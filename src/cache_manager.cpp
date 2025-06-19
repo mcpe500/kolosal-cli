@@ -46,10 +46,8 @@ void CacheManager::initialize() {
         homeDir = pw->pw_dir;
     }
     cacheDirectory = std::string(homeDir) + "/.cache/kolosal-cli";
-#endif
-
-    ensureCacheDirectory();
-    std::cout << "Cache initialized at: " << cacheDirectory << std::endl;
+#endif    ensureCacheDirectory();
+    // Cache initialized silently unless there are errors
 }
 
 void CacheManager::cleanup() {
@@ -207,54 +205,48 @@ void CacheManager::clearCache() {
                 std::filesystem::remove(entry.path());
             }
         }
-        std::cout << "Cache cleared successfully" << std::endl;
+        // Clear cache silently
+        std::cout << "Cache cleared\n";
     } catch (const std::filesystem::filesystem_error& e) {        std::cerr << "Failed to clear disk cache: " << e.what() << std::endl;
     }
 }
 
 std::vector<std::string> CacheManager::getCachedModelsOffline() {
     const std::string cacheKey = "kolosal_models";
-    
-    // Check memory cache first (ignore TTL for offline use)
+      // Check memory cache first (ignore TTL for offline use)
     auto memIt = memoryCache.find(cacheKey);
     if (memIt != memoryCache.end() && !memIt->second.data.empty()) {
-        std::cout << "Offline cache hit (memory): Found cached models" << std::endl;
         return jsonToVector(memIt->second.data);
     }
     
     // Check disk cache (ignore TTL for offline use)
     CacheEntry diskEntry = loadFromDisk(cacheKey);
     if (!diskEntry.data.empty()) {
-        std::cout << "Offline cache hit (disk): Found cached models" << std::endl;
         // Update memory cache
         memoryCache[cacheKey] = diskEntry;
         return jsonToVector(diskEntry.data);
     }
     
-    std::cout << "No cached models available for offline use" << std::endl;
     return {};
 }
 
 std::vector<ModelFile> CacheManager::getCachedModelFilesOffline(const std::string& modelId) {
     const std::string cacheKey = "model_files_" + modelId;
-    
-    // Check memory cache first (ignore TTL for offline use)
+      // Check memory cache first (ignore TTL for offline use)
     auto memIt = memoryCache.find(cacheKey);
     if (memIt != memoryCache.end() && !memIt->second.data.empty()) {
-        std::cout << "Offline cache hit (memory): Found cached files for " << modelId << std::endl;
         return jsonToModelFiles(memIt->second.data);
     }
     
     // Check disk cache (ignore TTL for offline use)
     CacheEntry diskEntry = loadFromDisk(cacheKey);
     if (!diskEntry.data.empty()) {
-        std::cout << "Offline cache hit (disk): Found cached files for " << modelId << std::endl;
         // Update memory cache
         memoryCache[cacheKey] = diskEntry;
         return jsonToModelFiles(diskEntry.data);
     }
     
-    std::cout << "No cached files available for offline use for " << modelId << std::endl;    return {};
+    return {};
 }
 
 bool CacheManager::hasAnyCachedData() {
@@ -263,8 +255,7 @@ bool CacheManager::hasAnyCachedData() {
             if (entry.is_regular_file() && entry.path().extension() == ".cache") {
                 return true;
             }
-        }
-    } catch (const std::filesystem::filesystem_error& e) {
+        }    } catch (const std::filesystem::filesystem_error&) {
         // Directory doesn't exist or can't be accessed
         return false;
     }

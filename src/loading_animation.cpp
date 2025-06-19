@@ -87,7 +87,7 @@ void LoadingAnimation::stop() {
 void LoadingAnimation::complete(const std::string& completionMessage) {
     stop();    // Brief pause before showing completion for smoother transition
     std::this_thread::sleep_for(std::chrono::milliseconds(150));
-    std::cout << "✓ " << completionMessage << std::endl;
+    std::cout << "Done: " << completionMessage << std::endl;
 }
 
 bool LoadingAnimation::isRunning() const {

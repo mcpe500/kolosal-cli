@@ -1,21 +1,23 @@
-# Kolo🤖 **Model Discovery** - Automatically fetches Kolosal models from Hugging Face
-📋 **Interactive Selection** - Navigate through models and files with keyboard controls
-🔍 **Smart Search** - Real-time filtering with search functionality
-📊 **Quantization Info** - Detailed information about model quantization types
-⚡ **Fast Navigation** - Efficient viewport handling for large model lists
-🎯 **User-Friendly** - Clear visual indicators and helpful instructions
-💾 **Smart Caching** - Intelligent caching system reduces API calls and improves performanceI
+# Kolosal CLI
+
+**Model Discovery** - Automatically fetches Kolosal models from Hugging Face
+**Interactive Selection** - Navigate through models and files with keyboard controls
+**Smart Search** - Real-time filtering with search functionality
+**Quantization Info** - Detailed information about model quantization types
+**Fast Navigation** - Efficient viewport handling for large model lists
+**User-Friendly** - Clear visual indicators and helpful instructions
+**Smart Caching** - Intelligent caching system reduces API calls and improves performance
 
 A command-line interface for browsing and managing Kolosal language models from Hugging Face. Features an interactive console interface for selecting models and quantized .gguf files.
 
 ## Features
 
-🤖 **Model Discovery** - Automatically fetches Kolosal models from Hugging Face
-� **Interactive Selection** - Navigate through models and files with keyboard controls
-🔍 **Smart Search** - Real-time filtering with search functionality
-📊 **Quantization Info** - Detailed information about model quantization types
-⚡ **Fast Navigation** - Efficient viewport handling for large model lists
-🎯 **User-Friendly** - Clear visual indicators and helpful instructions
+**Model Discovery** - Automatically fetches Kolosal models from Hugging Face
+**Interactive Selection** - Navigate through models and files with keyboard controls
+**Smart Search** - Real-time filtering with search functionality
+**Quantization Info** - Detailed information about model quantization types
+**Fast Navigation** - Efficient viewport handling for large model lists
+**User-Friendly** - Clear visual indicators and helpful instructions
 
 ## Supported Quantization Types
 
@@ -65,10 +67,10 @@ Kolosal CLI includes an intelligent caching mechanism that significantly improve
 - **Cross-Platform**: Works on Windows, Linux, and macOS
 
 ### Benefits
-- ⚡ **Faster Startup**: Cached data loads instantly
-- 🌐 **Reduced API Calls**: Less network traffic to Hugging Face
-- 💾 **Offline Capability**: Access recently cached data without internet
-- 🎛️ **User Control**: Clear cache when needed
+- **Faster Startup**: Cached data loads instantly
+- **Reduced API Calls**: Less network traffic to Hugging Face
+- **Offline Capability**: Access recently cached data without internet
+- **User Control**: Clear cache when needed
 
 ### Cache Management Menu
 - Continue to Model Selection
@@ -164,11 +166,11 @@ The application gracefully handles various error conditions:
 
 ## Future Features
 
-- 📥 **File Download** - Direct downloading of selected model files
-- ⚙️ **Configuration** - Customizable settings and preferences
-- 📊 **Progress Bars** - Visual progress indicators for downloads
-- 🔧 **Model Management** - Local model organization and management
-- 🌐 **Cross-Platform UI** - Enhanced compatibility across operating systems
+- **File Download** - Direct downloading of selected model files
+- **Configuration** - Customizable settings and preferences
+- **Progress Bars** - Visual progress indicators for downloads
+- **Model Management** - Local model organization and management
+- **Cross-Platform UI** - Enhanced compatibility across operating systems
 
 ## Contributing
 

@@ -117,15 +117,11 @@ void InteractiveList::displayList() {
         }
         std::cout << std::endl;
     }
-    std::cout << std::endl;
-
-    if (filteredItems.empty()) {
+    std::cout << std::endl;    if (filteredItems.empty()) {
         if (searchQuery.empty()) {
-            std::cout << "No models available or failed to fetch models.\n";
-            std::cout << "Please check your internet connection and try again.\n";
+            std::cout << "No models available.\n";
         } else {
             std::cout << "No models found matching: \"" << searchQuery << "\"\n";
-            std::cout << "Try a different search term or press BACKSPACE to clear.\n";
         }
         return;
     }
@@ -278,11 +274,9 @@ int InteractiveList::run() {
                     if (isSearchMode) {
                         // Exit search mode
                         isSearchMode = false;
-                    } else if (!filteredItems.empty()) {
-                        // Select item
+                    } else if (!filteredItems.empty()) {                        // Select item
                         showCursor();
                         clearScreen();
-                        std::cout << "You selected: " << filteredItems[selectedIndex] << std::endl;
                         // Find the original index in the items array
                         auto it = std::find(items.begin(), items.end(), filteredItems[selectedIndex]);
                         if (it != items.end()) {
@@ -296,16 +290,12 @@ int InteractiveList::run() {
                         // Exit search mode
                         isSearchMode = false;
                     } else {
-                        showCursor();
-                        clearScreen();
-                        std::cout << "Operation cancelled." << std::endl;
+                        showCursor();                        clearScreen();
                         return -1;
                     }
-                    break;
-                case 3: // Ctrl+C
+                    break;                case 3: // Ctrl+C
                     showCursor();
                     clearScreen();
-                    std::cout << "Interrupted by user." << std::endl;
                     return -1;
                 case 8: // Backspace
                     if (isSearchMode && !searchQuery.empty()) {
