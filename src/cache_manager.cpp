@@ -138,24 +138,20 @@ void CacheManager::saveToDisk(const std::string& key, const CacheEntry& entry) {
 
 std::vector<std::string> CacheManager::getCachedModels() {
     const std::string cacheKey = "kolosal_models";
-    
-    // Check memory cache first
+      // Check memory cache first
     auto memIt = memoryCache.find(cacheKey);
     if (memIt != memoryCache.end() && memIt->second.isValid(DEFAULT_TTL_SECONDS)) {
-        std::cout << "Cache hit (memory): Found cached models" << std::endl;
         return jsonToVector(memIt->second.data);
     }
     
     // Check disk cache
     CacheEntry diskEntry = loadFromDisk(cacheKey);
     if (!diskEntry.data.empty() && diskEntry.isValid(DEFAULT_TTL_SECONDS)) {
-        std::cout << "Cache hit (disk): Found cached models" << std::endl;
         // Update memory cache
         memoryCache[cacheKey] = diskEntry;
         return jsonToVector(diskEntry.data);
     }
     
-    std::cout << "Cache miss: No valid cached models found" << std::endl;
     return {};
 }
 
@@ -165,34 +161,27 @@ void CacheManager::cacheModels(const std::vector<std::string>& models) {
     CacheEntry entry;
     entry.data = vectorToJson(models);
     entry.timestamp = std::chrono::system_clock::now();
-    
-    // Save to both memory and disk
+      // Save to both memory and disk
     memoryCache[cacheKey] = entry;
     saveToDisk(cacheKey, entry);
-    
-    std::cout << "Cached " << models.size() << " models" << std::endl;
 }
 
 std::vector<ModelFile> CacheManager::getCachedModelFiles(const std::string& modelId) {
     const std::string cacheKey = "model_files_" + modelId;
-    
-    // Check memory cache first
+      // Check memory cache first
     auto memIt = memoryCache.find(cacheKey);
     if (memIt != memoryCache.end() && memIt->second.isValid(MODEL_FILES_TTL_SECONDS)) {
-        std::cout << "Cache hit (memory): Found cached files for " << modelId << std::endl;
         return jsonToModelFiles(memIt->second.data);
     }
     
     // Check disk cache
     CacheEntry diskEntry = loadFromDisk(cacheKey);
     if (!diskEntry.data.empty() && diskEntry.isValid(MODEL_FILES_TTL_SECONDS)) {
-        std::cout << "Cache hit (disk): Found cached files for " << modelId << std::endl;
         // Update memory cache
         memoryCache[cacheKey] = diskEntry;
         return jsonToModelFiles(diskEntry.data);
     }
     
-    std::cout << "Cache miss: No valid cached files found for " << modelId << std::endl;
     return {};
 }
 
@@ -202,12 +191,9 @@ void CacheManager::cacheModelFiles(const std::string& modelId, const std::vector
     CacheEntry entry;
     entry.data = modelFilesToJson(files);
     entry.timestamp = std::chrono::system_clock::now();
-    
-    // Save to both memory and disk
+      // Save to both memory and disk
     memoryCache[cacheKey] = entry;
     saveToDisk(cacheKey, entry);
-    
-    std::cout << "Cached " << files.size() << " files for model " << modelId << std::endl;
 }
 
 void CacheManager::clearCache() {

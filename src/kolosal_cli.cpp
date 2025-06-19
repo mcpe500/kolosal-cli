@@ -4,6 +4,7 @@
 #include "interactive_list.h"
 #include "model_file.h"
 #include "cache_manager.h"
+#include "loading_animation.h"
 #include <iostream>
 #include <conio.h>
 #include <windows.h>
@@ -63,8 +64,7 @@ std::vector<ModelFile> KolosalCLI::generateSampleFiles(const std::string& modelI
 std::string KolosalCLI::selectModel() {
     // Fetch models from Hugging Face API
     std::vector<std::string> models = HuggingFaceClient::fetchKolosalModels();
-    
-    if (models.empty()) {
+      if (models.empty()) {
         std::cout << "No Kolosal models found or failed to fetch models.\n";
         std::cout << "This could be due to:\n";
         std::cout << "1. No internet connection\n";
@@ -75,9 +75,6 @@ std::string KolosalCLI::selectModel() {
         // Fallback to sample menu
         models = generateSampleModels();
         Sleep(2000);
-    } else {
-        std::cout << "Found " << models.size() << " Kolosal models!\n\n";
-        Sleep(1000);
     }
 
     // Add navigation option
@@ -97,7 +94,6 @@ ModelFile KolosalCLI::selectModelFile(const std::string& modelId) {
     std::cout << "You selected model: " << modelId << std::endl;
     
     // Fetch .gguf files for the selected model
-    std::cout << "\nFetching available .gguf files...\n\n";
     std::vector<ModelFile> modelFiles = HuggingFaceClient::fetchModelFiles(modelId);
     
     if (modelFiles.empty()) {
@@ -107,13 +103,9 @@ ModelFile KolosalCLI::selectModelFile(const std::string& modelId) {
         std::cout << "2. Files are in a different format\n";
         std::cout << "3. API request failed\n\n";
         std::cout << "Showing sample files instead...\n\n";
-        
-        // Fallback to sample files with quantization info
+          // Fallback to sample files with quantization info
         modelFiles = generateSampleFiles(modelId);
         Sleep(2000);
-    } else {
-        std::cout << "Found " << modelFiles.size() << " .gguf files!\n\n";
-        Sleep(1000);
     }
     
     // Convert ModelFile objects to display strings
