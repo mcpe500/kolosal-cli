@@ -1,29 +1,50 @@
 # Kolosal CLI
 
-A modern, interactive command-line interface built with FTXUI (C++ Terminal User Interface library).
+A command-line interface for browsing and managing Kolosal language models from Hugging Face. Features an interactive console interface for selecting models and quantized .gguf files.
 
 ## Features
 
-🚀 **Interactive Terminal UI** - Beautiful, responsive interface using FTXUI
-📝 **Command Input** - Execute custom commands with built-in help system
-🎯 **Menu Navigation** - Easy navigation through different tool categories
-📊 **Real-time Output** - Live log display with scrollable history
-⚡ **Cross-Platform** - Works on Windows, Linux, and macOS
+🤖 **Model Discovery** - Automatically fetches Kolosal models from Hugging Face
+� **Interactive Selection** - Navigate through models and files with keyboard controls
+🔍 **Smart Search** - Real-time filtering with search functionality
+📊 **Quantization Info** - Detailed information about model quantization types
+⚡ **Fast Navigation** - Efficient viewport handling for large model lists
+🎯 **User-Friendly** - Clear visual indicators and helpful instructions
 
-## Available Tools
+## Supported Quantization Types
 
-- **System Info** - Display system information and status
-- **Process Manager** - View and manage running processes
-- **File Explorer** - Browse and navigate file system
-- **Network Tools** - Network connectivity and diagnostic tools
-- **Settings** - Configuration and preferences
+The CLI automatically detects and provides descriptions for various quantization formats:
 
-## Built-in Commands
+- **Q8_0** - 8-bit quantization, good balance of quality and size
+- **Q6_K** - 6-bit quantization, high quality with smaller size  
+- **Q5_K_M/S** - 5-bit quantization (medium/small variants)
+- **Q4_K_M/S** - 4-bit quantization (medium/small variants)
+- **Q3_K_L/M/S** - 3-bit quantization (large/medium/small variants)
+- **Q2_K** - 2-bit quantization, extremely small but lower quality
+- **F16/F32** - Floating point formats (16-bit/32-bit)
 
-- `help` - Show available commands
-- `clear` - Clear the output log
-- `version` - Display version information
-- `status` - Show system status
+## Architecture
+
+The project follows a clean, modular architecture with clear separation of concerns:
+
+```
+include/           # Header files
+├── http_client.h         # HTTP communication with libcurl
+├── model_file.h          # Model file data structures
+├── hugging_face_client.h # Hugging Face API client
+├── interactive_list.h    # Console UI component
+└── kolosal_cli.h        # Main application logic
+
+src/              # Implementation files
+├── http_client.cpp
+├── model_file.cpp
+├── hugging_face_client.cpp
+├── interactive_list.cpp
+├── kolosal_cli.cpp
+└── main.cpp             # Entry point
+```
+
+See [ARCHITECTURE.md](docs/ARCHITECTURE.md) for detailed documentation.
 
 ## Building from Source
 
@@ -31,17 +52,17 @@ A modern, interactive command-line interface built with FTXUI (C++ Terminal User
 
 - CMake 3.12 or higher
 - C++17 compatible compiler
-- Git (to clone FTXUI submodule)
+- libcurl (included in external/)
+- nlohmann/json (included in external/)
 
 ### Build Instructions
 
-1. Clone the repository:
+1. Navigate to the project directory:
    ```bash
-   git clone <your-repo-url>
    cd kolosal-cli
    ```
 
-2. Create build directory:
+2. Create and enter build directory:
    ```bash
    mkdir build
    cd build
@@ -54,28 +75,77 @@ A modern, interactive command-line interface built with FTXUI (C++ Terminal User
 
 4. Build the project:
    ```bash
-   cmake --build . --config Release
+   # Windows
+   cmake --build . --config Debug
+   
+   # Linux/macOS
+   make
    ```
 
 5. Run the application:
    ```bash
-   # On Windows
-   .\Release\kolosal-cli.exe
+   # Windows
+   .\Debug\kolosal-cli.exe
    
-   # On Linux/macOS
+   # Linux/macOS
    ./kolosal-cli
    ```
 
 ## Usage
 
-1. **Navigation**: Use arrow keys to navigate through menu items
-2. **Command Input**: Type commands in the input field and press "Execute"
-3. **Menu Actions**: Select menu items and press "Select" to perform actions
-4. **Exit**: Choose "Exit" from the menu or press ESC to quit
+### Navigation Controls
+
+- **↑/↓ Arrow Keys** - Navigate through items
+- **Enter** - Select highlighted item  
+- **Escape** - Cancel operation or exit search mode
+- **/** - Enter search mode
+- **Backspace** - Edit search query or clear search
+- **Ctrl+C** - Exit application
+
+### Basic Workflow
+
+1. **Model Selection**: Browse available Kolosal models from Hugging Face
+2. **File Selection**: Choose from available .gguf files for the selected model
+3. **Information Display**: View details about the selected model and file
+4. **Download URL**: Get the direct download link for the model file
+
+### Search Functionality
+
+- Press `/` to enter search mode
+- Type to filter models/files in real-time
+- Press `Backspace` to edit or clear search
+- Press `Enter` or arrow keys to exit search mode
+
+## Error Handling
+
+The application gracefully handles various error conditions:
+
+- **Network Issues**: Falls back to sample data when API requests fail
+- **Empty Results**: Provides helpful messages and suggestions
+- **API Errors**: Clear error reporting with debug information
 
 ## Dependencies
 
-- [FTXUI](https://github.com/ArthurSonzogni/FTXUI) - Modern C++ Terminal User Interface library
+- [libcurl](https://curl.se/libcurl/) - HTTP client library
+- [nlohmann/json](https://github.com/nlohmann/json) - JSON parsing library
+- Windows Console API - For interactive terminal features (Windows only)
+
+## Future Features
+
+- 📥 **File Download** - Direct downloading of selected model files
+- ⚙️ **Configuration** - Customizable settings and preferences
+- 📊 **Progress Bars** - Visual progress indicators for downloads
+- 🔧 **Model Management** - Local model organization and management
+- 🌐 **Cross-Platform UI** - Enhanced compatibility across operating systems
+
+## Contributing
+
+Contributions are welcome! The modular architecture makes it easy to add new features:
+
+- Add new API endpoints in `HuggingFaceClient`
+- Enhance UI components in `InteractiveList`
+- Extend model file utilities in `ModelFileUtils`
+- Improve error handling and user experience
 
 ## License
 

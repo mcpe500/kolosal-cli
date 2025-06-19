@@ -17,6 +17,7 @@ set(NLOHMANN_JSON_DIR ${CMAKE_CURRENT_SOURCE_DIR}/external)
 # Include directories
 include_directories(${CURL_DIR}/include)
 include_directories(${NLOHMANN_JSON_DIR})
+include_directories(${CMAKE_CURRENT_SOURCE_DIR}/include)
 
 # Find curl library
 find_library(CURL_LIBRARY
@@ -25,11 +26,22 @@ find_library(CURL_LIBRARY
     NO_DEFAULT_PATH
 )
 
-# Create src directory if it doesn't exist
+# Create directories if they don't exist
 file(MAKE_DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR}/src)
+file(MAKE_DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR}/include)
+
+# Collect all source files
+file(GLOB_RECURSE SOURCES
+    "src/*.cpp"
+)
+
+# Collect all header files (for IDE purposes)
+file(GLOB_RECURSE HEADERS
+    "include/*.h"
+)
 
 # Add executable
-add_executable(kolosal-cli src/main.cpp)
+add_executable(kolosal-cli ${SOURCES} ${HEADERS})
 
 # Link libraries
 target_link_libraries(kolosal-cli ${CURL_LIBRARY})
