@@ -57,16 +57,12 @@ private:
      * @return Vector of sample model IDs
      */
     std::vector<std::string> generateSampleModels();
-    
-    /**
+      /**
      * @brief Generate fallback sample files when API fails
      * @param modelId The model ID to generate sample files for
      * @return Vector of sample ModelFile objects
      */
-    std::vector<ModelFile> generateSampleFiles(const std::string& modelId);    /**
-     * @brief Wait for user to press any key
-     */
-    void waitForKeyPress();
+    std::vector<ModelFile> generateSampleFiles(const std::string& modelId);
 };
 
 #endif // KOLOSAL_CLI_H

@@ -135,19 +135,13 @@ void KolosalCLI::showSelectionResult(const std::string& modelId, const ModelFile
     std::cout << "\nFile download feature coming soon!" << std::endl;
 }
 
-void KolosalCLI::waitForKeyPress() {
-    std::cout << "\nPress any key to exit...";    _getch();
-}
-
 int KolosalCLI::run() {
     showWelcome();
     
     while (true) {
         std::string selectedModel = selectModel();
-        
-        if (selectedModel.empty()) {
+          if (selectedModel.empty()) {
             std::cout << "Model selection cancelled." << std::endl;
-            waitForKeyPress();
             return 0;
         }
         
@@ -157,9 +151,7 @@ int KolosalCLI::run() {
             // User selected "Back to Model Selection" - continue the loop
             continue;
         }
-        
-        showSelectionResult(selectedModel, selectedFile);
-        waitForKeyPress();
+          showSelectionResult(selectedModel, selectedFile);
         return 0;
     }
 }
