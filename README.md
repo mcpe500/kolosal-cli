@@ -1,4 +1,10 @@
-# Kolosal CLI
+# Kolo🤖 **Model Discovery** - Automatically fetches Kolosal models from Hugging Face
+📋 **Interactive Selection** - Navigate through models and files with keyboard controls
+🔍 **Smart Search** - Real-time filtering with search functionality
+📊 **Quantization Info** - Detailed information about model quantization types
+⚡ **Fast Navigation** - Efficient viewport handling for large model lists
+🎯 **User-Friendly** - Clear visual indicators and helpful instructions
+💾 **Smart Caching** - Intelligent caching system reduces API calls and improves performanceI
 
 A command-line interface for browsing and managing Kolosal language models from Hugging Face. Features an interactive console interface for selecting models and quantized .gguf files.
 
@@ -33,6 +39,7 @@ include/           # Header files
 ├── model_file.h          # Model file data structures
 ├── hugging_face_client.h # Hugging Face API client
 ├── interactive_list.h    # Console UI component
+├── cache_manager.h       # Smart caching system
 └── kolosal_cli.h        # Main application logic
 
 src/              # Implementation files
@@ -40,11 +47,36 @@ src/              # Implementation files
 ├── model_file.cpp
 ├── hugging_face_client.cpp
 ├── interactive_list.cpp
+├── cache_manager.cpp
 ├── kolosal_cli.cpp
 └── main.cpp             # Entry point
 ```
 
 See [ARCHITECTURE.md](docs/ARCHITECTURE.md) for detailed documentation.
+
+## Smart Caching System
+
+Kolosal CLI includes an intelligent caching mechanism that significantly improves performance:
+
+### Features
+- **Two-Level Cache**: In-memory and persistent disk storage
+- **Automatic TTL**: Models (1 hour), Model Files (30 minutes)
+- **Cache Management**: Interactive menu for cache operations
+- **Cross-Platform**: Works on Windows, Linux, and macOS
+
+### Benefits
+- ⚡ **Faster Startup**: Cached data loads instantly
+- 🌐 **Reduced API Calls**: Less network traffic to Hugging Face
+- 💾 **Offline Capability**: Access recently cached data without internet
+- 🎛️ **User Control**: Clear cache when needed
+
+### Cache Management Menu
+- Continue to Model Selection
+- Clear Cache
+- View Cache Status
+- Exit Application
+
+See [CACHING.md](docs/CACHING.md) for detailed information.
 
 ## Building from Source
 

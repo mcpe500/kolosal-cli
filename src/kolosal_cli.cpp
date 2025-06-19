@@ -3,21 +3,31 @@
 #include "hugging_face_client.h"
 #include "interactive_list.h"
 #include "model_file.h"
+#include "cache_manager.h"
 #include <iostream>
 #include <conio.h>
 #include <windows.h>
 
 void KolosalCLI::initialize() {
     HttpClient::initialize();
+    CacheManager::initialize();
 }
 
 void KolosalCLI::cleanup() {
+    CacheManager::cleanup();
     HttpClient::cleanup();
 }
 
 void KolosalCLI::showWelcome() {
     std::cout << "Welcome to Kolosal CLI!\n";
-    std::cout << "Fetching available models from Hugging Face...\n\n";
+    std::cout << "Fetching available models from Hugging Face...\n";
+    std::cout << "(Using smart caching to reduce load times)\n";
+    
+    // Show offline capability status
+    if (CacheManager::hasAnyCachedData()) {
+        std::cout << "💾 Offline mode available - cached data found\n";
+    }
+    std::cout << std::endl;
 }
 
 std::vector<std::string> KolosalCLI::generateSampleModels() {
@@ -134,31 +144,30 @@ void KolosalCLI::showSelectionResult(const std::string& modelId, const ModelFile
 }
 
 void KolosalCLI::waitForKeyPress() {
-    std::cout << "\nPress any key to exit...";
-    _getch();
+    std::cout << "\nPress any key to exit...";    _getch();
 }
 
 int KolosalCLI::run() {
     showWelcome();
     
-    std::string selectedModel = selectModel();
-    
-    if (selectedModel.empty()) {
-        std::cout << "Model selection cancelled." << std::endl;
+    while (true) {
+        std::string selectedModel = selectModel();
+        
+        if (selectedModel.empty()) {
+            std::cout << "Model selection cancelled." << std::endl;
+            waitForKeyPress();
+            return 0;
+        }
+        
+        ModelFile selectedFile = selectModelFile(selectedModel);
+        
+        if (selectedFile.filename.empty()) {
+            // User selected "Back to Model Selection" - continue the loop
+            continue;
+        }
+        
+        showSelectionResult(selectedModel, selectedFile);
         waitForKeyPress();
         return 0;
     }
-    
-    ModelFile selectedFile = selectModelFile(selectedModel);
-    
-    if (selectedFile.filename.empty()) {
-        std::cout << "File selection cancelled." << std::endl;
-        waitForKeyPress();
-        return 0;
-    }
-    
-    showSelectionResult(selectedModel, selectedFile);
-    waitForKeyPress();
-    
-    return 0;
 }

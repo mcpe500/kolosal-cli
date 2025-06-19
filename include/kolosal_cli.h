@@ -63,9 +63,7 @@ private:
      * @param modelId The model ID to generate sample files for
      * @return Vector of sample ModelFile objects
      */
-    std::vector<ModelFile> generateSampleFiles(const std::string& modelId);
-    
-    /**
+    std::vector<ModelFile> generateSampleFiles(const std::string& modelId);    /**
      * @brief Wait for user to press any key
      */
     void waitForKeyPress();
