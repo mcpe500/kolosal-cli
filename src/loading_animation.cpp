@@ -9,7 +9,7 @@
 #include <fcntl.h>
 #endif
 
-const int LoadingAnimation::INTERVAL_MS = 1;
+const int LoadingAnimation::INTERVAL_MS = 30;
 
 LoadingAnimation::LoadingAnimation(const std::string& message) 
     : message(message), running(false), currentFrame(0) {
