@@ -8,6 +8,8 @@
 #include <iostream>
 #include <conio.h>
 #include <windows.h>
+#include <regex>
+#include <algorithm>
 
 void KolosalCLI::initialize() {
     HttpClient::initialize();
@@ -21,7 +23,7 @@ void KolosalCLI::cleanup() {
 
 void KolosalCLI::showWelcome() {
     std::cout << "Welcome to Kolosal CLI!\n";
-    std::cout << "Fetching available models from Hugging Face...\n";
+    std::cout << "🤗 Browse and download GGUF models from Hugging Face\n";
     std::cout << "(Using smart caching to reduce load times)\n";
     
     // Show offline capability status
@@ -62,6 +64,8 @@ std::vector<ModelFile> KolosalCLI::generateSampleFiles(const std::string& modelI
 }
 
 std::string KolosalCLI::selectModel() {
+    std::cout << "📚 Browsing Kolosal models...\n\n";
+    
     // Fetch models from Hugging Face API
     std::vector<std::string> models = HuggingFaceClient::fetchKolosalModels();
       if (models.empty()) {
@@ -135,12 +139,97 @@ void KolosalCLI::showSelectionResult(const std::string& modelId, const ModelFile
     std::cout << "\nFile download feature coming soon!" << std::endl;
 }
 
-int KolosalCLI::run() {
+std::string KolosalCLI::parseRepositoryInput(const std::string& input) {
+    if (input.empty()) {
+        return "";
+    }
+    
+    // Remove whitespace
+    std::string trimmed = input;
+    trimmed.erase(std::remove_if(trimmed.begin(), trimmed.end(), ::isspace), trimmed.end());
+      // Check if it's a full Hugging Face URL
+    std::regex urlPattern(R"(https?://huggingface\.co/([^/]+/[^/?\s#]+))");
+    std::smatch matches;
+    
+    if (std::regex_search(trimmed, matches, urlPattern)) {
+        std::string modelId = matches[1].str();
+        // Remove any trailing slashes or query parameters
+        size_t pos = modelId.find_first_of("/?#");
+        if (pos != std::string::npos) {
+            modelId = modelId.substr(0, pos);
+        }
+        return modelId;
+    }
+    
+    // Check if it's already in the correct format (owner/model-name)
+    std::regex idPattern(R"(^[a-zA-Z0-9_.-]+/[a-zA-Z0-9_.-]+$)");
+    if (std::regex_match(trimmed, idPattern)) {
+        return trimmed;
+    }
+    
+    return ""; // Invalid format
+}
+
+bool KolosalCLI::isValidModelId(const std::string& modelId) {
+    if (modelId.empty()) {
+        return false;
+    }
+    
+    // Check format: owner/model-name
+    std::regex pattern(R"(^[a-zA-Z0-9_.-]+/[a-zA-Z0-9_.-]+$)");
+    return std::regex_match(modelId, pattern);
+}
+
+int KolosalCLI::run(const std::string& repoId) {
     showWelcome();
     
+    // If a repository ID is provided, go directly to file selection
+    if (!repoId.empty()) {
+        std::string modelId = parseRepositoryInput(repoId);
+          if (modelId.empty()) {
+            std::cout << "❌ Invalid repository URL or ID format.\n\n";
+            std::cout << "Valid formats:\n";
+            std::cout << "  • owner/model-name (e.g., microsoft/DialoGPT-medium)\n";
+            std::cout << "  • https://huggingface.co/owner/model-name\n";
+            return 1; // Exit with error code
+        } else {
+            std::cout << "🎯 Direct access to repository: " << modelId << "\n\n";
+            
+            // Fetch GGUF files from the specified repository
+            std::vector<ModelFile> modelFiles = HuggingFaceClient::fetchModelFilesFromAnyRepo(modelId);
+              if (modelFiles.empty()) {
+                std::cout << "❌ No .gguf files found in repository: " << modelId << "\n";
+                std::cout << "This repository may not contain quantized models.\n";
+                return 1; // Exit with error code
+            } else {
+                // Show GGUF file selection
+                std::vector<std::string> displayFiles;
+                for (const auto& file : modelFiles) {
+                    displayFiles.push_back(file.getDisplayName());
+                }
+                displayFiles.push_back("Exit");
+                
+                std::cout << "Found " << modelFiles.size() << " .gguf file(s) in " << modelId << "\n\n";
+                
+                InteractiveList fileMenu(displayFiles);
+                int fileResult = fileMenu.run();
+                
+                if (fileResult >= 0 && fileResult < static_cast<int>(modelFiles.size())) {
+                    showSelectionResult(modelId, modelFiles[fileResult]);
+                    return 0;
+                }
+                
+                std::cout << "Selection cancelled." << std::endl;
+                return 0;
+            }
+        }
+    }
+    
+    // Standard flow: browse kolosal models
     while (true) {
         std::string selectedModel = selectModel();
-          if (selectedModel.empty()) {
+        
+        if (selectedModel.empty()) {
             std::cout << "Model selection cancelled." << std::endl;
             return 0;
         }
@@ -151,7 +240,8 @@ int KolosalCLI::run() {
             // User selected "Back to Model Selection" - continue the loop
             continue;
         }
-          showSelectionResult(selectedModel, selectedFile);
+        
+        showSelectionResult(selectedModel, selectedFile);
         return 0;
     }
 }

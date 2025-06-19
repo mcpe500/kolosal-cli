@@ -142,3 +142,76 @@ std::vector<ModelFile> HuggingFaceClient::fetchModelFiles(const std::string& mod
     
     return modelFiles;
 }
+
+std::vector<ModelFile> HuggingFaceClient::fetchModelFilesFromAnyRepo(const std::string& modelId) {
+    // Try to get from cache first
+    std::vector<ModelFile> cachedFiles = CacheManager::getCachedModelFiles(modelId);
+    if (!cachedFiles.empty()) {
+        std::cout << "Using cached files (" << cachedFiles.size() << " found)\n";
+        return cachedFiles;
+    }
+    
+    // Cache miss - fetch from API with animation
+    std::vector<ModelFile> modelFiles;
+    LoadingAnimation loader("Fetching .gguf files for " + modelId);
+    loader.start();
+    
+    HttpResponse response;
+    std::string url = API_BASE_URL + "/models/" + modelId + "/tree/main";
+    
+    if (!HttpClient::get(url, response)) {
+        loader.stop();
+        std::cerr << "Failed to fetch model files from Hugging Face API" << std::endl;
+        
+        // Try offline fallback - use cached data even if expired
+        std::cout << "Attempting offline fallback using cached data..." << std::endl;
+        std::vector<ModelFile> offlineFiles = CacheManager::getCachedModelFilesOffline(modelId);
+        if (!offlineFiles.empty()) {
+            std::cout << "Using offline cached data (" << offlineFiles.size() << " files)" << std::endl;
+            return offlineFiles;
+        }
+        
+        std::cout << "No offline data available for " << modelId << std::endl;
+        return modelFiles;
+    }
+    
+    // Parse JSON response
+    try {
+        json jsonData = json::parse(response.data);
+        
+        // Extract .gguf files
+        if (jsonData.is_array()) {
+            for (const auto& item : jsonData) {
+                if (item.contains("type") && item["type"].is_string() && 
+                    item["type"] == "file" && item.contains("path") && item["path"].is_string()) {
+                    std::string filename = item["path"];
+                    // Check if file has .gguf extension
+                    if (filename.length() >= 5 && filename.substr(filename.length() - 5) == ".gguf") {
+                        ModelFile modelFile;
+                        modelFile.filename = filename;
+                        modelFile.quant = ModelFileUtils::detectQuantization(filename);
+                        modelFiles.push_back(modelFile);
+                    }
+                }
+            }
+        }
+        
+        // Sort by quantization priority (8-bit first)
+        ModelFileUtils::sortByPriority(modelFiles);
+        
+        // Cache the results for future use
+        if (!modelFiles.empty()) {
+            CacheManager::cacheModelFiles(modelId, modelFiles);
+        }
+        
+        loader.complete("Found " + std::to_string(modelFiles.size()) + " .gguf files");
+        
+    } catch (const json::exception& e) {
+        loader.stop();
+        std::cerr << "JSON parsing error: " << e.what() << std::endl;
+        std::cerr << "Raw response (first 500 chars): " << response.data.substr(0, 500) << std::endl;
+        return modelFiles;
+    }
+    
+    return modelFiles;
+}

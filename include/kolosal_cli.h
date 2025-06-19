@@ -14,12 +14,12 @@ public:
      * @brief Initialize the application
      */
     void initialize();
-    
-    /**
+      /**
      * @brief Run the main application loop
+     * @param repoId Optional Hugging Face repository URL or ID
      * @return Exit code (0 for success, non-zero for error)
      */
-    int run();
+    int run(const std::string& repoId = "");
     
     /**
      * @brief Cleanup resources before exit
@@ -27,6 +27,20 @@ public:
     void cleanup();
 
 private:
+    /**
+     * @brief Parse Hugging Face repository URL or ID to extract model ID
+     * @param input URL or ID from command line
+     * @return Normalized model ID (e.g., "owner/model-name") or empty string if invalid
+     */
+    std::string parseRepositoryInput(const std::string& input);
+    
+    /**
+     * @brief Validate if a model ID has the correct format
+     * @param modelId The model ID to validate
+     * @return True if valid, false otherwise
+     */
+    bool isValidModelId(const std::string& modelId);
+    
     /**
      * @brief Display welcome message and initialize HTTP client
      */

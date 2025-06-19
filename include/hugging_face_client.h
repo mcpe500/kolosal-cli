@@ -15,13 +15,19 @@ public:
      * @return Vector of model IDs from the kolosal organization
      */
     static std::vector<std::string> fetchKolosalModels();
-    
-    /**
+      /**
      * @brief Fetch .gguf files for a specific model with quantization info
      * @param modelId The model ID (e.g., "kolosal/model-name")
      * @return Vector of ModelFile objects with quantization information
      */
     static std::vector<ModelFile> fetchModelFiles(const std::string& modelId);
+    
+    /**
+     * @brief Fetch .gguf files for any repository (not just kolosal)
+     * @param modelId The model ID (e.g., "microsoft/DialoGPT-medium")
+     * @return Vector of ModelFile objects with quantization information
+     */
+    static std::vector<ModelFile> fetchModelFilesFromAnyRepo(const std::string& modelId);
 
 private:
     static const std::string API_BASE_URL;
