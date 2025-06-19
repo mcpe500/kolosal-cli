@@ -1,174 +1,153 @@
-#include <ftxui/component/captured_mouse.hpp>
-#include <ftxui/component/component.hpp>
-#include <ftxui/component/component_base.hpp>
-#include <ftxui/component/screen_interactive.hpp>
-#include <ftxui/dom/elements.hpp>
-#include <ftxui/screen/screen.hpp>
-
 #include <iostream>
-#include <string>
 #include <vector>
+#include <string>
+#include <conio.h>
+#include <windows.h>
 
-using namespace ftxui;
+class InteractiveList {
+private:
+    std::vector<std::string> items;
+    size_t selectedIndex;
+    HANDLE hConsole;
+    CONSOLE_SCREEN_BUFFER_INFO csbi;
+
+public:
+    InteractiveList(const std::vector<std::string>& listItems) 
+        : items(listItems), selectedIndex(0) {
+        hConsole = GetStdHandle(STD_OUTPUT_HANDLE);
+        GetConsoleScreenBufferInfo(hConsole, &csbi);
+    }
+
+    void hideCursor() {
+        CONSOLE_CURSOR_INFO cursorInfo;
+        GetConsoleCursorInfo(hConsole, &cursorInfo);
+        cursorInfo.bVisible = false;
+        SetConsoleCursorInfo(hConsole, &cursorInfo);
+    }
+
+    void showCursor() {
+        CONSOLE_CURSOR_INFO cursorInfo;
+        GetConsoleCursorInfo(hConsole, &cursorInfo);
+        cursorInfo.bVisible = true;
+        SetConsoleCursorInfo(hConsole, &cursorInfo);
+    }
+
+    void clearScreen() {
+        system("cls");
+    }
+
+    void moveCursor(int x, int y) {
+        COORD coord;
+        coord.X = x;
+        coord.Y = y;
+        SetConsoleCursorPosition(hConsole, coord);
+    }
+
+    void setColor(int color) {
+        SetConsoleTextAttribute(hConsole, color);
+    }
+
+    void resetColor() {
+        SetConsoleTextAttribute(hConsole, csbi.wAttributes);
+    }
+
+    void displayList() {
+        clearScreen();
+        
+        // Display title
+        std::cout << "Kolosal CLI - Interactive List\n";
+        std::cout << "Use UP/DOWN arrows to navigate, ENTER to select, ESC or Ctrl+C to exit\n\n";        // Display items
+        for (size_t i = 0; i < items.size(); ++i) {
+            if (i == selectedIndex) {
+                // Highlight selected item
+                setColor(BACKGROUND_BLUE | FOREGROUND_RED | FOREGROUND_GREEN | FOREGROUND_BLUE);
+                std::cout << "> " << items[i] << std::endl;
+                resetColor();
+            } else {
+                std::cout << "  " << items[i] << std::endl;
+            }
+        }
+
+        std::cout << "\nSelected: " << items[selectedIndex] << std::endl;
+    }    int run() {
+        hideCursor();
+        
+        while (true) {
+            displayList();
+            
+            int key = _getch();
+            
+            // Handle special keys (arrow keys)
+            if (key == 224) { // Special key prefix
+                key = _getch();
+                switch (key) {
+                    case 72: // Up arrow
+                        if (selectedIndex > 0) {
+                            selectedIndex--;
+                        } else {
+                            selectedIndex = items.size() - 1; // Wrap to bottom
+                        }
+                        break;
+                    case 80: // Down arrow
+                        if (selectedIndex < items.size() - 1) {
+                            selectedIndex++;
+                        } else {
+                            selectedIndex = 0; // Wrap to top
+                        }
+                        break;
+                }
+            } else {
+                switch (key) {
+                    case 13: // Enter
+                        showCursor();
+                        clearScreen();
+                        std::cout << "You selected: " << items[selectedIndex] << std::endl;
+                        return static_cast<int>(selectedIndex);
+                    case 27: // Escape
+                        showCursor();
+                        clearScreen();
+                        std::cout << "Operation cancelled." << std::endl;
+                        return -1;
+                    case 3: // Ctrl+C
+                        showCursor();
+                        clearScreen();
+                        std::cout << "Interrupted by user." << std::endl;
+                        return -1;
+                }
+            }
+        }
+    }
+};
 
 int main() {
-    // Application state
-    std::string input_text = "";
-    std::vector<std::string> menu_options = {
-        "View System Info",
-        "Process Manager", 
-        "File Explorer",
-        "Network Tools",
-        "Settings",
-        "Exit"
+    // Sample list items
+    std::vector<std::string> menuItems = {
+        "Deploy Local LLM",
+        "Manage Models",
+        "Chat with Model",
+        "Configuration",
+        "View Logs",
+        "System Status",
+        "Help & Documentation",
+        "Exit Application"
     };
-    int selected_menu = 0;
-    std::vector<std::string> log_messages;
-    
-    // Add welcome message
-    log_messages.push_back("Welcome to Kolosal CLI!");
-    log_messages.push_back("Use arrow keys to navigate the menu.");
 
-    // Components
-    auto input = Input(&input_text, "Enter command...");
+    std::cout << "Welcome to Kolosal CLI!\n";
+    std::cout << "Initializing interactive menu...\n\n";
     
-    auto menu = Menu(&menu_options, &selected_menu);
-    
-    auto execute_button = Button("Execute", [&] {
-        if (!input_text.empty()) {
-            log_messages.push_back("> " + input_text);
-            
-            // Simple command processing
-            if (input_text == "help") {
-                log_messages.push_back("Available commands: help, clear, version, status");
-            } else if (input_text == "clear") {
-                log_messages.clear();
-                log_messages.push_back("Log cleared.");
-            } else if (input_text == "version") {
-                log_messages.push_back("Kolosal CLI v1.0.0");
-            } else if (input_text == "status") {
-                log_messages.push_back("System status: OK");
-            } else {
-                log_messages.push_back("Unknown command. Type 'help' for available commands.");
-            }
-            
-            input_text = "";
-        }
-    });
-    
-    auto menu_action_button = Button("Select", [&] {
-        switch (selected_menu) {
-            case 0:
-                log_messages.push_back("System Info: Windows OS detected");
-                log_messages.push_back("Memory: Available");
-                log_messages.push_back("CPU: Running normally");
-                break;
-            case 1:
-                log_messages.push_back("Process Manager: Listing processes...");
-                log_messages.push_back("Found 42 active processes");
-                break;
-            case 2:
-                log_messages.push_back("File Explorer: Current directory listed");
-                log_messages.push_back("Files: CMakeLists.txt, README.md, src/");
-                break;
-            case 3:
-                log_messages.push_back("Network Tools: Checking connectivity...");
-                log_messages.push_back("Network status: Connected");
-                break;
-            case 4:
-                log_messages.push_back("Settings: Configuration panel opened");
-                break;
-            case 5:
-                log_messages.push_back("Goodbye!");
-                exit(0);
-                break;
-        }
-    });
-    
-    auto clear_log_button = Button("Clear Log", [&] {
-        log_messages.clear();
-        log_messages.push_back("Log cleared.");
-    });
+    // Small delay to show welcome message
+    Sleep(1000);
 
-    // Layout components
-    auto input_container = Container::Horizontal({
-        input,
-        execute_button
-    });
+    InteractiveList menu(menuItems);
+    int result = menu.run();
+
+    if (result >= 0) {
+        std::cout << "Processing selection: " << menuItems[result] << std::endl;
+        std::cout << "Feature implementation coming soon!" << std::endl;
+    }
+
+    std::cout << "\nPress any key to exit...";
+    _getch();
     
-    auto menu_container = Container::Horizontal({
-        menu,
-        menu_action_button
-    });
-    
-    auto button_container = Container::Horizontal({
-        clear_log_button
-    });
-    
-    auto main_container = Container::Vertical({
-        input_container,
-        menu_container,
-        button_container
-    });
-
-    // Renderer
-    auto renderer = Renderer(main_container, [&] {
-        // Create log display
-        Elements log_elements;
-        int max_logs = 10; // Show last 10 log messages
-        int start_idx = std::max(0, (int)log_messages.size() - max_logs);
-        
-        for (int i = start_idx; i < log_messages.size(); ++i) {
-            log_elements.push_back(text(log_messages[i]));
-        }
-        
-        auto log_box = vbox(log_elements) | 
-                       border | 
-                       size(HEIGHT, EQUAL, 12) | 
-                       frame;
-
-        return vbox({
-            // Header
-            text("🚀 KOLOSAL CLI") | bold | color(Color::Cyan) | center,
-            separator(),
-            
-            // Command input section
-            vbox({
-                text("Command Input:") | bold,
-                hbox({
-                    input->Render() | flex,
-                    separator(),
-                    execute_button->Render()
-                }) | border
-            }),
-            
-            // Menu section
-            vbox({
-                text("Main Menu:") | bold,
-                hbox({
-                    menu->Render() | flex,
-                    separator(),
-                    menu_action_button->Render()
-                }) | border
-            }),
-            
-            // Controls
-            hbox({
-                clear_log_button->Render(),
-                filler(),
-                text("ESC to quit") | dim
-            }),
-            
-            // Log section
-            vbox({
-                text("Output Log:") | bold,
-                log_box
-            })
-        }) | border | size(WIDTH, GREATER_THAN, 80);
-    });
-
-    auto screen = ScreenInteractive::Fullscreen();
-    screen.Loop(renderer);
-
     return 0;
 }
