@@ -55,4 +55,15 @@ if(WIN32)
         COMMAND ${CMAKE_COMMAND} -E copy_if_different
         "${CURL_DIR}/bin/libcurl.dll"
         $<TARGET_FILE_DIR:kolosal-cli>)
+    
+    # Copy Kolosal server files to output directory
+    add_custom_command(TARGET kolosal-cli POST_BUILD
+        COMMAND ${CMAKE_COMMAND} -E copy_if_different
+        "${CMAKE_CURRENT_SOURCE_DIR}/server-bin/kolosal_server.dll"
+        $<TARGET_FILE_DIR:kolosal-cli>)
+    
+    add_custom_command(TARGET kolosal-cli POST_BUILD
+        COMMAND ${CMAKE_COMMAND} -E copy_if_different
+        "${CMAKE_CURRENT_SOURCE_DIR}/server-bin/kolosal-server.exe"
+        $<TARGET_FILE_DIR:kolosal-cli>)
 endif()

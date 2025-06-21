@@ -25,20 +25,43 @@ public:
      * @brief Cleanup the HTTP client (calls curl_global_cleanup)
      */
     static void cleanup();
-    
-    /**
+      /**
      * @brief Make a GET request to the specified URL
      * @param url The URL to request
      * @param response Reference to HttpResponse object to store the response
      * @return true if the request was successful, false otherwise
      */
     static bool get(const std::string& url, HttpResponse& response);
+    
+    /**
+     * @brief Make a GET request with custom headers
+     * @param url The URL to request
+     * @param response String to store the response body
+     * @param headers Vector of custom headers (format: "Header: Value")
+     * @return true if the request was successful, false otherwise
+     */
+    bool get(const std::string& url, std::string& response, const std::vector<std::string>& headers = {});
+    
+    /**
+     * @brief Make a POST request with JSON payload
+     * @param url The URL to request
+     * @param payload JSON payload to send
+     * @param response String to store the response body
+     * @param headers Vector of custom headers (format: "Header: Value")
+     * @return true if the request was successful, false otherwise
+     */
+    bool post(const std::string& url, const std::string& payload, std::string& response, const std::vector<std::string>& headers = {});
 
 private:
     /**
      * @brief Callback function for libcurl to write response data
      */
     static size_t writeCallback(void* contents, size_t size, size_t nmemb, void* userp);
+    
+    /**
+     * @brief Instance-based callback for writing response data to std::string
+     */
+    static size_t writeStringCallback(void* contents, size_t size, size_t nmemb, void* userp);
 };
 
 #endif // HTTP_CLIENT_H

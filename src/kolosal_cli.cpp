@@ -5,16 +5,43 @@
 #include "model_file.h"
 #include "cache_manager.h"
 #include "loading_animation.h"
+#include "kolosal_server_client.h"
 #include <iostream>
 #include <conio.h>
 #include <windows.h>
 #include <regex>
 #include <algorithm>
+#include <iomanip>
+#include <memory>
+#include <sstream>
+
+// Helper function to format file sizes
+static std::string formatFileSize(long long bytes) {
+    const char* units[] = {"B", "KB", "MB", "GB", "TB"};
+    int unitIndex = 0;
+    double size = static_cast<double>(bytes);
+    
+    while (size >= 1024.0 && unitIndex < 4) {
+        size /= 1024.0;
+        unitIndex++;
+    }
+    
+    std::ostringstream oss;
+    if (unitIndex == 0) {
+        oss << static_cast<long long>(size) << " " << units[unitIndex];
+    } else {
+        oss << std::fixed << std::setprecision(1) << size << " " << units[unitIndex];
+    }
+    return oss.str();
+}
 
 void KolosalCLI::initialize()
 {
     HttpClient::initialize();
     CacheManager::initialize();
+    
+    // Initialize server client
+    m_serverClient = std::make_unique<KolosalServerClient>();
 }
 
 void KolosalCLI::cleanup()
@@ -25,10 +52,7 @@ void KolosalCLI::cleanup()
 
 void KolosalCLI::showWelcome()
 {
-    std::cout << "Welcome to Kolosal CLI!\n";
-    std::cout << "Browse and download GGUF models from Hugging Face\n";
-
-    // Show offline capability status
+    std::cout << "Kolosal CLI - Browse and download GGUF models\n";
     if (CacheManager::hasAnyCachedData())
     {
         std::cout << "Cached data available\n";
@@ -62,9 +86,84 @@ std::vector<ModelFile> KolosalCLI::generateSampleFiles(const std::string &modelI
     ModelFile file3;
     file3.filename = modelName + "-Q5_K_M.gguf";
     file3.quant = ModelFileUtils::detectQuantization(file3.filename);
-    modelFiles.push_back(file3);
+    modelFiles.push_back(file3);    return modelFiles;
+}
 
-    return modelFiles;
+bool KolosalCLI::initializeServer()
+{
+    std::cout << "Starting server..." << std::endl;
+    
+    // Try to start the server
+    if (!m_serverClient->startServer()) {
+        std::cerr << "Failed to start server." << std::endl;
+        return false;
+    }
+    
+    // Wait for server to become ready
+    if (!m_serverClient->waitForServerReady(30)) {
+        std::cerr << "Server failed to become ready." << std::endl;
+        return false;
+    }
+    
+    return true;
+}
+
+bool KolosalCLI::processModelDownload(const std::string& modelId, const ModelFile& modelFile)
+{
+    // Generate download URL
+    std::string downloadUrl = "https://huggingface.co/" + modelId + "/resolve/main/" + modelFile.filename;
+    
+    // Generate engine ID (use model ID + filename without extension)
+    std::string engineId = modelId;
+    std::replace(engineId.begin(), engineId.end(), '/', '_');
+    engineId += "_" + modelFile.filename.substr(0, modelFile.filename.find_last_of('.'));
+      std::cout << "\nDownloading: " << modelFile.filename << std::endl;
+    std::cout << "From: " << modelId << std::endl;
+    
+    // Send engine creation request to server
+    if (!m_serverClient->addEngine(engineId, downloadUrl, "./models/" + modelFile.filename, true)) {
+        std::cerr << "Failed to send download request." << std::endl;
+        return false;
+    }
+    
+    // Monitor download progress
+      bool downloadSuccess = m_serverClient->monitorDownloadProgress(
+        engineId,
+        [](double percentage, const std::string& status, long long downloadedBytes, long long totalBytes) {
+            // Progress callback - update display
+            std::cout << "\r";
+              // Create progress bar
+            int barWidth = 50;
+            int pos = static_cast<int>(barWidth * percentage / 100.0);
+            
+            std::cout << "|";
+            for (int i = 0; i < barWidth; ++i) {
+                if (i < pos) std::cout << "█";
+                else std::cout << "-";
+            }
+            std::cout << "| " << std::fixed << std::setprecision(1) << percentage << "% ";
+            // Show file sizes if available
+            if (totalBytes > 0) {
+                std::cout << "(" << formatFileSize(downloadedBytes) << "/" << formatFileSize(totalBytes) << ") ";
+            }
+            
+            if (status == "creating_engine") {
+                std::cout << "(loading)";
+            }
+            
+            std::cout.flush();
+        },
+        1000 // Check every 1 second
+    );
+    
+    std::cout << std::endl; // New line after progress bar
+      if (downloadSuccess) {
+        std::cout << "✓ Download completed. Model ready for inference." << std::endl;
+    } else {
+        std::cout << "✗ Download failed." << std::endl;
+    }
+    
+    return downloadSuccess;
 }
 
 std::string KolosalCLI::selectModel()
@@ -191,6 +290,12 @@ bool KolosalCLI::isValidModelId(const std::string &modelId)
 int KolosalCLI::run(const std::string &repoId)
 {
     showWelcome();
+    
+    // Initialize Kolosal server first
+    if (!initializeServer()) {
+        std::cerr << "Failed to initialize Kolosal server. Exiting." << std::endl;
+        return 1;
+    }
 
     // If a repository ID is provided, go directly to file selection
     if (!repoId.empty())
@@ -233,8 +338,9 @@ int KolosalCLI::run(const std::string &repoId)
 
                 if (fileResult >= 0 && fileResult < static_cast<int>(modelFiles.size()))
                 {
-                    showSelectionResult(modelId, modelFiles[fileResult]);
-                    return 0;
+                    // Process download through server
+                    bool success = processModelDownload(modelId, modelFiles[fileResult]);
+                    return success ? 0 : 1;
                 }
                 std::cout << "Selection cancelled." << std::endl;
                 return 0;
@@ -261,7 +367,8 @@ int KolosalCLI::run(const std::string &repoId)
             continue;
         }
 
-        showSelectionResult(selectedModel, selectedFile);
-        return 0;
+        // Process download through server
+        bool success = processModelDownload(selectedModel, selectedFile);
+        return success ? 0 : 1;
     }
 }

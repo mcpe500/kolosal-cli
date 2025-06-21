@@ -3,7 +3,9 @@
 
 #include <string>
 #include <vector>
+#include <memory>
 #include "model_file.h"
+#include "kolosal_server_client.h"
 
 /**
  * @brief Main application class for Kolosal CLI
@@ -70,13 +72,29 @@ private:
      * @brief Generate fallback sample models when API fails
      * @return Vector of sample model IDs
      */
-    std::vector<std::string> generateSampleModels();
-      /**
+    std::vector<std::string> generateSampleModels();    /**
      * @brief Generate fallback sample files when API fails
      * @param modelId The model ID to generate sample files for
      * @return Vector of sample ModelFile objects
      */
     std::vector<ModelFile> generateSampleFiles(const std::string& modelId);
+
+private:
+    std::unique_ptr<KolosalServerClient> m_serverClient;
+    
+    /**
+     * @brief Initialize and start the Kolosal server
+     * @return True if server is ready, false otherwise
+     */
+    bool initializeServer();
+    
+    /**
+     * @brief Process model selection and send to server for download
+     * @param modelId The selected model ID
+     * @param modelFile The selected model file
+     * @return True if download completed successfully, false otherwise
+     */
+    bool processModelDownload(const std::string& modelId, const ModelFile& modelFile);
 };
 
 #endif // KOLOSAL_CLI_H
