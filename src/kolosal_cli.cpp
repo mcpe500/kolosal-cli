@@ -165,12 +165,11 @@ bool KolosalCLI::initializeServer()
 bool KolosalCLI::processModelDownload(const std::string& modelId, const ModelFile& modelFile)
 {
     // Generate download URL
-    std::string downloadUrl = "https://huggingface.co/" + modelId + "/resolve/main/" + modelFile.filename;
+    std::string downloadUrl = "https://huggingface.co/" + modelId + "/resolve/main/" + modelFile.filename;    // Generate simplified engine ID in format "model-name:quant"
+    std::string modelName = modelId.substr(modelId.find('/') + 1); // Extract model name after "/"
+    std::string quantType = modelFile.quant.type; // Use full quantization type
     
-    // Generate engine ID (use model ID + filename without extension)
-    std::string engineId = modelId;
-    std::replace(engineId.begin(), engineId.end(), '/', '_');
-    engineId += "_" + modelFile.filename.substr(0, modelFile.filename.find_last_of('.'));
+    std::string engineId = modelName + ":" + quantType;
       std::cout << "\nDownloading: " << modelFile.filename << std::endl;
     std::cout << "From: " << modelId << std::endl;
     
