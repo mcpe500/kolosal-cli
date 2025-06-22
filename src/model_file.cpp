@@ -254,7 +254,7 @@ MemoryUsage ModelFileUtils::calculateMemoryUsage(const ModelFile &modelFile, int
         usage.kvCacheMB = static_cast<size_t>(kvCacheSizeBytes / (1000 * 1000));
 
         // Total required memory = model file size * 1.2 (20% overhead) + KV cache
-        usage.totalRequiredMB = static_cast<size_t>(usage.modelSizeMB * 1.2) + usage.kvCacheMB;
+        usage.totalRequiredMB = static_cast<size_t>(usage.modelSizeMB + usage.kvCacheMB);
 
         // Create display string
         std::ostringstream oss;
