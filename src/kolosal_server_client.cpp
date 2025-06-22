@@ -5,6 +5,7 @@
 #include <chrono>
 #include <regex>
 #include <windows.h>
+#include <tlhelp32.h>
 #include <nlohmann/json.hpp>
 
 using json = nlohmann::json;
@@ -14,51 +15,62 @@ KolosalServerClient::KolosalServerClient(const std::string& baseUrl, const std::
 }
 
 KolosalServerClient::~KolosalServerClient() {
-    if (m_serverStartedByUs) {
-        stopServer();
+    // Server should keep running in background after CLI exits
+    // Don't stop server in destructor anymore
+    if (m_serverProcess) {
+        CloseHandle(static_cast<HANDLE>(m_serverProcess));
+        m_serverProcess = nullptr;
     }
 }
 
 bool KolosalServerClient::startServer(const std::string& serverPath, int port) {
     // Check if server is already running
     if (isServerHealthy()) {
+        std::cout << "Server is already running and healthy." << std::endl;
         return true;
     }
     
-    // Determine server executable path
+    std::cout << "Server not detected. Starting new server instance..." << std::endl;
+      // Determine server executable path
     std::string actualServerPath = serverPath;
     if (actualServerPath.empty()) {
-        // Try to find the server in common locations relative to the CLI
+        // Try to find the server in the same directory as the CLI executable
         char exePath[MAX_PATH];
         GetModuleFileNameA(NULL, exePath, MAX_PATH);
         std::string exeDir = std::string(exePath);
         exeDir = exeDir.substr(0, exeDir.find_last_of("\\/"));
         
-        // Check for server-bin relative to CLI directory
-        std::string parentDir = exeDir.substr(0, exeDir.find_last_of("\\/"));
-        parentDir = parentDir.substr(0, parentDir.find_last_of("\\/"));
+        // First try: same directory as CLI executable
+        std::string sameDirPath = exeDir + "\\kolosal-server.exe";
         
-        std::string serverBinPath = parentDir + "\\server-bin\\kolosal-server.exe";
-        
-        // Check if the file exists
-        DWORD fileAttr = GetFileAttributesA(serverBinPath.c_str());
+        // Check if the file exists in the same directory
+        DWORD fileAttr = GetFileAttributesA(sameDirPath.c_str());
         if (fileAttr != INVALID_FILE_ATTRIBUTES && !(fileAttr & FILE_ATTRIBUTE_DIRECTORY)) {
-            actualServerPath = serverBinPath;
+            actualServerPath = sameDirPath;
         } else {
-            // Fallback to current directory
-            actualServerPath = "kolosal-server.exe";
+            // Fallback: Check for server-bin relative to CLI directory (for backward compatibility)
+            std::string parentDir = exeDir.substr(0, exeDir.find_last_of("\\/"));
+            parentDir = parentDir.substr(0, parentDir.find_last_of("\\/"));
+            
+            std::string serverBinPath = parentDir + "\\server-bin\\kolosal-server.exe";
+            
+            fileAttr = GetFileAttributesA(serverBinPath.c_str());
+            if (fileAttr != INVALID_FILE_ATTRIBUTES && !(fileAttr & FILE_ATTRIBUTE_DIRECTORY)) {
+                actualServerPath = serverBinPath;
+            } else {
+                // Final fallback to current directory
+                actualServerPath = "kolosal-server.exe";
+            }
         }
-    }
+    }    // Prepare command line
+    std::string commandLine = "kolosal-server.exe --port " + std::to_string(port) + " --host 0.0.0.0";
     
-    // Prepare command line
-    std::string commandLine = "\"" + actualServerPath + "\" --port " + std::to_string(port) + " --host 0.0.0.0";
-      // Set up working directory to be the same as the server executable
+    // Set up working directory to be the same as the server executable
     std::string workingDir = actualServerPath.substr(0, actualServerPath.find_last_of("\\/"));
     if (workingDir == actualServerPath) {
         workingDir = "."; // If no path separator found, use current directory
     }
-    
-    // Windows process creation
+      // Windows process creation
     STARTUPINFOA si;
     PROCESS_INFORMATION pi;
     ZeroMemory(&si, sizeof(si));
@@ -66,15 +78,14 @@ bool KolosalServerClient::startServer(const std::string& serverPath, int port) {
     si.dwFlags = STARTF_USESHOWWINDOW;
     si.wShowWindow = SW_HIDE; // Hide the server window
     ZeroMemory(&pi, sizeof(pi));
-    
-    // Create the process
+      // Create the process detached from parent so it can persist after CLI exits
     BOOL result = CreateProcessA(
-        NULL,                           // No module name (use command line)
+        actualServerPath.c_str(),       // Application name
         const_cast<char*>(commandLine.c_str()), // Command line
         NULL,                           // Process handle not inheritable
         NULL,                           // Thread handle not inheritable
         FALSE,                          // Set handle inheritance to FALSE
-        CREATE_NEW_CONSOLE,             // Create new console
+        CREATE_NEW_CONSOLE,             // Create new console only
         NULL,                           // Use parent's environment block
         workingDir.c_str(),             // Working directory
         &si,                            // Pointer to STARTUPINFO structure
@@ -98,8 +109,7 @@ bool KolosalServerClient::startServer(const std::string& serverPath, int port) {
                 break;
         }
         return false;
-    }
-      // Store process handle and mark that we started it
+    }    // Store process handle and mark that we started it
     m_serverProcess = pi.hProcess;
     m_serverStartedByUs = true;
     CloseHandle(pi.hThread); // Close thread handle as we don't need it
@@ -145,7 +155,7 @@ bool KolosalServerClient::isServerHealthy() {
 }
 
 bool KolosalServerClient::waitForServerReady(int timeoutSeconds) {
-    std::cout << "Starting server";
+    std::cout << "Waiting for server to become ready";
     
     auto startTime = std::chrono::steady_clock::now();
     auto timeout = std::chrono::seconds(timeoutSeconds);
@@ -153,6 +163,7 @@ bool KolosalServerClient::waitForServerReady(int timeoutSeconds) {
     while (std::chrono::steady_clock::now() - startTime < timeout) {
         if (isServerHealthy()) {
             std::cout << " ✓" << std::endl;
+            std::cout << "Server is ready and running in the background." << std::endl;
             return true;
         }
         
@@ -298,4 +309,106 @@ bool KolosalServerClient::parseJsonNumber(const std::string& jsonString, const s
         // JSON parsing failed
     }
     return false;
+}
+
+bool KolosalServerClient::shutdownServer() {
+    // First try the API endpoint if it exists
+    std::string response;
+    if (makePostRequest("/v1/shutdown", "{}", response)) {
+        std::cout << "Shutdown request sent to server via API." << std::endl;
+        
+        // Wait a moment for the server to shutdown gracefully
+        std::this_thread::sleep_for(std::chrono::seconds(2));
+        
+        return true;
+    }
+    
+    // If API shutdown fails, try to find and terminate the server process
+    std::cout << "API shutdown not available. Attempting to terminate server process..." << std::endl;
+    
+    // On Windows, find the kolosal-server process and terminate it
+#ifdef _WIN32
+    HANDLE hSnapshot = CreateToolhelp32Snapshot(TH32CS_SNAPPROCESS, 0);
+    if (hSnapshot == INVALID_HANDLE_VALUE) {
+        std::cerr << "Failed to create process snapshot." << std::endl;
+        return false;
+    }
+    
+    PROCESSENTRY32 pe32;
+    pe32.dwSize = sizeof(PROCESSENTRY32);
+    
+    if (!Process32First(hSnapshot, &pe32)) {
+        std::cerr << "Failed to get first process." << std::endl;
+        CloseHandle(hSnapshot);
+        return false;
+    }
+    
+    bool found = false;
+    do {
+        if (strcmp(pe32.szExeFile, "kolosal-server.exe") == 0) {
+            HANDLE hProcess = OpenProcess(PROCESS_TERMINATE, FALSE, pe32.th32ProcessID);
+            if (hProcess != NULL) {
+                if (TerminateProcess(hProcess, 0)) {
+                    std::cout << "Server process terminated successfully." << std::endl;
+                    found = true;
+                } else {
+                    std::cerr << "Failed to terminate server process. Error: " << GetLastError() << std::endl;
+                }
+                CloseHandle(hProcess);
+            } else {
+                std::cerr << "Failed to open server process. Error: " << GetLastError() << std::endl;
+            }
+            break;
+        }
+    } while (Process32Next(hSnapshot, &pe32));
+    
+    CloseHandle(hSnapshot);
+    
+    if (!found) {
+        std::cout << "No kolosal-server.exe process found." << std::endl;
+        return true; // Not an error if no process exists
+    }
+    
+    return found;
+#else
+    std::cerr << "Process termination not implemented for this platform." << std::endl;
+    return false;
+#endif
+}
+
+bool KolosalServerClient::cancelDownload(const std::string& modelId) {
+    std::string response;
+    std::string endpoint = "/downloads/" + modelId + "/cancel";
+    
+    if (!makePostRequest(endpoint, "{}", response)) {
+        return false;
+    }
+    
+    try {
+        json cancelJson = json::parse(response);
+        bool success = cancelJson.value("success", false);
+        return success;
+    } catch (const std::exception& e) {
+        std::cerr << "Error parsing cancel response: " << e.what() << std::endl;
+        return false;
+    }
+}
+
+bool KolosalServerClient::cancelAllDownloads() {
+    std::string response;
+    std::string endpoint = "/downloads";
+    
+    if (!makePostRequest(endpoint, "{}", response)) {
+        return false;
+    }
+    
+    try {
+        json cancelJson = json::parse(response);
+        int cancelledCount = cancelJson.value("cancelled_count", 0);
+        std::cout << "Cancelled " << cancelledCount << " downloads." << std::endl;
+        return true;
+    } catch (const std::exception& e) {
+        std::cerr << "Error parsing cancel all response: " << e.what() << std::endl;
+        return false;
+    }
 }

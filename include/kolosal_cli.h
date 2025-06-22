@@ -27,6 +27,12 @@ public:
      * @brief Cleanup resources before exit
      */
     void cleanup();
+    
+    /**
+     * @brief Stop the background Kolosal server
+     * @return True if server was stopped successfully, false otherwise
+     */
+    bool stopBackgroundServer();
 
 private:
     /**
@@ -81,6 +87,8 @@ private:
 
 private:
     std::unique_ptr<KolosalServerClient> m_serverClient;
+    std::vector<std::string> m_activeDownloads; // Track active download IDs
+    static KolosalCLI* s_instance; // For signal handling
     
     /**
      * @brief Initialize and start the Kolosal server
@@ -95,6 +103,17 @@ private:
      * @return True if download completed successfully, false otherwise
      */
     bool processModelDownload(const std::string& modelId, const ModelFile& modelFile);
+    
+    /**
+     * @brief Cancel all active downloads
+     */
+    void cancelActiveDownloads();
+    
+    /**
+     * @brief Signal handler for graceful shutdown
+     * @param signal Signal number
+     */
+    static void signalHandler(int signal);
 };
 
 #endif // KOLOSAL_CLI_H

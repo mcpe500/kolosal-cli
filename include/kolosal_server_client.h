@@ -35,6 +35,12 @@ public:
     bool stopServer();
     
     /**
+     * @brief Gracefully shutdown the server via API call
+     * @return True if shutdown request was sent successfully, false otherwise
+     */
+    bool shutdownServer();
+    
+    /**
      * @brief Check if the server is running and healthy
      * @return True if server is healthy, false otherwise
      */
@@ -70,7 +76,7 @@ public:
     bool getDownloadProgress(const std::string& modelId, long long& downloadedBytes,
                            long long& totalBytes, double& percentage, std::string& status);
       /**
-     * @brief Monitor download progress with callback
+     * @brief Monitor download progress and provide updates
      * @param modelId Model ID to monitor
      * @param progressCallback Callback function called with progress updates (percentage, status, downloadedBytes, totalBytes)
      * @param checkIntervalMs Interval between progress checks in milliseconds (default: 1000)
@@ -79,6 +85,19 @@ public:
     bool monitorDownloadProgress(const std::string& modelId, 
                                std::function<void(double, const std::string&, long long, long long)> progressCallback,
                                int checkIntervalMs = 1000);
+
+    /**
+     * @brief Cancel a specific download
+     * @param modelId Model ID of the download to cancel
+     * @return True if cancellation request was successful, false otherwise
+     */
+    bool cancelDownload(const std::string& modelId);
+
+    /**
+     * @brief Cancel all active downloads
+     * @return True if cancellation request was successful, false otherwise
+     */
+    bool cancelAllDownloads();
 
 private:
     std::string m_baseUrl;

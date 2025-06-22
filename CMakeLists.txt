@@ -1,4 +1,4 @@
-cmake_minimum_required(VERSION 3.12)
+cmake_minimum_required(VERSION 3.14)
 
 project(kolosal-cli
   LANGUAGES CXX
@@ -9,6 +9,9 @@ project(kolosal-cli
 # Set C++ standard
 set(CMAKE_CXX_STANDARD 17)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
+
+# Add the kolosal-server submodule
+add_subdirectory(kolosal-server)
 
 # Add external libraries
 set(CURL_DIR ${CMAKE_CURRENT_SOURCE_DIR}/external/curl)
@@ -43,6 +46,9 @@ file(GLOB_RECURSE HEADERS
 # Add executable
 add_executable(kolosal-cli ${SOURCES} ${HEADERS})
 
+# Make kolosal-cli depend on the server targets to ensure proper build order
+add_dependencies(kolosal-cli kolosal_server_exe kolosal_server)
+
 # Link libraries
 target_link_libraries(kolosal-cli ${CURL_LIBRARY})
 
@@ -55,15 +61,19 @@ if(WIN32)
         COMMAND ${CMAKE_COMMAND} -E copy_if_different
         "${CURL_DIR}/bin/libcurl.dll"
         $<TARGET_FILE_DIR:kolosal-cli>)
-    
-    # Copy Kolosal server files to output directory
+      # Copy Kolosal server files from built submodule to output directory
     add_custom_command(TARGET kolosal-cli POST_BUILD
         COMMAND ${CMAKE_COMMAND} -E copy_if_different
-        "${CMAKE_CURRENT_SOURCE_DIR}/server-bin/kolosal_server.dll"
-        $<TARGET_FILE_DIR:kolosal-cli>)
+        $<TARGET_FILE:kolosal_server>
+        $<TARGET_FILE_DIR:kolosal-cli>/kolosal_server.dll)
     
     add_custom_command(TARGET kolosal-cli POST_BUILD
         COMMAND ${CMAKE_COMMAND} -E copy_if_different
-        "${CMAKE_CURRENT_SOURCE_DIR}/server-bin/kolosal-server.exe"
-        $<TARGET_FILE_DIR:kolosal-cli>)
+        $<TARGET_FILE:kolosal_server_exe>
+        $<TARGET_FILE_DIR:kolosal-cli>/kolosal-server.exe)
+          # Copy libcurl.dll from kolosal-server build if available
+    add_custom_command(TARGET kolosal-cli POST_BUILD
+        COMMAND ${CMAKE_COMMAND} -E copy_if_different
+        $<TARGET_FILE_DIR:kolosal_server_exe>/libcurl.dll
+        $<TARGET_FILE_DIR:kolosal-cli>/libcurl.dll)
 endif()

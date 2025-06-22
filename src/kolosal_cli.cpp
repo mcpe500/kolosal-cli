@@ -14,6 +14,11 @@
 #include <iomanip>
 #include <memory>
 #include <sstream>
+#include <signal.h>
+#include <csignal>
+
+// Static member initialization
+KolosalCLI* KolosalCLI::s_instance = nullptr;
 
 // Helper function to format file sizes
 static std::string formatFileSize(long long bytes) {
@@ -42,12 +47,61 @@ void KolosalCLI::initialize()
     
     // Initialize server client
     m_serverClient = std::make_unique<KolosalServerClient>();
+    
+    // Set up signal handling for graceful shutdown
+    s_instance = this;
+    signal(SIGINT, signalHandler);   // Ctrl+C
+    signal(SIGTERM, signalHandler);  // Termination request
+#ifdef _WIN32
+    // On Windows, also handle console control events
+    SetConsoleCtrlHandler([](DWORD dwCtrlType) -> BOOL {
+        if (dwCtrlType == CTRL_C_EVENT || dwCtrlType == CTRL_CLOSE_EVENT || dwCtrlType == CTRL_BREAK_EVENT) {
+            if (KolosalCLI::s_instance) {
+                std::cout << "\nReceived shutdown signal. Cancelling downloads..." << std::endl;
+                KolosalCLI::s_instance->cancelActiveDownloads();
+            }
+            return TRUE;
+        }
+        return FALSE;
+    }, TRUE);
+#endif
 }
 
 void KolosalCLI::cleanup()
 {
+    // Cancel any active downloads before cleanup
+    cancelActiveDownloads();
+    
+    // Reset signal instance
+    s_instance = nullptr;
+    
     CacheManager::cleanup();
     HttpClient::cleanup();
+}
+
+bool KolosalCLI::stopBackgroundServer()
+{
+    if (!m_serverClient) {
+        std::cerr << "Server client not initialized." << std::endl;
+        return false;
+    }
+    
+    // Check if server is running
+    if (!m_serverClient->isServerHealthy()) {
+        std::cout << "No server is currently running." << std::endl;
+        return true;
+    }
+    
+    std::cout << "Stopping background Kolosal server..." << std::endl;
+    
+    // Try graceful shutdown first
+    if (m_serverClient->shutdownServer()) {
+        std::cout << "Server stopped successfully." << std::endl;
+        return true;
+    } else {
+        std::cerr << "Failed to stop server gracefully." << std::endl;
+        return false;
+    }
 }
 
 void KolosalCLI::showWelcome()
@@ -126,6 +180,9 @@ bool KolosalCLI::processModelDownload(const std::string& modelId, const ModelFil
         return false;
     }
     
+    // Track this download
+    m_activeDownloads.push_back(engineId);
+    
     // Monitor download progress
       bool downloadSuccess = m_serverClient->monitorDownloadProgress(
         engineId,
@@ -155,6 +212,12 @@ bool KolosalCLI::processModelDownload(const std::string& modelId, const ModelFil
         },
         1000 // Check every 1 second
     );
+    
+    // Remove from active downloads list
+    auto it = std::find(m_activeDownloads.begin(), m_activeDownloads.end(), engineId);
+    if (it != m_activeDownloads.end()) {
+        m_activeDownloads.erase(it);
+    }
     
     std::cout << std::endl; // New line after progress bar
       if (downloadSuccess) {
@@ -290,12 +353,15 @@ bool KolosalCLI::isValidModelId(const std::string &modelId)
 int KolosalCLI::run(const std::string &repoId)
 {
     showWelcome();
-    
-    // Initialize Kolosal server first
+      // Initialize Kolosal server first
     if (!initializeServer()) {
         std::cerr << "Failed to initialize Kolosal server. Exiting." << std::endl;
         return 1;
     }
+    
+    std::cout << "Note: Kolosal server will continue running in the background after CLI exits." << std::endl;
+    std::cout << "Use '" << "kolosal-cli --stop-server" << "' to stop the server when done." << std::endl;
+    std::cout << std::endl;
 
     // If a repository ID is provided, go directly to file selection
     if (!repoId.empty())
@@ -371,4 +437,35 @@ int KolosalCLI::run(const std::string &repoId)
         bool success = processModelDownload(selectedModel, selectedFile);
         return success ? 0 : 1;
     }
+}
+
+void KolosalCLI::cancelActiveDownloads()
+{
+    if (m_activeDownloads.empty()) {
+        return;
+    }
+    
+    std::cout << "Cancelling " << m_activeDownloads.size() << " active download(s)..." << std::endl;
+    
+    for (const std::string& downloadId : m_activeDownloads) {
+        if (m_serverClient && m_serverClient->cancelDownload(downloadId)) {
+            std::cout << "Cancelled download: " << downloadId << std::endl;
+        } else {
+            std::cerr << "Failed to cancel download: " << downloadId << std::endl;
+        }
+    }
+    
+    m_activeDownloads.clear();
+}
+
+void KolosalCLI::signalHandler(int signal)
+{
+    std::cout << "\nReceived signal " << signal << ". Performing cleanup..." << std::endl;
+    
+    if (s_instance) {
+        s_instance->cancelActiveDownloads();
+    }
+    
+    // Exit gracefully
+    exit(signal);
 }
