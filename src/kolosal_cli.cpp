@@ -130,23 +130,27 @@ std::vector<ModelFile> KolosalCLI::generateSampleFiles(const std::string &modelI
     ModelFile file1;
     file1.filename = modelName + "-Q8_0.gguf";
     file1.quant = ModelFileUtils::detectQuantization(file1.filename);
+    file1.downloadUrl = "https://huggingface.co/" + modelId + "/resolve/main/" + file1.filename;
+    file1.memoryUsage = ModelFileUtils::calculateMemoryUsage(file1, 4096);
     modelFiles.push_back(file1);
 
     ModelFile file2;
     file2.filename = modelName + "-Q4_K_M.gguf";
     file2.quant = ModelFileUtils::detectQuantization(file2.filename);
+    file2.downloadUrl = "https://huggingface.co/" + modelId + "/resolve/main/" + file2.filename;
+    file2.memoryUsage = ModelFileUtils::calculateMemoryUsage(file2, 4096);
     modelFiles.push_back(file2);
 
     ModelFile file3;
     file3.filename = modelName + "-Q5_K_M.gguf";
     file3.quant = ModelFileUtils::detectQuantization(file3.filename);
+    file3.downloadUrl = "https://huggingface.co/" + modelId + "/resolve/main/" + file3.filename;
+    file3.memoryUsage = ModelFileUtils::calculateMemoryUsage(file3, 4096);
     modelFiles.push_back(file3);    return modelFiles;
 }
 
 bool KolosalCLI::initializeServer()
 {
-    std::cout << "Starting server..." << std::endl;
-    
     // Try to start the server
     if (!m_serverClient->startServer()) {
         std::cerr << "Failed to start server." << std::endl;
@@ -269,13 +273,11 @@ ModelFile KolosalCLI::selectModelFile(const std::string &modelId)
         // Fallback to sample files with quantization info
         modelFiles = generateSampleFiles(modelId);
         Sleep(2000);
-    }
-
-    // Convert ModelFile objects to display strings
+    }    // Convert ModelFile objects to display strings with memory usage
     std::vector<std::string> displayFiles;
     for (const auto &file : modelFiles)
     {
-        displayFiles.push_back(file.getDisplayName());
+        displayFiles.push_back(file.getDisplayNameWithMemory());
     }
     displayFiles.push_back("Back to Model Selection");
 
@@ -311,6 +313,12 @@ std::string KolosalCLI::parseRepositoryInput(const std::string &input)
     // Remove whitespace
     std::string trimmed = input;
     trimmed.erase(std::remove_if(trimmed.begin(), trimmed.end(), ::isspace), trimmed.end());
+    
+    // Check if it's a direct GGUF file URL first
+    if (isDirectGGUFUrl(trimmed)) {
+        return "DIRECT_URL"; // Special marker for direct URLs
+    }
+    
     // Check if it's a full Hugging Face URL
     std::regex urlPattern(R"(https?://huggingface\.co/([^/]+/[^/?\s#]+))");
     std::smatch matches;
@@ -337,16 +345,98 @@ std::string KolosalCLI::parseRepositoryInput(const std::string &input)
     return ""; // Invalid format
 }
 
-bool KolosalCLI::isValidModelId(const std::string &modelId)
+bool KolosalCLI::isDirectGGUFUrl(const std::string& input)
 {
-    if (modelId.empty())
-    {
+    if (input.empty()) {
         return false;
     }
+    
+    // Check if it's a URL that ends with .gguf
+    std::regex ggufUrlPattern(R"(^https?://[^\s]+\.gguf$)", std::regex_constants::icase);
+    return std::regex_match(input, ggufUrlPattern);
+}
 
-    // Check format: owner/model-name
-    std::regex pattern(R"(^[a-zA-Z0-9_.-]+/[a-zA-Z0-9_.-]+$)");
-    return std::regex_match(modelId, pattern);
+bool KolosalCLI::handleDirectGGUFUrl(const std::string& url)
+{
+    std::cout << "Processing direct GGUF file URL...\n\n";
+    
+    // Extract filename from URL
+    std::string filename;
+    size_t lastSlash = url.find_last_of('/');
+    if (lastSlash != std::string::npos && lastSlash < url.length() - 1) {
+        filename = url.substr(lastSlash + 1);
+    } else {
+        filename = "model.gguf"; // Fallback filename
+    }
+      // Create a ModelFile object for the direct URL
+    ModelFile modelFile;
+    modelFile.filename = filename;
+    modelFile.downloadUrl = url;
+    
+    // Try to get cached model file info first
+    std::string cacheKey = "direct_url:" + url;
+    ModelFile cachedFile = CacheManager::getCachedModelFile(cacheKey);
+    if (!cachedFile.filename.empty()) {
+        std::cout << "Using cached information for: " << filename << std::endl;
+        modelFile = cachedFile;
+    } else {
+        std::cout << "Analyzing GGUF file: " << filename << std::endl;
+        LoadingAnimation loading("Reading metadata");
+        loading.start();
+        
+        // Extract quantization info from filename
+        modelFile.quant = ModelFileUtils::detectQuantization(filename);
+        
+        // Calculate memory usage
+        modelFile.memoryUsage = ModelFileUtils::calculateMemoryUsage(modelFile);
+        
+        loading.stop();
+        
+        // Cache the model file info
+        CacheManager::cacheModelFile(cacheKey, modelFile);
+        std::cout << "✓ Cached model information" << std::endl;
+    }
+    
+    // Display file information
+    std::cout << "File: " << filename << std::endl;
+    std::cout << "URL: " << url << std::endl;
+    std::cout << "Quantization: " << modelFile.quant.type << " - " << modelFile.quant.description << std::endl;    if (modelFile.memoryUsage.hasEstimate) {
+        std::cout << "Estimated Memory Usage: " << modelFile.memoryUsage.displayString << std::endl;
+    }
+    
+    std::cout << std::endl;
+    
+    // Ask for confirmation
+    std::cout << "Download this model? (y/n): ";
+    char choice;
+    std::cin >> choice;
+    
+    if (choice == 'y' || choice == 'Y') {
+        // Generate simplified engine ID from filename
+        std::string engineId = filename;
+        size_t dotPos = engineId.find_last_of('.');
+        if (dotPos != std::string::npos) {
+            engineId = engineId.substr(0, dotPos);
+        }
+        
+        // Process download through server
+        if (!m_serverClient->addEngine(engineId, url, "./models/" + filename, true)) {
+            std::cerr << "Failed to start download." << std::endl;
+            return false;
+        }
+        
+        m_activeDownloads.push_back(engineId);
+        
+        std::cout << "\n✓ Download started successfully!" << std::endl;
+        std::cout << "Engine ID: " << engineId << std::endl;
+        std::cout << "Downloading to: ./models/" << filename << std::endl;
+        std::cout << "\nDownload initiated. Check server logs for progress." << std::endl;
+        
+        return true;
+    } else {
+        std::cout << "Download cancelled." << std::endl;
+        return false;
+    }
 }
 
 int KolosalCLI::run(const std::string &repoId)
@@ -354,14 +444,9 @@ int KolosalCLI::run(const std::string &repoId)
     showWelcome();
       // Initialize Kolosal server first
     if (!initializeServer()) {
-        std::cerr << "Failed to initialize Kolosal server. Exiting." << std::endl;
-        return 1;
+        std::cerr << "Failed to initialize Kolosal server. Exiting." << std::endl;        return 1;
     }
     
-    std::cout << "Note: Kolosal server will continue running in the background after CLI exits." << std::endl;
-    std::cout << "Use '" << "kolosal-cli --stop-server" << "' to stop the server when done." << std::endl;
-    std::cout << std::endl;
-
     // If a repository ID is provided, go directly to file selection
     if (!repoId.empty())
     {
@@ -372,7 +457,14 @@ int KolosalCLI::run(const std::string &repoId)
             std::cout << "Valid formats:\n";
             std::cout << "  • owner/model-name (e.g., microsoft/DialoGPT-medium)\n";
             std::cout << "  • https://huggingface.co/owner/model-name\n";
+            std::cout << "  • Direct GGUF file URL (e.g., https://huggingface.co/owner/model/resolve/main/model.gguf)\n";
             return 1; // Exit with error code
+        }
+        else if (modelId == "DIRECT_URL")
+        {
+            // Handle direct GGUF file URL
+            bool success = handleDirectGGUFUrl(repoId);
+            return success ? 0 : 1;
         }
         else
         {
@@ -387,12 +479,11 @@ int KolosalCLI::run(const std::string &repoId)
                 return 1; // Exit with error code
             }
             else
-            {
-                // Show GGUF file selection
+            {                // Show GGUF file selection
                 std::vector<std::string> displayFiles;
                 for (const auto &file : modelFiles)
                 {
-                    displayFiles.push_back(file.getDisplayName());
+                    displayFiles.push_back(file.getDisplayNameWithMemory());
                 }
                 displayFiles.push_back("Exit");
 

@@ -80,6 +80,20 @@ public:
     static bool hasAnyCachedData();
     
     /**
+     * @brief Get cached individual model file if available and not expired
+     * @param cacheKey Unique key for the model file (e.g., "direct_url:http://...")
+     * @return ModelFile object, empty if cache miss or expired
+     */
+    static ModelFile getCachedModelFile(const std::string& cacheKey);
+    
+    /**
+     * @brief Cache individual model file for future use
+     * @param cacheKey Unique key for the model file
+     * @param modelFile ModelFile object to cache
+     */
+    static void cacheModelFile(const std::string& cacheKey, const ModelFile& modelFile);
+    
+    /**
      * @brief Check if cache directory exists and create if needed
      */
     static void ensureCacheDirectory();

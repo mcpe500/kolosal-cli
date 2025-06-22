@@ -11,13 +11,8 @@ InteractiveList::InteractiveList(const std::vector<std::string> &listItems)
     hConsole = GetStdHandle(STD_OUTPUT_HANDLE);
     GetConsoleScreenBufferInfo(hConsole, &csbi);
 
-    // Calculate max display items based on console height
-    // Reserve space for title (4 lines) + search bar (2 lines) + selected info (2 lines) + margin (2 lines)
-    int availableHeight = csbi.srWindow.Bottom - csbi.srWindow.Top - 10;
-    if (availableHeight > 5)
-    {
-        maxDisplayItems = static_cast<size_t>(availableHeight);
-    }
+    // Calculate max display items dynamically based on actual content
+    maxDisplayItems = calculateMaxDisplayItems();
 }
 
 void InteractiveList::hideCursor()
@@ -111,6 +106,51 @@ void InteractiveList::applyFilter()
             }
         }
     }
+    
+    // Recalculate max display items based on the new filtered set
+    maxDisplayItems = calculateMaxDisplayItems();
+}
+
+int InteractiveList::calculateItemLines(const std::string& item) {
+    // Check if item has memory info (format: "... [Memory: info]")
+    size_t memoryStart = item.find(" [Memory: ");
+    if (memoryStart != std::string::npos) {
+        size_t memoryEnd = item.find("]", memoryStart);
+        if (memoryEnd != std::string::npos) {
+            return 2; // Filename line + memory line
+        }
+    }
+    return 1; // Just filename line
+}
+
+size_t InteractiveList::calculateMaxDisplayItems() {
+    int totalHeight = csbi.srWindow.Bottom - csbi.srWindow.Top + 1;
+    int reservedLines = 10; // UI elements (title, search, info, scroll indicators)
+    int availableHeight = totalHeight - reservedLines;
+    
+    if (availableHeight <= 5) {
+        return 5; // Minimum usable amount
+    }
+    
+    // If we have no items yet, use a reasonable default
+    if (filteredItems.empty()) {
+        return static_cast<size_t>(availableHeight / 1.5); // Assume average 1.5 lines per item
+    }
+      // Calculate based on actual items in the current filtered set
+    // Sample the first several items to estimate average lines per item
+    int sampleSize = (static_cast<int>(filteredItems.size()) < 10) ? 
+                     static_cast<int>(filteredItems.size()) : 10;
+    int totalSampleLines = 0;
+    
+    for (int i = 0; i < sampleSize; ++i) {
+        totalSampleLines += calculateItemLines(filteredItems[i]);
+    }
+    
+    double avgLinesPerItem = static_cast<double>(totalSampleLines) / sampleSize;
+    size_t maxItems = static_cast<size_t>(availableHeight / avgLinesPerItem);
+    
+    // Ensure we have at least a few items visible
+    return (maxItems > 3) ? maxItems : 3;
 }
 
 void InteractiveList::displayList()
@@ -172,14 +212,25 @@ void InteractiveList::displayList()
         setColor(FOREGROUND_INTENSITY);
         std::cout << "  ... " << viewportTop << " more above\n";
         resetColor();
-    }
-
-    // Display visible items
+    }    // Display visible items
     for (size_t i = displayStart; i < displayEnd; ++i)
     {
         std::string item = filteredItems[i];
         std::string filename = item;
         std::string quantDescription = "";
+        std::string memoryInfo = "";
+
+        // Parse memory info if present (format: "... [Memory: info]")
+        size_t memoryStart = item.find(" [Memory: ");
+        if (memoryStart != std::string::npos)
+        {
+            size_t memoryEnd = item.find("]", memoryStart);
+            if (memoryEnd != std::string::npos)
+            {
+                memoryInfo = item.substr(memoryStart + 10, memoryEnd - memoryStart - 10); // Extract content after " [Memory: "
+                item = item.substr(0, memoryStart) + item.substr(memoryEnd + 1); // Remove memory part for further parsing
+            }
+        }
 
         // Parse quantization info if present (format: "filename (TYPE: description)")
         size_t parenPos = item.find(" (");
@@ -192,9 +243,7 @@ void InteractiveList::displayList()
                 quantDescription = item.substr(colonPos + 2);
                 quantDescription = quantDescription.substr(0, quantDescription.length() - 1); // Remove closing paren
             }
-        }
-
-        if (i == selectedIndex)
+        }        if (i == selectedIndex)
         {
             // Highlight selected item
             setColor(BACKGROUND_BLUE | FOREGROUND_RED | FOREGROUND_GREEN | FOREGROUND_BLUE);
@@ -212,6 +261,14 @@ void InteractiveList::displayList()
                 resetColor();
             }
             std::cout << std::endl;
+            
+            // Show memory info on next line if available
+            if (!memoryInfo.empty())
+            {
+                setColor(FOREGROUND_GREEN | FOREGROUND_INTENSITY); // Green color for memory info
+                std::cout << "    Memory: " << memoryInfo << std::endl;
+                resetColor();
+            }
         }
         else
         {
@@ -228,6 +285,14 @@ void InteractiveList::displayList()
                 resetColor();
             }
             std::cout << std::endl;
+            
+            // Show memory info on next line if available (dimmer for non-selected items)
+            if (!memoryInfo.empty())
+            {
+                setColor(FOREGROUND_INTENSITY); // Dimmer gray for non-selected items
+                std::cout << "    Memory: " << memoryInfo << std::endl;
+                resetColor();
+            }
         }
     }
 

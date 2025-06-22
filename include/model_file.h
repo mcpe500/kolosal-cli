@@ -3,6 +3,8 @@
 
 #include <string>
 #include <vector>
+#include <optional>
+#include "gguf_reader.h"
 
 /**
  * @brief Information about quantization type and quality
@@ -14,17 +16,36 @@ struct QuantizationInfo {
 };
 
 /**
+ * @brief Memory usage estimation for a model
+ */
+struct MemoryUsage {
+    size_t modelSizeMB = 0;         ///< Model size in MB
+    size_t kvCacheMB = 0;           ///< KV cache size in MB
+    size_t totalRequiredMB = 0;     ///< Total required memory in MB
+    std::string displayString;     ///< Formatted display string
+    bool hasEstimate = false;       ///< Whether we have valid estimates
+};
+
+/**
  * @brief Represents a model file with quantization information
  */
 struct ModelFile {
-    std::string filename;       ///< Name of the model file
-    QuantizationInfo quant;     ///< Quantization information
+    std::string filename;           ///< Name of the model file
+    QuantizationInfo quant;         ///< Quantization information
+    std::optional<std::string> downloadUrl; ///< Full download URL if available
+    MemoryUsage memoryUsage;        ///< Memory usage estimation
     
     /**
      * @brief Get a formatted display name for the model file
      * @return String containing filename and quantization info
      */
     std::string getDisplayName() const;
+    
+    /**
+     * @brief Get a formatted display name with memory usage
+     * @return String containing filename, quantization info, and memory usage
+     */
+    std::string getDisplayNameWithMemory() const;
 };
 
 /**
@@ -44,6 +65,37 @@ public:
      * @param modelFiles Vector of ModelFile objects to sort
      */
     static void sortByPriority(std::vector<ModelFile>& modelFiles);
+    
+    /**
+     * @brief Calculate memory usage estimation for a model file
+     * @param modelFile The model file to analyze
+     * @param contextSize Context size to use for KV cache calculation (default: 4096)
+     * @return MemoryUsage structure with estimated memory requirements
+     */
+    static MemoryUsage calculateMemoryUsage(const ModelFile& modelFile, int contextSize = 4096);
+    
+    /**
+     * @brief Estimate model file size based on quantization type and model parameters
+     * @param params Model parameters from GGUF metadata
+     * @param quantType Quantization type
+     * @return Estimated model size in MB
+     */
+    static size_t estimateModelSize(const GGUFModelParams& params, const std::string& quantType);
+      /**
+     * @brief Format memory size in human-readable format
+     * @param sizeInMB Size in megabytes
+     * @return Formatted string (e.g., "2.4 GB", "512 MB")
+     */
+    static std::string formatMemorySize(size_t sizeInMB);
+    
+    /**
+     * @brief Estimate memory usage from filename when GGUF metadata is not available
+     * @param filename The model filename
+     * @param quantType Quantization type
+     * @param contextSize Context size for KV cache calculation
+     * @return MemoryUsage structure with estimated values
+     */
+    static MemoryUsage estimateMemoryFromFilename(const std::string& filename, const std::string& quantType, int contextSize);
 };
 
 #endif // MODEL_FILE_H

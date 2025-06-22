@@ -81,6 +81,19 @@ private:
      * @brief Display the current list state
      */
     void displayList();
+    
+    /**
+     * @brief Calculate how many lines an item will take when displayed
+     * @param item The item string to analyze
+     * @return Number of lines the item will occupy
+     */
+    int calculateItemLines(const std::string& item);
+    
+    /**
+     * @brief Calculate how many items can fit in the available space
+     * @return Maximum number of items that can be displayed
+     */
+    size_t calculateMaxDisplayItems();
 };
 
 #endif // INTERACTIVE_LIST_H

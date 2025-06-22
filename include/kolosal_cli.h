@@ -43,6 +43,20 @@ private:
     std::string parseRepositoryInput(const std::string& input);
     
     /**
+     * @brief Check if input is a direct URL to a GGUF file
+     * @param input URL from command line
+     * @return True if it's a direct GGUF file URL, false otherwise
+     */
+    bool isDirectGGUFUrl(const std::string& input);
+    
+    /**
+     * @brief Handle direct GGUF file URL input
+     * @param url Direct URL to a GGUF file
+     * @return True if download completed successfully, false otherwise
+     */
+    bool handleDirectGGUFUrl(const std::string& url);
+    
+    /**
      * @brief Validate if a model ID has the correct format
      * @param modelId The model ID to validate
      * @return True if valid, false otherwise

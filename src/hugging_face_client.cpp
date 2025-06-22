@@ -70,10 +70,11 @@ std::vector<std::string> HuggingFaceClient::fetchKolosalModels() {    // Try to 
 
 std::vector<ModelFile> HuggingFaceClient::fetchModelFiles(const std::string& modelId) {
     // Try to get from cache first
-    std::vector<ModelFile> cachedFiles = CacheManager::getCachedModelFiles(modelId);
-    if (!cachedFiles.empty()) {
+    std::vector<ModelFile> cachedFiles = CacheManager::getCachedModelFiles(modelId);    if (!cachedFiles.empty()) {
         return cachedFiles;
-    }    // Cache miss - fetch from API with animation
+    }
+    
+    // Cache miss - fetch from API with animation
     std::vector<ModelFile> modelFiles;
     LoadingAnimation loader("Fetching .gguf files for " + modelId);
     loader.start();
@@ -107,17 +108,27 @@ std::vector<ModelFile> HuggingFaceClient::fetchModelFiles(const std::string& mod
                         ModelFile modelFile;
                         modelFile.filename = filename;
                         modelFile.quant = ModelFileUtils::detectQuantization(filename);
+                        
+                        // Set download URL
+                        modelFile.downloadUrl = "https://huggingface.co/" + modelId + "/resolve/main/" + filename;
+                        
+                        // Calculate memory usage with default context size of 4096
+                        modelFile.memoryUsage = ModelFileUtils::calculateMemoryUsage(modelFile, 4096);
+                        
                         modelFiles.push_back(modelFile);
                     }
                 }
             }
         }
-        
-        // Sort by quantization priority (8-bit first)
+          // Sort by quantization priority (8-bit first)
         ModelFileUtils::sortByPriority(modelFiles);
-          // Cache the results for future use
+        
+        // Cache the results for future use
         if (!modelFiles.empty()) {
+            std::cout << "[DEBUG] About to cache " << modelFiles.size() << " files for: " << modelId << std::endl;
             CacheManager::cacheModelFiles(modelId, modelFiles);
+        } else {
+            std::cout << "[DEBUG] No files to cache for: " << modelId << std::endl;
         }
         
         loader.complete("Found " + std::to_string(modelFiles.size()) + " .gguf files");
@@ -134,8 +145,7 @@ std::vector<ModelFile> HuggingFaceClient::fetchModelFiles(const std::string& mod
 
 std::vector<ModelFile> HuggingFaceClient::fetchModelFilesFromAnyRepo(const std::string& modelId) {
     // Try to get from cache first
-    std::vector<ModelFile> cachedFiles = CacheManager::getCachedModelFiles(modelId);
-    if (!cachedFiles.empty()) {
+    std::vector<ModelFile> cachedFiles = CacheManager::getCachedModelFiles(modelId);    if (!cachedFiles.empty()) {
         return cachedFiles;
     }
     
@@ -165,8 +175,7 @@ std::vector<ModelFile> HuggingFaceClient::fetchModelFilesFromAnyRepo(const std::
         
         // Extract .gguf files
         if (jsonData.is_array()) {
-            for (const auto& item : jsonData) {
-                if (item.contains("type") && item["type"].is_string() && 
+            for (const auto& item : jsonData) {                if (item.contains("type") && item["type"].is_string() && 
                     item["type"] == "file" && item.contains("path") && item["path"].is_string()) {
                     std::string filename = item["path"];
                     // Check if file has .gguf extension
@@ -174,18 +183,27 @@ std::vector<ModelFile> HuggingFaceClient::fetchModelFilesFromAnyRepo(const std::
                         ModelFile modelFile;
                         modelFile.filename = filename;
                         modelFile.quant = ModelFileUtils::detectQuantization(filename);
+                        
+                        // Set download URL
+                        modelFile.downloadUrl = "https://huggingface.co/" + modelId + "/resolve/main/" + filename;
+                        
+                        // Calculate memory usage with default context size of 4096
+                        modelFile.memoryUsage = ModelFileUtils::calculateMemoryUsage(modelFile, 4096);
+                        
                         modelFiles.push_back(modelFile);
                     }
                 }
             }
         }
-        
-        // Sort by quantization priority (8-bit first)
+          // Sort by quantization priority (8-bit first)
         ModelFileUtils::sortByPriority(modelFiles);
         
         // Cache the results for future use
         if (!modelFiles.empty()) {
+            std::cout << "[DEBUG] About to cache " << modelFiles.size() << " files for: " << modelId << std::endl;
             CacheManager::cacheModelFiles(modelId, modelFiles);
+        } else {
+            std::cout << "[DEBUG] No files to cache for: " << modelId << std::endl;
         }
         
         loader.complete("Found " + std::to_string(modelFiles.size()) + " .gguf files");

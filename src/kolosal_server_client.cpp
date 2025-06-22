@@ -26,11 +26,10 @@ KolosalServerClient::~KolosalServerClient() {
 bool KolosalServerClient::startServer(const std::string& serverPath, int port) {
     // Check if server is already running
     if (isServerHealthy()) {
-        std::cout << "Server is already running and healthy." << std::endl;
         return true;
     }
     
-    std::cout << "Server not detected. Starting new server instance..." << std::endl;
+    // Server not detected. Starting new server instance...
       // Determine server executable path
     std::string actualServerPath = serverPath;
     if (actualServerPath.empty()) {
@@ -155,25 +154,17 @@ bool KolosalServerClient::isServerHealthy() {
 }
 
 bool KolosalServerClient::waitForServerReady(int timeoutSeconds) {
-    std::cout << "Waiting for server to become ready";
-    
     auto startTime = std::chrono::steady_clock::now();
     auto timeout = std::chrono::seconds(timeoutSeconds);
     
     while (std::chrono::steady_clock::now() - startTime < timeout) {
         if (isServerHealthy()) {
-            std::cout << " ✓" << std::endl;
-            std::cout << "Server is ready and running in the background." << std::endl;
             return true;
         }
         
-        std::cout << ".";
-        std::cout.flush();
         std::this_thread::sleep_for(std::chrono::milliseconds(1000));
     }
     
-    std::cout << " ✗" << std::endl;
-    std::cout << "Timeout waiting for server." << std::endl;
     return false;
 }
 
