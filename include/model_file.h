@@ -80,8 +80,7 @@ public:
      * @param quantType Quantization type
      * @return Estimated model size in MB
      */
-    static size_t estimateModelSize(const GGUFModelParams& params, const std::string& quantType);
-      /**
+    static size_t estimateModelSize(const GGUFModelParams& params, const std::string& quantType);    /**
      * @brief Format memory size in human-readable format
      * @param sizeInMB Size in megabytes
      * @return Formatted string (e.g., "2.4 GB", "512 MB")
@@ -89,13 +88,11 @@ public:
     static std::string formatMemorySize(size_t sizeInMB);
     
     /**
-     * @brief Estimate memory usage from filename when GGUF metadata is not available
-     * @param filename The model filename
-     * @param quantType Quantization type
-     * @param contextSize Context size for KV cache calculation
-     * @return MemoryUsage structure with estimated values
+     * @brief Get actual file size from URL using HTTP HEAD request
+     * @param url The URL to check
+     * @return File size in bytes, or 0 if unable to determine
      */
-    static MemoryUsage estimateMemoryFromFilename(const std::string& filename, const std::string& quantType, int contextSize);
+    static size_t getActualFileSizeFromUrl(const std::string& url);
 };
 
 #endif // MODEL_FILE_H
