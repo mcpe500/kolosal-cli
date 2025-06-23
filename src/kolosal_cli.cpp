@@ -16,6 +16,7 @@
 #include <sstream>
 #include <signal.h>
 #include <csignal>
+#include <thread>
 
 // Static member initialization
 KolosalCLI* KolosalCLI::s_instance = nullptr;
@@ -125,27 +126,25 @@ std::vector<std::string> KolosalCLI::generateSampleModels()
 std::vector<ModelFile> KolosalCLI::generateSampleFiles(const std::string &modelId)
 {
     std::vector<ModelFile> modelFiles;
-    std::string modelName = modelId.substr(modelId.find('/') + 1);
-
-    ModelFile file1;
+    std::string modelName = modelId.substr(modelId.find('/') + 1);    ModelFile file1;
     file1.filename = modelName + "-Q8_0.gguf";
     file1.quant = ModelFileUtils::detectQuantization(file1.filename);
     file1.downloadUrl = "https://huggingface.co/" + modelId + "/resolve/main/" + file1.filename;
-    file1.memoryUsage = ModelFileUtils::calculateMemoryUsage(file1, 4096);
+    file1.memoryUsage = ModelFileUtils::calculateMemoryUsageAsync(file1, 4096);
     modelFiles.push_back(file1);
 
     ModelFile file2;
     file2.filename = modelName + "-Q4_K_M.gguf";
     file2.quant = ModelFileUtils::detectQuantization(file2.filename);
     file2.downloadUrl = "https://huggingface.co/" + modelId + "/resolve/main/" + file2.filename;
-    file2.memoryUsage = ModelFileUtils::calculateMemoryUsage(file2, 4096);
+    file2.memoryUsage = ModelFileUtils::calculateMemoryUsageAsync(file2, 4096);
     modelFiles.push_back(file2);
 
     ModelFile file3;
     file3.filename = modelName + "-Q5_K_M.gguf";
     file3.quant = ModelFileUtils::detectQuantization(file3.filename);
     file3.downloadUrl = "https://huggingface.co/" + modelId + "/resolve/main/" + file3.filename;
-    file3.memoryUsage = ModelFileUtils::calculateMemoryUsage(file3, 4096);
+    file3.memoryUsage = ModelFileUtils::calculateMemoryUsageAsync(file3, 4096);
     modelFiles.push_back(file3);    return modelFiles;
 }
 
@@ -272,19 +271,17 @@ ModelFile KolosalCLI::selectModelFile(const std::string &modelId)
         std::cout << "No .gguf files found. Showing sample files...\n\n";
         // Fallback to sample files with quantization info
         modelFiles = generateSampleFiles(modelId);
-        Sleep(2000);
-    }    // Convert ModelFile objects to display strings with memory usage
-    std::vector<std::string> displayFiles;
-    for (const auto &file : modelFiles)
-    {
-        displayFiles.push_back(file.getDisplayNameWithMemory());
-    }
-    displayFiles.push_back("Back to Model Selection");
-
-    // Show .gguf files in interactive list with default selection on Q8_0 (8-bit)
-    InteractiveList fileMenu(displayFiles);
-
-    int fileResult = fileMenu.run();
+        Sleep(2000);    }    
+    std::cout << "Found " << modelFiles.size() << " .gguf file(s)!\n\n";
+    
+    // Show model files with real-time async memory updates and cache after completion
+    int fileResult = ModelFileUtils::displayAsyncModelFileList(modelFiles, "Select a .gguf file:");
+    
+    // Cache the files with completed memory information (runs in background)
+    std::thread cacheThread([modelId, modelFiles]() mutable {
+        ModelFileUtils::cacheModelFilesWithMemory(modelId, modelFiles);
+    });
+    cacheThread.detach();
 
     if (fileResult >= 0 && fileResult < static_cast<int>(modelFiles.size()))
     {
@@ -386,9 +383,8 @@ bool KolosalCLI::handleDirectGGUFUrl(const std::string& url)
         
         // Extract quantization info from filename
         modelFile.quant = ModelFileUtils::detectQuantization(filename);
-        
-        // Calculate memory usage
-        modelFile.memoryUsage = ModelFileUtils::calculateMemoryUsage(modelFile);
+          // Calculate memory usage
+        modelFile.memoryUsage = ModelFileUtils::calculateMemoryUsageAsync(modelFile);
         
         loading.stop();
         
@@ -477,20 +473,18 @@ int KolosalCLI::run(const std::string &repoId)
                 std::cout << "No .gguf files found in repository: " << modelId << "\n";
                 std::cout << "This repository may not contain quantized models.\n";
                 return 1; // Exit with error code
-            }
-            else
-            {                // Show GGUF file selection
-                std::vector<std::string> displayFiles;
-                for (const auto &file : modelFiles)
-                {
-                    displayFiles.push_back(file.getDisplayNameWithMemory());
-                }
-                displayFiles.push_back("Exit");
-
+            }            else
+            {
                 std::cout << "Found " << modelFiles.size() << " .gguf file(s) in " << modelId << "\n\n";
-
-                InteractiveList fileMenu(displayFiles);
-                int fileResult = fileMenu.run();
+                
+                // Show model files with real-time async memory updates
+                int fileResult = ModelFileUtils::displayAsyncModelFileList(modelFiles, "Select a .gguf file to download:");
+                
+                // Cache the files with completed memory information (runs in background)
+                std::thread cacheThread([modelId, modelFiles]() mutable {
+                    ModelFileUtils::cacheModelFilesWithMemory(modelId, modelFiles);
+                });
+                cacheThread.detach();
 
                 if (fileResult >= 0 && fileResult < static_cast<int>(modelFiles.size()))
                 {

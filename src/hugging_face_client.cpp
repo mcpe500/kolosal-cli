@@ -71,6 +71,8 @@ std::vector<std::string> HuggingFaceClient::fetchKolosalModels() {    // Try to 
 std::vector<ModelFile> HuggingFaceClient::fetchModelFiles(const std::string& modelId) {
     // Try to get from cache first
     std::vector<ModelFile> cachedFiles = CacheManager::getCachedModelFiles(modelId);    if (!cachedFiles.empty()) {
+        // Ensure async memory calculations are running for cached files that need them
+        ModelFileUtils::ensureAsyncMemoryCalculations(cachedFiles);
         return cachedFiles;
     }
     
@@ -87,6 +89,8 @@ std::vector<ModelFile> HuggingFaceClient::fetchModelFiles(const std::string& mod
         // Try offline fallback - use cached data even if expired
         std::vector<ModelFile> offlineFiles = CacheManager::getCachedModelFilesOffline(modelId);
         if (!offlineFiles.empty()) {
+            // Ensure async memory calculations are running for cached files that need them
+            ModelFileUtils::ensureAsyncMemoryCalculations(offlineFiles);
             return offlineFiles;
         }
         
@@ -112,8 +116,8 @@ std::vector<ModelFile> HuggingFaceClient::fetchModelFiles(const std::string& mod
                         // Set download URL
                         modelFile.downloadUrl = "https://huggingface.co/" + modelId + "/resolve/main/" + filename;
                         
-                        // Calculate memory usage with default context size of 4096
-                        modelFile.memoryUsage = ModelFileUtils::calculateMemoryUsage(modelFile, 4096);
+                        // Start async memory usage calculation
+                        modelFile.memoryUsage = ModelFileUtils::calculateMemoryUsageAsync(modelFile, 4096);
                         
                         modelFiles.push_back(modelFile);
                     }
@@ -146,6 +150,8 @@ std::vector<ModelFile> HuggingFaceClient::fetchModelFiles(const std::string& mod
 std::vector<ModelFile> HuggingFaceClient::fetchModelFilesFromAnyRepo(const std::string& modelId) {
     // Try to get from cache first
     std::vector<ModelFile> cachedFiles = CacheManager::getCachedModelFiles(modelId);    if (!cachedFiles.empty()) {
+        // Ensure async memory calculations are running for cached files that need them
+        ModelFileUtils::ensureAsyncMemoryCalculations(cachedFiles);
         return cachedFiles;
     }
     
@@ -156,13 +162,14 @@ std::vector<ModelFile> HuggingFaceClient::fetchModelFilesFromAnyRepo(const std::
     
     HttpResponse response;
     std::string url = API_BASE_URL + "/models/" + modelId + "/tree/main";
-    
-    if (!HttpClient::get(url, response)) {
+      if (!HttpClient::get(url, response)) {
         loader.stop();
         std::cerr << "Failed to fetch model files from Hugging Face API" << std::endl;
           // Try offline fallback - use cached data even if expired
         std::vector<ModelFile> offlineFiles = CacheManager::getCachedModelFilesOffline(modelId);
         if (!offlineFiles.empty()) {
+            // Ensure async memory calculations are running for cached files that need them
+            ModelFileUtils::ensureAsyncMemoryCalculations(offlineFiles);
             return offlineFiles;
         }
         
@@ -183,12 +190,11 @@ std::vector<ModelFile> HuggingFaceClient::fetchModelFilesFromAnyRepo(const std::
                         ModelFile modelFile;
                         modelFile.filename = filename;
                         modelFile.quant = ModelFileUtils::detectQuantization(filename);
-                        
-                        // Set download URL
+                          // Set download URL
                         modelFile.downloadUrl = "https://huggingface.co/" + modelId + "/resolve/main/" + filename;
                         
-                        // Calculate memory usage with default context size of 4096
-                        modelFile.memoryUsage = ModelFileUtils::calculateMemoryUsage(modelFile, 4096);
+                        // Start async memory usage calculation
+                        modelFile.memoryUsage = ModelFileUtils::calculateMemoryUsageAsync(modelFile, 4096);
                         
                         modelFiles.push_back(modelFile);
                     }

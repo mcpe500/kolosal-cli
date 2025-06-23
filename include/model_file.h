@@ -4,6 +4,8 @@
 #include <string>
 #include <vector>
 #include <optional>
+#include <future>
+#include <memory>
 #include "gguf_reader.h"
 
 /**
@@ -24,6 +26,8 @@ struct MemoryUsage {
     size_t totalRequiredMB = 0;     ///< Total required memory in MB
     std::string displayString;     ///< Formatted display string
     bool hasEstimate = false;       ///< Whether we have valid estimates
+    bool isLoading = false;         ///< Whether memory calculation is in progress
+    std::shared_ptr<std::future<MemoryUsage>> asyncResult; ///< Future for async calculation
 };
 
 /**
@@ -46,6 +50,12 @@ struct ModelFile {
      * @return String containing filename, quantization info, and memory usage
      */
     std::string getDisplayNameWithMemory() const;
+    
+    /**
+     * @brief Update display string after async memory calculation completes
+     * @return true if the display string was updated (calculation completed)
+     */
+    bool updateDisplayIfReady();
 };
 
 /**
@@ -65,14 +75,35 @@ public:
      * @param modelFiles Vector of ModelFile objects to sort
      */
     static void sortByPriority(std::vector<ModelFile>& modelFiles);
-    
-    /**
+      /**
      * @brief Calculate memory usage estimation for a model file
      * @param modelFile The model file to analyze
      * @param contextSize Context size to use for KV cache calculation (default: 4096)
      * @return MemoryUsage structure with estimated memory requirements
      */
     static MemoryUsage calculateMemoryUsage(const ModelFile& modelFile, int contextSize = 4096);
+    
+    /**
+     * @brief Start async memory usage calculation for a model file
+     * @param modelFile The model file to analyze
+     * @param contextSize Context size to use for KV cache calculation (default: 4096)
+     * @return MemoryUsage structure with async calculation future
+     */
+    static MemoryUsage calculateMemoryUsageAsync(const ModelFile& modelFile, int contextSize = 4096);
+    
+    /**
+     * @brief Update memory usage if async calculation is complete
+     * @param memoryUsage The memory usage structure to update
+     * @return true if the calculation was completed and updated, false if still in progress
+     */
+    static bool updateAsyncMemoryUsage(MemoryUsage& memoryUsage);
+    
+    /**
+     * @brief Update memory usage for all model files with pending async calculations
+     * @param modelFiles Vector of ModelFile objects to update
+     * @return true if any calculations were completed, false if all are still pending
+     */
+    static bool updateAllAsyncMemoryUsage(std::vector<ModelFile>& modelFiles);
     
     /**
      * @brief Estimate model file size based on quantization type and model parameters
@@ -93,6 +124,35 @@ public:
      * @return File size in bytes, or 0 if unable to determine
      */
     static size_t getActualFileSizeFromUrl(const std::string& url);
+    
+    /**
+     * @brief Wait for async memory calculations to complete with timeout and progress indication
+     * @param modelFiles Vector of ModelFile objects to wait for
+     * @param timeoutSeconds Maximum time to wait in seconds (default: 30)
+     * @return true if all calculations completed, false if timeout reached
+     */
+    static bool waitForAsyncMemoryCalculations(std::vector<ModelFile>& modelFiles, int timeoutSeconds = 30);
+    
+    /**
+     * @brief Display model files with real-time async memory updates
+     * @param modelFiles Vector of ModelFile objects to display and update
+     * @param title Title to show above the list
+     * @return Index of selected file, or -1 if cancelled
+     */
+    static int displayAsyncModelFileList(std::vector<ModelFile>& modelFiles, const std::string& title);
+    
+    /**
+     * @brief Ensure model files have async memory calculations running if needed
+     * @param modelFiles Vector of ModelFile objects to check and start calculations for
+     */
+    static void ensureAsyncMemoryCalculations(std::vector<ModelFile>& modelFiles);
+    
+    /**
+     * @brief Cache model files after ensuring async memory calculations are complete
+     * @param modelId The model ID to use as cache key
+     * @param modelFiles Vector of ModelFile objects to cache
+     */
+    static void cacheModelFilesWithMemory(const std::string& modelId, std::vector<ModelFile>& modelFiles);
 };
 
 #endif // MODEL_FILE_H

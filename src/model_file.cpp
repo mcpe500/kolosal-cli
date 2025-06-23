@@ -1,9 +1,16 @@
 #include "model_file.h"
 #include "http_client.h"
+#include "cache_manager.h"
 #include <algorithm>
 #include <iomanip>
 #include <sstream>
 #include <unordered_map>
+#include <thread>
+#include <future>
+#include <chrono>
+#include <iostream>
+#include <windows.h>
+#include <conio.h>
 #include <curl/curl.h>
 
 std::string ModelFile::getDisplayName() const
@@ -15,10 +22,16 @@ std::string ModelFile::getDisplayNameWithMemory() const
 {
     // Format: "filename (QUANT_TYPE: description) [Memory: total (breakdown)]"
     std::string result = filename + " (" + quant.type + ": " + quant.description + ")";
-    if (memoryUsage.hasEstimate)
+    
+    if (memoryUsage.isLoading)
+    {
+        result += " [Memory: calculating...]";
+    }
+    else if (memoryUsage.hasEstimate)
     {
         result += " [Memory: " + memoryUsage.displayString + "]";
     }
+    
     return result;
 }
 
@@ -277,6 +290,84 @@ MemoryUsage ModelFileUtils::calculateMemoryUsage(const ModelFile &modelFile, int
     }
 }
 
+MemoryUsage ModelFileUtils::calculateMemoryUsageAsync(const ModelFile &modelFile, int contextSize)
+{
+    MemoryUsage usage;
+    
+    // Only calculate if we have a download URL
+    if (!modelFile.downloadUrl.has_value())
+    {
+        return usage; // Return invalid usage (hasEstimate = false)
+    }
+    
+    // Set loading state
+    usage.isLoading = true;
+    usage.hasEstimate = false;
+    
+    // Create async task
+    auto asyncTask = std::make_shared<std::future<MemoryUsage>>(
+        std::async(std::launch::async, [modelFile, contextSize]() -> MemoryUsage {
+            return calculateMemoryUsage(modelFile, contextSize);
+        })
+    );
+    
+    usage.asyncResult = asyncTask;
+    return usage;
+}
+
+bool ModelFileUtils::updateAsyncMemoryUsage(MemoryUsage& memoryUsage)
+{
+    if (!memoryUsage.isLoading || !memoryUsage.asyncResult)
+    {
+        return false; // Not in loading state or no async task
+    }
+    
+    // Check if the async calculation is ready
+    if (memoryUsage.asyncResult->wait_for(std::chrono::seconds(0)) == std::future_status::ready)
+    {
+        try
+        {
+            // Get the result and update the memory usage
+            MemoryUsage result = memoryUsage.asyncResult->get();
+            
+            memoryUsage.modelSizeMB = result.modelSizeMB;
+            memoryUsage.kvCacheMB = result.kvCacheMB;
+            memoryUsage.totalRequiredMB = result.totalRequiredMB;
+            memoryUsage.displayString = result.displayString;
+            memoryUsage.hasEstimate = result.hasEstimate;
+            memoryUsage.isLoading = false;
+            memoryUsage.asyncResult.reset(); // Clear the future
+            
+            return true; // Calculation completed
+        }
+        catch (const std::exception&)
+        {
+            // Error in calculation
+            memoryUsage.isLoading = false;
+            memoryUsage.hasEstimate = false;
+            memoryUsage.asyncResult.reset();
+            return true; // Calculation completed (with error)
+        }
+    }
+    
+    return false; // Still calculating
+}
+
+bool ModelFileUtils::updateAllAsyncMemoryUsage(std::vector<ModelFile>& modelFiles)
+{
+    bool anyCompleted = false;
+    
+    for (auto& modelFile : modelFiles)
+    {
+        if (updateAsyncMemoryUsage(modelFile.memoryUsage))
+        {
+            anyCompleted = true;
+        }
+    }
+    
+    return anyCompleted;
+}
+
 size_t ModelFileUtils::estimateModelSize(const GGUFModelParams &params, const std::string &quantType)
 {
     // Calculate approximate model size based on parameters and quantization
@@ -381,4 +472,225 @@ size_t ModelFileUtils::getActualFileSizeFromUrl(const std::string &url)
 
     curl_easy_cleanup(curl);
     return fileSize;
+}
+
+bool ModelFileUtils::waitForAsyncMemoryCalculations(std::vector<ModelFile>& modelFiles, int timeoutSeconds)
+{
+    auto startTime = std::chrono::steady_clock::now();
+    auto timeoutDuration = std::chrono::seconds(timeoutSeconds);
+    
+    int totalFiles = 0;
+    for (const auto& modelFile : modelFiles)
+    {
+        if (modelFile.memoryUsage.isLoading)
+        {
+            totalFiles++;
+        }
+    }
+    
+    if (totalFiles == 0)
+    {
+        return true; // No async calculations in progress
+    }
+    
+    std::cout << "Calculating memory usage for " << totalFiles << " file(s)";
+    
+    while (true)
+    {
+        int completedFiles = 0;
+        
+        // Update and count completed calculations
+        updateAllAsyncMemoryUsage(modelFiles);
+        
+        for (const auto& modelFile : modelFiles)
+        {
+            if (!modelFile.memoryUsage.isLoading && modelFile.memoryUsage.hasEstimate)
+            {
+                completedFiles++;
+            }
+        }
+        
+        // Show progress
+        if (completedFiles < totalFiles)
+        {
+            std::cout << "\rCalculating memory usage for " << totalFiles << " file(s) [" 
+                      << completedFiles << "/" << totalFiles << "]";
+            std::cout.flush();
+        }
+        else
+        {
+            std::cout << "\rMemory usage calculated for all " << totalFiles << " file(s) ✓" << std::endl;
+            return true;
+        }
+        
+        // Check timeout
+        auto currentTime = std::chrono::steady_clock::now();
+        if (currentTime - startTime >= timeoutDuration)
+        {
+            std::cout << "\rMemory calculation timeout (showing partial results)" << std::endl;
+            return false;
+        }
+        
+        // Small delay
+        std::this_thread::sleep_for(std::chrono::milliseconds(200));
+    }
+}
+
+bool ModelFile::updateDisplayIfReady()
+{
+    return ModelFileUtils::updateAsyncMemoryUsage(memoryUsage);
+}
+
+int ModelFileUtils::displayAsyncModelFileList(std::vector<ModelFile>& modelFiles, const std::string& title)
+{
+    if (modelFiles.empty()) {
+        std::cout << "No model files available." << std::endl;
+        return -1;
+    }
+    
+    HANDLE hConsole = GetStdHandle(STD_OUTPUT_HANDLE);
+    CONSOLE_CURSOR_INFO cursorInfo;
+    GetConsoleCursorInfo(hConsole, &cursorInfo);
+    cursorInfo.bVisible = false;
+    SetConsoleCursorInfo(hConsole, &cursorInfo);
+    
+    int selectedIndex = 0;
+    bool needsRefresh = true;
+    auto lastUpdateTime = std::chrono::steady_clock::now();
+    
+    while (true) {
+        // Check for async updates every 200ms
+        auto currentTime = std::chrono::steady_clock::now();
+        if (currentTime - lastUpdateTime >= std::chrono::milliseconds(200)) {
+            if (updateAllAsyncMemoryUsage(modelFiles)) {
+                needsRefresh = true;
+            }
+            lastUpdateTime = currentTime;
+        }
+        
+        if (needsRefresh) {
+            // Clear screen and show title
+            system("cls");
+            std::cout << title << "\n\n";
+            
+            // Display each model file
+            for (size_t i = 0; i < modelFiles.size(); ++i) {
+                if (i == selectedIndex) {
+                    SetConsoleTextAttribute(hConsole, BACKGROUND_BLUE | FOREGROUND_RED | FOREGROUND_GREEN | FOREGROUND_BLUE);
+                    std::cout << "> ";
+                } else {
+                    SetConsoleTextAttribute(hConsole, FOREGROUND_RED | FOREGROUND_GREEN | FOREGROUND_BLUE);
+                    std::cout << "  ";
+                }
+                
+                const auto& file = modelFiles[i];
+                std::cout << file.filename;
+                  // Pad to align description
+                int nameWidth = 50;
+                int currentWidth = static_cast<int>(file.filename.length());
+                for (int j = currentWidth; j < nameWidth; ++j) {
+                    std::cout << " ";
+                }
+                
+                std::cout << file.quant.description << std::endl;
+                
+                // Show memory status on next line
+                SetConsoleTextAttribute(hConsole, FOREGROUND_GREEN | FOREGROUND_BLUE);
+                if (file.memoryUsage.isLoading) {
+                    std::cout << "    Fetching metadata..." << std::endl;
+                } else if (file.memoryUsage.hasEstimate) {
+                    std::cout << "    Memory: " << file.memoryUsage.displayString << std::endl;
+                } else {
+                    std::cout << "    Memory: Unable to calculate" << std::endl;
+                }
+                SetConsoleTextAttribute(hConsole, FOREGROUND_RED | FOREGROUND_GREEN | FOREGROUND_BLUE);
+            }
+            
+            // Add back/exit option
+            if (selectedIndex == modelFiles.size()) {
+                SetConsoleTextAttribute(hConsole, BACKGROUND_BLUE | FOREGROUND_RED | FOREGROUND_GREEN | FOREGROUND_BLUE);
+                std::cout << "> ";
+            } else {
+                SetConsoleTextAttribute(hConsole, FOREGROUND_RED | FOREGROUND_GREEN | FOREGROUND_BLUE);
+                std::cout << "  ";
+            }
+            std::cout << "Back to Model Selection" << std::endl;
+            
+            SetConsoleTextAttribute(hConsole, FOREGROUND_RED | FOREGROUND_GREEN | FOREGROUND_BLUE);
+            std::cout << "\nUse arrow keys to navigate, Enter to select, Esc to exit" << std::endl;
+            
+            needsRefresh = false;
+        }
+        
+        // Check for keyboard input (non-blocking)
+        if (_kbhit()) {
+            int key = _getch();
+            
+            if (key == 224) { // Special key prefix
+                key = _getch();
+                switch (key) {
+                    case 72: // Up arrow
+                        if (selectedIndex > 0) {
+                            selectedIndex--;
+                            needsRefresh = true;
+                        }
+                        break;
+                    case 80: // Down arrow
+                        if (selectedIndex < modelFiles.size()) {
+                            selectedIndex++;
+                            needsRefresh = true;
+                        }
+                        break;
+                }
+            } else {
+                switch (key) {
+                    case 13: // Enter
+                        cursorInfo.bVisible = true;
+                        SetConsoleCursorInfo(hConsole, &cursorInfo);
+                        if (selectedIndex < modelFiles.size()) {
+                            return selectedIndex;
+                        } else {
+                            return -1; // Back/Exit selected
+                        }
+                        break;
+                    case 27: // Escape
+                        cursorInfo.bVisible = true;
+                        SetConsoleCursorInfo(hConsole, &cursorInfo);
+                        return -1;
+                        break;
+                }
+            }
+        }
+        
+        // Small delay to prevent high CPU usage
+        std::this_thread::sleep_for(std::chrono::milliseconds(50));
+    }
+}
+
+void ModelFileUtils::ensureAsyncMemoryCalculations(std::vector<ModelFile>& modelFiles)
+{
+    for (auto& modelFile : modelFiles)
+    {
+        // If the file doesn't have a memory estimate and isn't currently loading, start async calculation
+        if (!modelFile.memoryUsage.hasEstimate && !modelFile.memoryUsage.isLoading)
+        {
+            // Only start calculation if we have a download URL
+            if (modelFile.downloadUrl.has_value())
+            {
+                modelFile.memoryUsage = calculateMemoryUsageAsync(modelFile, 4096);
+            }
+        }
+    }
+}
+
+void ModelFileUtils::cacheModelFilesWithMemory(const std::string& modelId, std::vector<ModelFile>& modelFiles)
+{
+    // Wait for async calculations to complete before caching
+    waitForAsyncMemoryCalculations(modelFiles, 30);
+    
+    // Cache the results with completed memory information
+    if (!modelFiles.empty()) {
+        CacheManager::cacheModelFiles(modelId, modelFiles);
+        std::cout << "✓ Cached " << modelFiles.size() << " model files with memory information" << std::endl;
+    }
 }
