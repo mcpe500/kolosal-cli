@@ -125,7 +125,20 @@ int InteractiveList::calculateItemLines(const std::string& item) {
 
 size_t InteractiveList::calculateMaxDisplayItems() {
     int totalHeight = csbi.srWindow.Bottom - csbi.srWindow.Top + 1;
-    int reservedLines = 8; // UI elements (title, search, info, scroll indicators)
+    
+    // Calculate reserved lines more precisely:
+    // 1. Title (1 line)
+    // 2. Instructions (1 line) 
+    // 3. Search instructions with double newline (2 lines)
+    // 4. Search bar (1 line)
+    // 5. Empty line after search (1 line)
+    // 6. Potential scroll indicator above (1 line max)
+    // 7. Potential scroll indicator below (1 line max)
+    // 8. Empty line before selection info (1 line)
+    // 9. Selection info (1 line)
+    // Total: 10 lines reserved
+    int reservedLines = 10;
+    
     int availableHeight = totalHeight - reservedLines;
     
     if (availableHeight <= 3) {
@@ -329,6 +342,12 @@ void InteractiveList::displayList()
 
 int InteractiveList::run()
 {
+    // Use the update version with a no-op callback
+    return runWithUpdates([]() { return false; });
+}
+
+int InteractiveList::runWithUpdates(std::function<bool()> updateCallback)
+{
     hideCursor();
 
     // Handle empty list case
@@ -345,7 +364,46 @@ int InteractiveList::run()
     {
         displayList();
 
-        int key = _getch();
+        // Check for keyboard input with timeout
+        bool hasInput = false;
+        int key = 0;
+        
+        // Check for input periodically, allowing for updates
+        auto startTime = GetTickCount();
+        const DWORD UPDATE_INTERVAL_MS = 200; // Check for updates every 200ms
+        
+        while (true)
+        {
+            // Check if key is available without blocking
+            if (_kbhit())
+            {
+                key = _getch();
+                hasInput = true;
+                break;
+            }
+            
+            // Check if it's time for an update
+            DWORD currentTime = GetTickCount();
+            if (currentTime - startTime >= UPDATE_INTERVAL_MS)
+            {
+                // Call update callback and refresh display if needed
+                if (updateCallback())
+                {
+                    // Update occurred, redraw screen and reset timer
+                    break; // Exit input loop to redraw
+                }
+                startTime = currentTime; // Reset timer
+            }
+            
+            // Small sleep to prevent busy waiting
+            Sleep(10);
+        }
+        
+        // If no input was received, continue to redraw
+        if (!hasInput)
+        {
+            continue;
+        }
 
         // Handle special keys (arrow keys)
         if (key == 224)
@@ -463,4 +521,24 @@ int InteractiveList::run()
             }
         }
     }
+}
+
+void InteractiveList::updateItems(const std::vector<std::string>& newItems)
+{
+    items = newItems;
+    
+    // Preserve current search if any
+    if (!searchQuery.empty()) {
+        applyFilter();
+    } else {
+        filteredItems = items;
+    }
+    
+    // Adjust selected index if it's now out of bounds
+    if (selectedIndex >= filteredItems.size() && !filteredItems.empty()) {
+        selectedIndex = filteredItems.size() - 1;
+    }
+    
+    // Recalculate display parameters
+    maxDisplayItems = calculateMaxDisplayItems();
 }

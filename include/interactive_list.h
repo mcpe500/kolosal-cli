@@ -3,6 +3,7 @@
 
 #include <string>
 #include <vector>
+#include <functional>
 #include <windows.h>
 
 /**
@@ -26,12 +27,24 @@ public:
      * @param listItems Vector of strings to display in the list
      */
     explicit InteractiveList(const std::vector<std::string>& listItems);
-    
-    /**
+      /**
      * @brief Run the interactive list and wait for user selection
      * @return Index of selected item in original items vector, or -1 if cancelled
      */
     int run();
+
+    /**
+     * @brief Run the interactive list with periodic update callback
+     * @param updateCallback Function called periodically to check for updates
+     * @return Index of selected item in original items vector, or -1 if cancelled
+     */
+    int runWithUpdates(std::function<bool()> updateCallback);
+
+    /**
+     * @brief Update the items in the list without resetting the selection
+     * @param newItems New vector of strings to display
+     */
+    void updateItems(const std::vector<std::string>& newItems);
 
 private:
     /**
