@@ -105,12 +105,12 @@ std::vector<ModelFile> HuggingFaceClient::fetchModelFiles(const std::string& mod
         if (jsonData.is_array()) {
             for (const auto& item : jsonData) {
                 if (item.contains("type") && item["type"].is_string() && 
-                    item["type"] == "file" && item.contains("path") && item["path"].is_string()) {
-                    std::string filename = item["path"];
+                    item["type"] == "file" && item.contains("path") && item["path"].is_string()) {                    std::string filename = item["path"];
                     // Check if file has .gguf extension
                     if (filename.length() >= 5 && filename.substr(filename.length() - 5) == ".gguf") {
                         ModelFile modelFile;
                         modelFile.filename = filename;
+                        modelFile.modelId = modelId;
                         modelFile.quant = ModelFileUtils::detectQuantization(filename);
                         
                         // Set download URL
@@ -183,12 +183,12 @@ std::vector<ModelFile> HuggingFaceClient::fetchModelFilesFromAnyRepo(const std::
         // Extract .gguf files
         if (jsonData.is_array()) {
             for (const auto& item : jsonData) {                if (item.contains("type") && item["type"].is_string() && 
-                    item["type"] == "file" && item.contains("path") && item["path"].is_string()) {
-                    std::string filename = item["path"];
+                    item["type"] == "file" && item.contains("path") && item["path"].is_string()) {                    std::string filename = item["path"];
                     // Check if file has .gguf extension
                     if (filename.length() >= 5 && filename.substr(filename.length() - 5) == ".gguf") {
                         ModelFile modelFile;
                         modelFile.filename = filename;
+                        modelFile.modelId = modelId;
                         modelFile.quant = ModelFileUtils::detectQuantization(filename);
                           // Set download URL
                         modelFile.downloadUrl = "https://huggingface.co/" + modelId + "/resolve/main/" + filename;

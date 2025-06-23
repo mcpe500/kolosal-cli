@@ -128,6 +128,7 @@ std::vector<ModelFile> KolosalCLI::generateSampleFiles(const std::string &modelI
     std::vector<ModelFile> modelFiles;
     std::string modelName = modelId.substr(modelId.find('/') + 1);    ModelFile file1;
     file1.filename = modelName + "-Q8_0.gguf";
+    file1.modelId = modelId;
     file1.quant = ModelFileUtils::detectQuantization(file1.filename);
     file1.downloadUrl = "https://huggingface.co/" + modelId + "/resolve/main/" + file1.filename;
     file1.memoryUsage = ModelFileUtils::calculateMemoryUsageAsync(file1, 4096);
@@ -135,6 +136,7 @@ std::vector<ModelFile> KolosalCLI::generateSampleFiles(const std::string &modelI
 
     ModelFile file2;
     file2.filename = modelName + "-Q4_K_M.gguf";
+    file2.modelId = modelId;
     file2.quant = ModelFileUtils::detectQuantization(file2.filename);
     file2.downloadUrl = "https://huggingface.co/" + modelId + "/resolve/main/" + file2.filename;
     file2.memoryUsage = ModelFileUtils::calculateMemoryUsageAsync(file2, 4096);
@@ -142,10 +144,11 @@ std::vector<ModelFile> KolosalCLI::generateSampleFiles(const std::string &modelI
 
     ModelFile file3;
     file3.filename = modelName + "-Q5_K_M.gguf";
+    file3.modelId = modelId;
     file3.quant = ModelFileUtils::detectQuantization(file3.filename);
     file3.downloadUrl = "https://huggingface.co/" + modelId + "/resolve/main/" + file3.filename;
     file3.memoryUsage = ModelFileUtils::calculateMemoryUsageAsync(file3, 4096);
-    modelFiles.push_back(file3);    return modelFiles;
+    modelFiles.push_back(file3);return modelFiles;
 }
 
 bool KolosalCLI::initializeServer()

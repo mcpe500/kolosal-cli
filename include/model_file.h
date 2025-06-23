@@ -35,19 +35,20 @@ struct MemoryUsage {
  */
 struct ModelFile {
     std::string filename;           ///< Name of the model file
+    std::string modelId;            ///< Full model ID (e.g., "kolosal/model-name")
     QuantizationInfo quant;         ///< Quantization information
     std::optional<std::string> downloadUrl; ///< Full download URL if available
     MemoryUsage memoryUsage;        ///< Memory usage estimation
     
     /**
      * @brief Get a formatted display name for the model file
-     * @return String containing filename and quantization info
+     * @return String containing model ID and quantization info in format "model-name:QUANT_TYPE"
      */
     std::string getDisplayName() const;
     
     /**
      * @brief Get a formatted display name with memory usage
-     * @return String containing filename, quantization info, and memory usage
+     * @return String containing model ID, quantization info, and memory usage in format "model-name:QUANT_TYPE [Memory: info]"
      */
     std::string getDisplayNameWithMemory() const;
     

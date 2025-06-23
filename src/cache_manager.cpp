@@ -419,12 +419,11 @@ std::vector<std::string> CacheManager::jsonToVector(const std::string &jsonStr)
 
 std::string CacheManager::modelFilesToJson(const std::vector<ModelFile> &files)
 {
-    json j = json::array();
-
-    for (const auto &file : files)
+    json j = json::array();    for (const auto &file : files)
     {
         json fileJson;
         fileJson["filename"] = file.filename;
+        fileJson["model_id"] = file.modelId;
         fileJson["quant_type"] = file.quant.type;
         fileJson["quant_description"] = file.quant.description;
         fileJson["quant_priority"] = file.quant.priority;
@@ -454,12 +453,11 @@ std::vector<ModelFile> CacheManager::jsonToModelFiles(const std::string &jsonStr
 
     try
     {
-        json j = json::parse(jsonStr);
-
-        for (const auto &fileJson : j)
+        json j = json::parse(jsonStr);        for (const auto &fileJson : j)
         {
             ModelFile file;
             file.filename = fileJson["filename"];
+            file.modelId = fileJson.value("model_id", ""); // Default to empty string for backwards compatibility
             file.quant.type = fileJson["quant_type"];
             file.quant.description = fileJson["quant_description"];
             file.quant.priority = fileJson["quant_priority"];

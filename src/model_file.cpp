@@ -15,13 +15,38 @@
 
 std::string ModelFile::getDisplayName() const
 {
-    return filename + " (" + quant.type + ": " + quant.description + ")";
+    // Extract model name from modelId (part after the last '/')
+    std::string modelName = modelId;
+    size_t lastSlash = modelName.find_last_of('/');
+    if (lastSlash != std::string::npos) {
+        modelName = modelName.substr(lastSlash + 1);
+    }
+    
+    // Convert to lowercase and replace underscores with hyphens
+    std::transform(modelName.begin(), modelName.end(), modelName.begin(), [](char c) {
+        return (c == '_') ? '-' : std::tolower(c);
+    });
+    
+    // Format: "model-name:QUANT_TYPE"
+    return modelName + ":" + quant.type;
 }
 
 std::string ModelFile::getDisplayNameWithMemory() const
 {
-    // Format: "filename (QUANT_TYPE: description) [Memory: total (breakdown)]"
-    std::string result = filename + " (" + quant.type + ": " + quant.description + ")";
+    // Extract model name from modelId (part after the last '/')
+    std::string modelName = modelId;
+    size_t lastSlash = modelName.find_last_of('/');
+    if (lastSlash != std::string::npos) {
+        modelName = modelName.substr(lastSlash + 1);
+    }
+    
+    // Convert to lowercase and replace underscores with hyphens
+    std::transform(modelName.begin(), modelName.end(), modelName.begin(), [](char c) {
+        return (c == '_') ? '-' : std::tolower(c);
+    });
+    
+    // Format: "model-name:QUANT_TYPE [Memory: info]"
+    std::string result = modelName + ":" + quant.type;
     
     if (memoryUsage.isLoading)
     {
@@ -554,9 +579,23 @@ int ModelFileUtils::displayAsyncModelFileList(std::vector<ModelFile>& modelFiles
     cursorInfo.bVisible = false;
     SetConsoleCursorInfo(hConsole, &cursorInfo);
     
+    // Get console screen buffer info for viewport calculations
+    CONSOLE_SCREEN_BUFFER_INFO csbi;
+    GetConsoleScreenBufferInfo(hConsole, &csbi);
+    
     int selectedIndex = 0;
+    size_t viewportTop = 0;
     bool needsRefresh = true;
     auto lastUpdateTime = std::chrono::steady_clock::now();
+    
+    // Calculate viewport size based on console height
+    int totalHeight = csbi.srWindow.Bottom - csbi.srWindow.Top + 1;
+    int reservedLines = 8; // Title, instructions, back option, margins
+    int availableHeight = totalHeight - reservedLines;
+    size_t maxDisplayItems = static_cast<size_t>((availableHeight > 5) ? availableHeight / 2 : 3); // Each item takes 2 lines
+    
+    // Add back option to the total count for navigation
+    size_t totalOptions = modelFiles.size() + 1; // +1 for "Back to Model Selection"
     
     while (true) {
         // Check for async updates every 200ms
@@ -569,12 +608,40 @@ int ModelFileUtils::displayAsyncModelFileList(std::vector<ModelFile>& modelFiles
         }
         
         if (needsRefresh) {
+            // Update viewport to keep selected item visible
+            if (selectedIndex < viewportTop) {
+                viewportTop = selectedIndex;
+            } else if (selectedIndex >= viewportTop + maxDisplayItems) {
+                viewportTop = selectedIndex - maxDisplayItems + 1;
+            }
+            
+            // Ensure viewport doesn't go beyond bounds
+            if (viewportTop + maxDisplayItems > totalOptions) {
+                if (totalOptions >= maxDisplayItems) {
+                    viewportTop = totalOptions - maxDisplayItems;
+                } else {
+                    viewportTop = 0;
+                }
+            }
+            
             // Clear screen and show title
             system("cls");
-            std::cout << title << "\n\n";
+            std::cout << title << "\n";
+            std::cout << "Use arrow keys to navigate, Enter to select, Esc to exit\n\n";
             
-            // Display each model file
-            for (size_t i = 0; i < modelFiles.size(); ++i) {
+            // Show scroll indicator at top if there are items above
+            if (viewportTop > 0) {
+                SetConsoleTextAttribute(hConsole, FOREGROUND_INTENSITY);
+                std::cout << "  ... " << viewportTop << " more above\n";
+                SetConsoleTextAttribute(hConsole, FOREGROUND_RED | FOREGROUND_GREEN | FOREGROUND_BLUE);
+            }
+            
+            // Calculate display range
+            size_t displayStart = viewportTop;
+            size_t displayEnd = (viewportTop + maxDisplayItems < totalOptions) ? viewportTop + maxDisplayItems : totalOptions;
+            
+            // Display visible model files
+            for (size_t i = displayStart; i < displayEnd && i < modelFiles.size(); ++i) {
                 if (i == selectedIndex) {
                     SetConsoleTextAttribute(hConsole, BACKGROUND_BLUE | FOREGROUND_RED | FOREGROUND_GREEN | FOREGROUND_BLUE);
                     std::cout << "> ";
@@ -582,17 +649,25 @@ int ModelFileUtils::displayAsyncModelFileList(std::vector<ModelFile>& modelFiles
                     SetConsoleTextAttribute(hConsole, FOREGROUND_RED | FOREGROUND_GREEN | FOREGROUND_BLUE);
                     std::cout << "  ";
                 }
+                  const auto& file = modelFiles[i];
                 
-                const auto& file = modelFiles[i];
-                std::cout << file.filename;
-                  // Pad to align description
-                int nameWidth = 50;
-                int currentWidth = static_cast<int>(file.filename.length());
-                for (int j = currentWidth; j < nameWidth; ++j) {
-                    std::cout << " ";
+                // Extract model name from modelId (part after the last '/')
+                std::string modelName = file.modelId;
+                size_t lastSlash = modelName.find_last_of('/');
+                if (lastSlash != std::string::npos) {
+                    modelName = modelName.substr(lastSlash + 1);
                 }
                 
-                std::cout << file.quant.description << std::endl;
+                // Convert to lowercase and replace underscores with hyphens
+                std::transform(modelName.begin(), modelName.end(), modelName.begin(), [](char c) {
+                    return (c == '_') ? '-' : std::tolower(c);
+                });
+                
+                // Display in format: model-name:QUANT_TYPE
+                std::cout << modelName << ":" << file.quant.type;
+                
+                SetConsoleTextAttribute(hConsole, FOREGROUND_RED | FOREGROUND_GREEN | FOREGROUND_BLUE);
+                std::cout << std::endl;
                 
                 // Show memory status on next line
                 SetConsoleTextAttribute(hConsole, FOREGROUND_GREEN | FOREGROUND_BLUE);
@@ -606,22 +681,29 @@ int ModelFileUtils::displayAsyncModelFileList(std::vector<ModelFile>& modelFiles
                 SetConsoleTextAttribute(hConsole, FOREGROUND_RED | FOREGROUND_GREEN | FOREGROUND_BLUE);
             }
             
-            // Add back/exit option
-            if (selectedIndex == modelFiles.size()) {
-                SetConsoleTextAttribute(hConsole, BACKGROUND_BLUE | FOREGROUND_RED | FOREGROUND_GREEN | FOREGROUND_BLUE);
-                std::cout << "> ";
-            } else {
+            // Add back/exit option if it's in the viewport
+            size_t backOptionIndex = modelFiles.size();
+            if (backOptionIndex >= displayStart && backOptionIndex < displayEnd) {
+                if (selectedIndex == backOptionIndex) {
+                    SetConsoleTextAttribute(hConsole, BACKGROUND_BLUE | FOREGROUND_RED | FOREGROUND_GREEN | FOREGROUND_BLUE);
+                    std::cout << "> ";
+                } else {
+                    SetConsoleTextAttribute(hConsole, FOREGROUND_RED | FOREGROUND_GREEN | FOREGROUND_BLUE);
+                    std::cout << "  ";
+                }
+                std::cout << "Back to Model Selection" << std::endl;
                 SetConsoleTextAttribute(hConsole, FOREGROUND_RED | FOREGROUND_GREEN | FOREGROUND_BLUE);
-                std::cout << "  ";
             }
-            std::cout << "Back to Model Selection" << std::endl;
-            
-            SetConsoleTextAttribute(hConsole, FOREGROUND_RED | FOREGROUND_GREEN | FOREGROUND_BLUE);
-            std::cout << "\nUse arrow keys to navigate, Enter to select, Esc to exit" << std::endl;
+              // Show scroll indicator at bottom if there are items below
+            if (displayEnd < totalOptions) {
+                SetConsoleTextAttribute(hConsole, FOREGROUND_INTENSITY);
+                std::cout << "  ... " << (totalOptions - displayEnd) << " more below\n";
+                SetConsoleTextAttribute(hConsole, FOREGROUND_RED | FOREGROUND_GREEN | FOREGROUND_BLUE);
+            }
             
             needsRefresh = false;
         }
-        
+          
         // Check for keyboard input (non-blocking)
         if (_kbhit()) {
             int key = _getch();
@@ -636,7 +718,7 @@ int ModelFileUtils::displayAsyncModelFileList(std::vector<ModelFile>& modelFiles
                         }
                         break;
                     case 80: // Down arrow
-                        if (selectedIndex < modelFiles.size()) {
+                        if (selectedIndex < totalOptions - 1) {
                             selectedIndex++;
                             needsRefresh = true;
                         }

@@ -125,21 +125,21 @@ int InteractiveList::calculateItemLines(const std::string& item) {
 
 size_t InteractiveList::calculateMaxDisplayItems() {
     int totalHeight = csbi.srWindow.Bottom - csbi.srWindow.Top + 1;
-    int reservedLines = 10; // UI elements (title, search, info, scroll indicators)
+    int reservedLines = 8; // UI elements (title, search, info, scroll indicators)
     int availableHeight = totalHeight - reservedLines;
     
-    if (availableHeight <= 5) {
-        return 5; // Minimum usable amount
+    if (availableHeight <= 3) {
+        return 2; // Minimum usable amount
     }
     
     // If we have no items yet, use a reasonable default
     if (filteredItems.empty()) {
-        return static_cast<size_t>(availableHeight / 1.5); // Assume average 1.5 lines per item
+        return static_cast<size_t>(availableHeight / 2); // Assume average 2 lines per item
     }
       // Calculate based on actual items in the current filtered set
     // Sample the first several items to estimate average lines per item
-    int sampleSize = (static_cast<int>(filteredItems.size()) < 10) ? 
-                     static_cast<int>(filteredItems.size()) : 10;
+    int sampleSize = (static_cast<int>(filteredItems.size()) < 5) ? 
+                     static_cast<int>(filteredItems.size()) : 5;
     int totalSampleLines = 0;
     
     for (int i = 0; i < sampleSize; ++i) {
@@ -150,7 +150,7 @@ size_t InteractiveList::calculateMaxDisplayItems() {
     size_t maxItems = static_cast<size_t>(availableHeight / avgLinesPerItem);
     
     // Ensure we have at least a few items visible
-    return (maxItems > 3) ? maxItems : 3;
+    return (maxItems > 2) ? maxItems : 2;
 }
 
 void InteractiveList::displayList()
