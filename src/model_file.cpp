@@ -138,79 +138,83 @@ QuantizationInfo ModelFileUtils::detectQuantization(const std::string &filename)
     {
         return {"Q4_K_M", "4-bit quantization (medium), good for most use cases", 25};
     }
+    else if (lower_filename.find("q4_k_l") != std::string::npos)
+    {
+        return {"Q4_K_L", "4-bit quantization (large), better quality at 4-bit", 26};
+    }
     else if (lower_filename.find("q4_k_s") != std::string::npos)
     {
-        return {"Q4_K_S", "4-bit quantization (small), very compact", 26};
+        return {"Q4_K_S", "4-bit quantization (small), very compact", 27};
     }
     else if (lower_filename.find("q4_1") != std::string::npos)
     {
-        return {"Q4_1", "4-bit quantization v1, improved legacy format", 27};
+        return {"Q4_1", "4-bit quantization v1, improved legacy format", 28};
     }
     else if (lower_filename.find("q4_0") != std::string::npos)
     {
-        return {"Q4_0", "4-bit quantization, legacy format", 28};
+        return {"Q4_0", "4-bit quantization, legacy format", 29};
 
         // 3-bit variants
     }
     else if (lower_filename.find("iq3_xxs") != std::string::npos)
     {
-        return {"IQ3_XXS", "3-bit improved quantization (extra extra small), maximum compression", 29};
+        return {"IQ3_XXS", "3-bit improved quantization (extra extra small), maximum compression", 30};
     }
     else if (lower_filename.find("q3_k_l") != std::string::npos)
     {
-        return {"Q3_K_L", "3-bit quantization (large), experimental", 30};
+        return {"Q3_K_L", "3-bit quantization (large), experimental", 31};
     }
     else if (lower_filename.find("q3_k_m") != std::string::npos)
     {
-        return {"Q3_K_M", "3-bit quantization (medium), very small size", 31};
+        return {"Q3_K_M", "3-bit quantization (medium), very small size", 32};
     }
     else if (lower_filename.find("q3_k_s") != std::string::npos)
     {
-        return {"Q3_K_S", "3-bit quantization (small), ultra compact", 32};
+        return {"Q3_K_S", "3-bit quantization (small), ultra compact", 33};
 
         // 2-bit variants
     }
     else if (lower_filename.find("iq2_xxs") != std::string::npos)
     {
-        return {"IQ2_XXS", "2-bit improved quantization (extra extra small), extreme compression", 33};
+        return {"IQ2_XXS", "2-bit improved quantization (extra extra small), extreme compression", 34};
     }
     else if (lower_filename.find("iq2_m") != std::string::npos)
     {
-        return {"IQ2_M", "2-bit improved quantization (medium), balanced compression", 34};
+        return {"IQ2_M", "2-bit improved quantization (medium), balanced compression", 35};
     }
     else if (lower_filename.find("q2_k_l") != std::string::npos)
     {
-        return {"Q2_K_L", "2-bit quantization (large), better quality at 2-bit", 35};
+        return {"Q2_K_L", "2-bit quantization (large), better quality at 2-bit", 36};
     }
     else if (lower_filename.find("q2_k") != std::string::npos)
     {
-        return {"Q2_K", "2-bit quantization, extremely small but lower quality", 36};
+        return {"Q2_K", "2-bit quantization, extremely small but lower quality", 37};
 
         // 1-bit variants (experimental)
     }
     else if (lower_filename.find("iq1_s") != std::string::npos)
     {
-        return {"IQ1_S", "1-bit improved quantization (small), experimental ultra compression", 37};
+        return {"IQ1_S", "1-bit improved quantization (small), experimental ultra compression", 38};
     }
     else if (lower_filename.find("iq1_m") != std::string::npos)
     {
-        return {"IQ1_M", "1-bit improved quantization (medium), experimental compression", 38};
+        return {"IQ1_M", "1-bit improved quantization (medium), experimental compression", 39};
 
         // Floating point variants
     }
     else if (lower_filename.find("f16") != std::string::npos)
     {
-        return {"F16", "16-bit floating point, highest quality but large size", 39};
+        return {"F16", "16-bit floating point, highest quality but large size", 40};
     }
     else if (lower_filename.find("f32") != std::string::npos)
     {
-        return {"F32", "32-bit floating point, original precision", 40};
+        return {"F32", "32-bit floating point, original precision", 41};
 
         // Default
     }
     else
     {
-        return {"Unknown", "Unknown quantization type", 41};
+        return {"Unknown", "Unknown quantization type", 42};
     }
 }
 
@@ -243,8 +247,8 @@ MemoryUsage ModelFileUtils::calculateMemoryUsage(const ModelFile &modelFile, int
         if (!params.has_value())
         {
             return usage; // Return invalid usage if metadata can't be read
-        } 
-        
+        }
+
         // Calculate KV cache size using actual model parameters (convert to decimal MB for consistency)
         // Formula: 4 * hidden_size * hidden_layers * context_size / (1000 * 1000)
         float kvCacheSizeBytes = 4.0f *
@@ -283,11 +287,9 @@ size_t ModelFileUtils::estimateModelSize(const GGUFModelParams &params, const st
                            params.attention_heads * 1000; // Rough multiplier
 
     // Bits per parameter based on quantization type
-    float bitsPerParam = 16.0f; // Default F16
-
-    // Map quantization types to bits per parameter
+    float bitsPerParam = 16.0f; // Default F16    // Map quantization types to bits per parameter
     static const std::unordered_map<std::string, float> quantBits = {
-        {"F32", 32.0f}, {"F16", 16.0f}, {"Q8_0", 8.5f}, {"Q8_K_XL", 8.5f}, {"Q6_K", 6.5f}, {"Q6_K_XL", 6.5f}, {"Q5_K_M", 5.5f}, {"Q5_K_S", 5.1f}, {"Q5_K_XL", 5.5f}, {"Q5_0", 5.5f}, {"Q4_K_M", 4.5f}, {"Q4_K_S", 4.1f}, {"Q4_K_XL", 4.5f}, {"Q4_0", 4.5f}, {"Q4_1", 4.5f}, {"IQ4_NL", 4.2f}, {"IQ4_XS", 4.0f}, {"Q3_K_L", 3.4f}, {"Q3_K_M", 3.3f}, {"Q3_K_S", 3.2f}, {"Q3_K_XL", 3.4f}, {"IQ3_XXS", 3.1f}, {"Q2_K", 2.6f}, {"Q2_K_L", 2.8f}, {"Q2_K_XL", 2.6f}, {"IQ2_XXS", 2.1f}, {"IQ2_M", 2.4f}, {"IQ1_S", 1.6f}, {"IQ1_M", 1.8f},
+        {"F32", 32.0f}, {"F16", 16.0f}, {"Q8_0", 8.5f}, {"Q8_K_XL", 8.5f}, {"Q6_K", 6.5f}, {"Q6_K_XL", 6.5f}, {"Q5_K_M", 5.5f}, {"Q5_K_S", 5.1f}, {"Q5_K_XL", 5.5f}, {"Q5_0", 5.5f}, {"Q4_K_M", 4.5f}, {"Q4_K_L", 4.6f}, {"Q4_K_S", 4.1f}, {"Q4_K_XL", 4.5f}, {"Q4_0", 4.5f}, {"Q4_1", 4.5f}, {"IQ4_NL", 4.2f}, {"IQ4_XS", 4.0f}, {"Q3_K_L", 3.4f}, {"Q3_K_M", 3.3f}, {"Q3_K_S", 3.2f}, {"Q3_K_XL", 3.4f}, {"IQ3_XXS", 3.1f}, {"Q2_K", 2.6f}, {"Q2_K_L", 2.8f}, {"Q2_K_XL", 2.6f}, {"IQ2_XXS", 2.1f}, {"IQ2_M", 2.4f}, {"IQ1_S", 1.6f}, {"IQ1_M", 1.8f},
         // Unsloth Dynamic variants (similar to base)
         {"UD-Q8_K_XL", 8.5f},
         {"UD-Q6_K_XL", 6.5f},
