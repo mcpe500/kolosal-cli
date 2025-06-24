@@ -4,9 +4,14 @@
 #include <thread>
 #include <chrono>
 #include <regex>
+#include <fstream>
+#include <filesystem>
 #include <windows.h>
 #include <tlhelp32.h>
 #include <nlohmann/json.hpp>
+
+// Note: For YAML processing, we'll use a simple string manipulation approach
+// since we don't want to add yaml-cpp dependency to the CLI
 
 using json = nlohmann::json;
 
@@ -72,11 +77,10 @@ bool KolosalServerClient::startServer(const std::string &serverPath, int port)
                 // Final fallback to current directory
                 actualServerPath = "kolosal-server.exe";
             }
-        }
-    } 
+        }    } 
     
-    // Prepare command line
-    std::string commandLine = "kolosal-server.exe --port " + std::to_string(port) + " --host 0.0.0.0";
+    // Prepare command line - server will automatically detect config.yaml
+    std::string commandLine = "kolosal-server.exe";
 
     // Set up working directory to be the same as the server executable
     std::string workingDir = actualServerPath.substr(0, actualServerPath.find_last_of("\\/"));
@@ -208,13 +212,19 @@ bool KolosalServerClient::addEngine(const std::string &engineId, const std::stri
         payload["n_ctx"] = 4096;
         payload["n_gpu_layers"] = 50;
         payload["main_gpu_id"] = 0;
-        payload["load_at_startup"] = loadAtStartup;
+        payload["load_at_startup"] = false; // Always set to lazy loading for user-selected models
 
         std::string response;
         if (!makePostRequest("/engines", payload.dump(), response))
         {
             return false;
         }
+        
+        // If engine was added successfully, update config.yaml
+        // Use the model path if provided, otherwise use the URL
+        std::string pathToStore = modelPath.empty() ? modelUrl : modelPath;
+        updateConfigWithNewModel(engineId, pathToStore);
+        
         return true;
     }
     catch (const std::exception &e)
@@ -487,6 +497,123 @@ bool KolosalServerClient::cancelAllDownloads()
     catch (const std::exception &e)
     {
         std::cerr << "Error parsing cancel all response: " << e.what() << std::endl;
+        return false;
+    }
+}
+
+bool KolosalServerClient::updateConfigWithNewModel(const std::string& engineId, const std::string& modelPath)
+{
+    const std::string configPath = "config.yaml";
+    
+    try {
+        // Check if config.yaml exists
+        if (!std::filesystem::exists(configPath)) {
+            std::cerr << "Warning: config.yaml not found, cannot update model configuration" << std::endl;
+            return false;
+        }
+        
+        // Read the existing config file
+        std::ifstream configFile(configPath);
+        if (!configFile.is_open()) {
+            std::cerr << "Error: Cannot open config.yaml for reading" << std::endl;
+            return false;
+        }
+        
+        std::string configContent;
+        std::string line;
+        bool inModelsSection = false;
+        bool modelsAdded = false;
+        
+        while (std::getline(configFile, line)) {
+            configContent += line + "\n";
+            
+            // Check if we're entering the models section
+            if (line.find("models:") == 0) {
+                inModelsSection = true;
+            }
+            // Check if we're leaving the models section (next major section starts)
+            else if (inModelsSection && !line.empty() && line[0] != ' ' && line[0] != '#' && line[0] != '-') {
+                inModelsSection = false;
+            }
+        }
+        configFile.close();
+        
+        // Generate the model entry to add
+        std::string newModelEntry = "  - id: \"" + engineId + "\"\n"
+                                   "    path: \"" + modelPath + "\"\n"
+                                   "    load_at_startup: false\n"
+                                   "    main_gpu_id: 0\n"
+                                   "    preload_context: false\n"
+                                   "    load_params:\n"
+                                   "      n_ctx: 4096\n"
+                                   "      n_keep: 2048\n"
+                                   "      use_mmap: true\n"
+                                   "      use_mlock: false\n"
+                                   "      n_parallel: 1\n"
+                                   "      cont_batching: true\n"
+                                   "      warmup: false\n"
+                                   "      n_gpu_layers: 50\n"
+                                   "      n_batch: 2048\n"
+                                   "      n_ubatch: 512\n";
+        
+        // Find where to insert the new model
+        size_t modelsPos = configContent.find("models:");
+        if (modelsPos != std::string::npos) {
+            // Check if models section is empty (contains only comments)
+            size_t afterModels = modelsPos + 7; // length of "models:"
+            size_t nextSection = configContent.find("\n# =====", afterModels);
+            if (nextSection == std::string::npos) {
+                nextSection = configContent.length();
+            }
+            
+            std::string modelsSection = configContent.substr(afterModels, nextSection - afterModels);
+            
+            // Check if there are already uncommented model entries
+            bool hasActiveModels = modelsSection.find("\n  - id:") != std::string::npos;
+            
+            if (hasActiveModels) {
+                // Add to existing models - find the end of the last model entry
+                size_t lastModelEnd = configContent.rfind("      n_ubatch:", nextSection);
+                if (lastModelEnd != std::string::npos) {
+                    // Find the end of the line
+                    size_t lineEnd = configContent.find("\n", lastModelEnd);
+                    if (lineEnd != std::string::npos) {
+                        configContent.insert(lineEnd + 1, "\n" + newModelEntry);
+                    }
+                } else {
+                    // Fallback: add after the models: line
+                    size_t lineEnd = configContent.find("\n", modelsPos);
+                    if (lineEnd != std::string::npos) {
+                        configContent.insert(lineEnd + 1, newModelEntry);
+                    }
+                }
+            } else {
+                // No active models, add as the first one after models:
+                size_t lineEnd = configContent.find("\n", modelsPos);
+                if (lineEnd != std::string::npos) {
+                    configContent.insert(lineEnd + 1, newModelEntry);
+                }
+            }
+        } else {
+            std::cerr << "Warning: Could not find models section in config.yaml" << std::endl;
+            return false;
+        }
+        
+        // Write the updated config back to file
+        std::ofstream outFile(configPath);
+        if (!outFile.is_open()) {
+            std::cerr << "Error: Cannot open config.yaml for writing" << std::endl;
+            return false;
+        }
+        
+        outFile << configContent;
+        outFile.close();
+        
+        std::cout << "✓ Updated config.yaml with model '" << engineId << "'" << std::endl;
+        return true;
+        
+    } catch (const std::exception& e) {
+        std::cerr << "Error updating config.yaml: " << e.what() << std::endl;
         return false;
     }
 }

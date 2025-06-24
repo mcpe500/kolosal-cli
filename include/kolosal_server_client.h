@@ -130,8 +130,7 @@ private:
      * @return True if parsing was successful, false otherwise
      */
     bool parseJsonValue(const std::string& jsonString, const std::string& key, std::string& value);
-    
-    /**
+      /**
      * @brief Parse JSON number value
      * @param jsonString JSON string to parse
      * @param key Key to extract from JSON
@@ -139,6 +138,14 @@ private:
      * @return True if parsing was successful, false otherwise
      */
     bool parseJsonNumber(const std::string& jsonString, const std::string& key, double& value);
+    
+    /**
+     * @brief Update config.yaml to include a new model entry
+     * @param engineId Model ID/name to add
+     * @param modelPath Path to the model file
+     * @return True if config was updated successfully, false otherwise
+     */
+    bool updateConfigWithNewModel(const std::string& engineId, const std::string& modelPath);
 };
 
 #endif // KOLOSAL_SERVER_CLIENT_H
