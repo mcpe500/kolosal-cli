@@ -93,7 +93,7 @@ models:
   # Example model configuration - Uncomment and modify as needed
   # - id: "qwen3-0.6b"                              # Unique model identifier
   #   path: "https://huggingface.co/kolosal/qwen3-0.6b/resolve/main/Qwen3-0.6B-UD-Q4_K_XL.gguf"
-  #   load_at_startup: true                         # Load immediately on server start
+  #   load_immediately: true                         # Load immediately on server start
   #   main_gpu_id: 0                                # Primary GPU ID for inference (-1 for CPU only)
   #   preload_context: false                        # Preload context for faster initial inference
   #   load_params:
@@ -120,7 +120,7 @@ models:
   # Example local model configuration for production use
   # - id: "production-model"
   #   path: "./models/production-model.gguf"
-  #   load_at_startup: false                        # Lazy loading for faster startup
+  #   load_immediately: false                        # Lazy loading for faster startup
   #   main_gpu_id: 0
   #   preload_context: true                         # Preload for faster inference
   #   load_params:

@@ -487,7 +487,7 @@ bool KolosalServerClient::updateConfigWithNewModel(const std::string& engineId, 
         
         std::string newModelEntry = "  - id: \"" + engineId + "\"\n"
                                    "    path: \"" + modelPath + "\"\n"
-                                   "    load_at_startup: false\n"
+                                   "    load_immediately: false\n"
                                    "    main_gpu_id: 0\n"
                                    "    preload_context: false\n"
                                    "    load_params:\n"
