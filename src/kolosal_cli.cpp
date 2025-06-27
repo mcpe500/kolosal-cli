@@ -19,23 +19,28 @@
 #include <thread>
 
 // Static member initialization
-KolosalCLI* KolosalCLI::s_instance = nullptr;
+KolosalCLI *KolosalCLI::s_instance = nullptr;
 
 // Helper function to format file sizes
-static std::string formatFileSize(long long bytes) {
-    const char* units[] = {"B", "KB", "MB", "GB", "TB"};
+static std::string formatFileSize(long long bytes)
+{
+    const char *units[] = {"B", "KB", "MB", "GB", "TB"};
     int unitIndex = 0;
     double size = static_cast<double>(bytes);
-    
-    while (size >= 1024.0 && unitIndex < 4) {
+
+    while (size >= 1024.0 && unitIndex < 4)
+    {
         size /= 1024.0;
         unitIndex++;
     }
-    
+
     std::ostringstream oss;
-    if (unitIndex == 0) {
+    if (unitIndex == 0)
+    {
         oss << static_cast<long long>(size) << " " << units[unitIndex];
-    } else {
+    }
+    else
+    {
         oss << std::fixed << std::setprecision(1) << size << " " << units[unitIndex];
     }
     return oss.str();
@@ -53,20 +58,21 @@ void KolosalCLI::ensureConsoleEncoding()
 void KolosalCLI::initialize()
 {
     ensureConsoleEncoding();
-    
+
     HttpClient::initialize();
     CacheManager::initialize();
-    
+
     // Initialize server client
     m_serverClient = std::make_unique<KolosalServerClient>();
-    
+
     // Set up signal handling for graceful shutdown
     s_instance = this;
-    signal(SIGINT, signalHandler);   // Ctrl+C
-    signal(SIGTERM, signalHandler);  // Termination request
+    signal(SIGINT, signalHandler);  // Ctrl+C
+    signal(SIGTERM, signalHandler); // Termination request
 #ifdef _WIN32
     // On Windows, also handle console control events
-    SetConsoleCtrlHandler([](DWORD dwCtrlType) -> BOOL {
+    SetConsoleCtrlHandler([](DWORD dwCtrlType) -> BOOL
+                          {
         if (dwCtrlType == CTRL_C_EVENT || dwCtrlType == CTRL_CLOSE_EVENT || dwCtrlType == CTRL_BREAK_EVENT) {
             if (KolosalCLI::s_instance) {
                 std::cout << "\nReceived shutdown signal. Cancelling downloads..." << std::endl;
@@ -74,8 +80,7 @@ void KolosalCLI::initialize()
             }
             return TRUE;
         }
-        return FALSE;
-    }, TRUE);
+        return FALSE; }, TRUE);
 #endif
 }
 
@@ -83,15 +88,16 @@ void KolosalCLI::cleanup()
 {
     // Cancel any active downloads before cleanup
     cancelActiveDownloads();
-    
+
     // Reset signal instance before destroying server client
     s_instance = nullptr;
-    
+
     // Cleanup server client (this will properly close handles)
-    if (m_serverClient) {
+    if (m_serverClient)
+    {
         m_serverClient.reset();
     }
-    
+
     // Cleanup other components
     CacheManager::cleanup();
     HttpClient::cleanup();
@@ -99,18 +105,20 @@ void KolosalCLI::cleanup()
 
 bool KolosalCLI::stopBackgroundServer()
 {
-    if (!m_serverClient) {
+    if (!m_serverClient)
+    {
         std::cerr << "Server client not initialized." << std::endl;
         return false;
     }
-    
+
     std::cout << "Stopping background Kolosal server..." << std::endl;
-    
+
     // Try to stop the server
-    if (m_serverClient->shutdownServer()) {
+    if (m_serverClient->shutdownServer())
+    {
         return true;
     }
-    
+
     std::cerr << "Failed to stop server." << std::endl;
     return false;
 }
@@ -136,7 +144,8 @@ std::vector<std::string> KolosalCLI::generateSampleModels()
 std::vector<ModelFile> KolosalCLI::generateSampleFiles(const std::string &modelId)
 {
     std::vector<ModelFile> modelFiles;
-    std::string modelName = modelId.substr(modelId.find('/') + 1);    ModelFile file1;
+    std::string modelName = modelId.substr(modelId.find('/') + 1);
+    ModelFile file1;
     file1.filename = modelName + "-Q8_0.gguf";
     file1.modelId = modelId;
     file1.quant = ModelFileUtils::detectQuantization(file1.filename);
@@ -158,110 +167,137 @@ std::vector<ModelFile> KolosalCLI::generateSampleFiles(const std::string &modelI
     file3.quant = ModelFileUtils::detectQuantization(file3.filename);
     file3.downloadUrl = "https://huggingface.co/" + modelId + "/resolve/main/" + file3.filename;
     file3.memoryUsage = ModelFileUtils::calculateMemoryUsageAsync(file3, 4096);
-    modelFiles.push_back(file3);return modelFiles;
+    modelFiles.push_back(file3);
+    return modelFiles;
 }
 
 bool KolosalCLI::initializeServer()
 {
-    if (!m_serverClient) {
+    if (!m_serverClient)
+    {
         std::cerr << "Server client not initialized." << std::endl;
         return false;
     }
-    
+
     // Check if server is already running
-    if (m_serverClient->isServerHealthy()) {
+    if (m_serverClient->isServerHealthy())
+    {
         std::cout << "Kolosal server is already running." << std::endl;
         return true;
     }
-    
+
     std::cout << "Starting Kolosal server..." << std::endl;
-    
+
     // Try to start the server
-    if (!m_serverClient->startServer()) {
+    if (!m_serverClient->startServer())
+    {
         std::cerr << "Failed to start server." << std::endl;
         return false;
     }
-    
+
     // Wait for server to become ready
     std::cout << "Waiting for server to become ready..." << std::endl;
-    if (!m_serverClient->waitForServerReady(30)) {
+    if (!m_serverClient->waitForServerReady(30))
+    {
         std::cerr << "Server failed to become ready within 30 seconds." << std::endl;
         return false;
     }
-    
+
     std::cout << "Server is ready!" << std::endl;
     return true;
 }
 
-bool KolosalCLI::processModelDownload(const std::string& modelId, const ModelFile& modelFile)
+bool KolosalCLI::processModelDownload(const std::string &modelId, const ModelFile &modelFile)
 {
+    // Ensure server is running and can be connected to
+    if (!ensureServerConnection())
+    {
+        std::cerr << "Unable to connect to Kolosal server. Download cancelled." << std::endl;
+        return false;
+    }
+
     // Generate download URL
-    std::string downloadUrl = "https://huggingface.co/" + modelId + "/resolve/main/" + modelFile.filename;    // Generate simplified engine ID in format "model-name:quant"
-    std::string modelName = modelId.substr(modelId.find('/') + 1); // Extract model name after "/"
-    std::string quantType = modelFile.quant.type; // Use full quantization type
-    
+    std::string downloadUrl = "https://huggingface.co/" + modelId + "/resolve/main/" + modelFile.filename; // Generate simplified engine ID in format "model-name:quant"
+    std::string modelName = modelId.substr(modelId.find('/') + 1);                                         // Extract model name after "/"
+    std::string quantType = modelFile.quant.type;                                                          // Use full quantization type
+
     std::string engineId = modelName + ":" + quantType;
-      std::cout << "\nDownloading: " << modelFile.filename << std::endl;
+    std::cout << "\nDownloading: " << modelFile.filename << std::endl;
     std::cout << "From: " << modelId << std::endl;
-    
+
     // Send engine creation request to server
-    if (!m_serverClient->addEngine(engineId, downloadUrl, "./models/" + modelFile.filename)) {
+    if (!m_serverClient->addEngine(engineId, downloadUrl, "./models/" + modelFile.filename))
+    {
         std::cerr << "Failed to send download request." << std::endl;
         return false;
     }
-    
+
     // Track this download
     m_activeDownloads.push_back(engineId);
-    
+
     // Monitor download progress
-      bool downloadSuccess = m_serverClient->monitorDownloadProgress(
+    bool downloadSuccess = m_serverClient->monitorDownloadProgress(
         engineId,
-        [this](double percentage, const std::string& status, long long downloadedBytes, long long totalBytes) {
+        [this](double percentage, const std::string &status, long long downloadedBytes, long long totalBytes)
+        {
             // Progress callback - update display
             ensureConsoleEncoding(); // Ensure proper encoding before each update
-            
+
             std::cout << "\r";
-              // Create progress bar
+            // Create progress bar
             int barWidth = 50;
             int pos = static_cast<int>(barWidth * percentage / 100.0);
-            
+
             std::cout << "|";
-            for (int i = 0; i < barWidth; ++i) {
-                if (i < pos) std::cout << "█";
-                else std::cout << "-";
+            for (int i = 0; i < barWidth; ++i)
+            {
+                if (i < pos)
+                    std::cout << "█";
+                else
+                    std::cout << "-";
             }
             std::cout << "| " << std::fixed << std::setprecision(1) << percentage << "% ";
             // Show file sizes if available
-            if (totalBytes > 0) {
+            if (totalBytes > 0)
+            {
                 std::cout << "(" << formatFileSize(downloadedBytes) << "/" << formatFileSize(totalBytes) << ") ";
             }
-            
-            if (status == "creating_engine") {
+
+            if (status == "creating_engine")
+            {
                 std::cout << "(loading)";
-            } else if (status == "engine_created") {
+            }
+            else if (status == "engine_created")
+            {
                 std::cout << "(registered)";
-            } else if (status == "completed") {
+            }
+            else if (status == "completed")
+            {
                 std::cout << "(complete)";
             }
-            
+
             std::cout.flush();
         },
         1000 // Check every 1 second
     );
-    
+
     // Remove from active downloads list
     auto it = std::find(m_activeDownloads.begin(), m_activeDownloads.end(), engineId);
-    if (it != m_activeDownloads.end()) {
+    if (it != m_activeDownloads.end())
+    {
         m_activeDownloads.erase(it);
     }
-    
+
     std::cout << std::endl; // New line after progress bar
-      if (downloadSuccess) {
+    if (downloadSuccess)
+    {
         std::cout << "✓ Download completed. Model ready for inference." << std::endl;
-    } else {
+    }
+    else
+    {
         std::cout << "✗ Download failed." << std::endl;
     }
-    
+
     return downloadSuccess;
 }
 
@@ -305,16 +341,16 @@ ModelFile KolosalCLI::selectModelFile(const std::string &modelId)
         std::cout << "No .gguf files found. Showing sample files...\n\n";
         // Fallback to sample files with quantization info
         modelFiles = generateSampleFiles(modelId);
-        Sleep(2000);    }    
+        Sleep(2000);
+    }
     std::cout << "Found " << modelFiles.size() << " .gguf file(s)!\n\n";
-    
+
     // Show model files with real-time async memory updates and cache after completion
     int fileResult = ModelFileUtils::displayAsyncModelFileList(modelFiles, "Select a .gguf file:");
-    
+
     // Cache the files with completed memory information (runs in background)
-    std::thread cacheThread([modelId, modelFiles]() mutable {
-        ModelFileUtils::cacheModelFilesWithMemory(modelId, modelFiles);
-    });
+    std::thread cacheThread([modelId, modelFiles]() mutable
+                            { ModelFileUtils::cacheModelFilesWithMemory(modelId, modelFiles); });
     cacheThread.detach();
 
     if (fileResult >= 0 && fileResult < static_cast<int>(modelFiles.size()))
@@ -344,12 +380,13 @@ std::string KolosalCLI::parseRepositoryInput(const std::string &input)
     // Remove whitespace
     std::string trimmed = input;
     trimmed.erase(std::remove_if(trimmed.begin(), trimmed.end(), ::isspace), trimmed.end());
-    
+
     // Check if it's a direct GGUF file URL first
-    if (isDirectGGUFUrl(trimmed)) {
+    if (isDirectGGUFUrl(trimmed))
+    {
         return "DIRECT_URL"; // Special marker for direct URLs
     }
-    
+
     // Check if it's a full Hugging Face URL
     std::regex urlPattern(R"(https?://huggingface\.co/([^/]+/[^/?\s#]+))");
     std::smatch matches;
@@ -376,94 +413,115 @@ std::string KolosalCLI::parseRepositoryInput(const std::string &input)
     return ""; // Invalid format
 }
 
-bool KolosalCLI::isDirectGGUFUrl(const std::string& input)
+bool KolosalCLI::isDirectGGUFUrl(const std::string &input)
 {
-    if (input.empty()) {
+    if (input.empty())
+    {
         return false;
     }
-    
+
     // Check if it's a URL that ends with .gguf
     std::regex ggufUrlPattern(R"(^https?://[^\s]+\.gguf$)", std::regex_constants::icase);
     return std::regex_match(input, ggufUrlPattern);
 }
 
-bool KolosalCLI::handleDirectGGUFUrl(const std::string& url)
+bool KolosalCLI::handleDirectGGUFUrl(const std::string &url)
 {
     std::cout << "Processing direct GGUF file URL...\n\n";
-    
+
     // Extract filename from URL
     std::string filename;
     size_t lastSlash = url.find_last_of('/');
-    if (lastSlash != std::string::npos && lastSlash < url.length() - 1) {
+    if (lastSlash != std::string::npos && lastSlash < url.length() - 1)
+    {
         filename = url.substr(lastSlash + 1);
-    } else {
+    }
+    else
+    {
         filename = "model.gguf"; // Fallback filename
     }
-      // Create a ModelFile object for the direct URL
+    // Create a ModelFile object for the direct URL
     ModelFile modelFile;
     modelFile.filename = filename;
     modelFile.downloadUrl = url;
-    
+
     // Try to get cached model file info first
     std::string cacheKey = "direct_url:" + url;
     ModelFile cachedFile = CacheManager::getCachedModelFile(cacheKey);
-    if (!cachedFile.filename.empty()) {
+    if (!cachedFile.filename.empty())
+    {
         std::cout << "Using cached information for: " << filename << std::endl;
         modelFile = cachedFile;
-    } else {
+    }
+    else
+    {
         std::cout << "Analyzing GGUF file: " << filename << std::endl;
         LoadingAnimation loading("Reading metadata");
         loading.start();
-        
+
         // Extract quantization info from filename
         modelFile.quant = ModelFileUtils::detectQuantization(filename);
-          // Calculate memory usage
+        // Calculate memory usage
         modelFile.memoryUsage = ModelFileUtils::calculateMemoryUsageAsync(modelFile);
-        
+
         loading.stop();
-        
+
         // Cache the model file info
         CacheManager::cacheModelFile(cacheKey, modelFile);
         std::cout << "✓ Cached model information" << std::endl;
     }
-    
+
     // Display file information
     std::cout << "File: " << filename << std::endl;
     std::cout << "URL: " << url << std::endl;
-    std::cout << "Quantization: " << modelFile.quant.type << " - " << modelFile.quant.description << std::endl;    if (modelFile.memoryUsage.hasEstimate) {
+    std::cout << "Quantization: " << modelFile.quant.type << " - " << modelFile.quant.description << std::endl;
+    if (modelFile.memoryUsage.hasEstimate)
+    {
         std::cout << "Estimated Memory Usage: " << modelFile.memoryUsage.displayString << std::endl;
     }
-    
+
     std::cout << std::endl;
-    
+
     // Ask for confirmation
     std::cout << "Download this model? (y/n): ";
     char choice;
     std::cin >> choice;
-    
-    if (choice == 'y' || choice == 'Y') {
+
+    if (choice == 'y' || choice == 'Y')
+    {
+        // Ensure server is running and can be connected to
+        if (!ensureServerConnection())
+        {
+            std::cerr << "Unable to connect to Kolosal server. Download cancelled." << std::endl;
+            return false;
+        }
+
         // Generate simplified engine ID from filename
         std::string engineId = filename;
         size_t dotPos = engineId.find_last_of('.');
-        if (dotPos != std::string::npos) {
+        if (dotPos != std::string::npos)
+        {
             engineId = engineId.substr(0, dotPos);
         }
-        
+
         // Process download through server
-        if (!m_serverClient->addEngine(engineId, url, "./models/" + filename)) {
+        if (!m_serverClient->addEngine(engineId, url, "./models/" + filename))
+        {
             std::cerr << "Failed to start download." << std::endl;
             return false;
         }
-        
+
         m_activeDownloads.push_back(engineId);
-        
+
         std::cout << "\n✓ Download started successfully!" << std::endl;
         std::cout << "Engine ID: " << engineId << std::endl;
         std::cout << "Downloading to: ./models/" << filename << std::endl;
         std::cout << "\nDownload initiated. Check server logs for progress." << std::endl;
-        
+
         return true;
-    } else {
+    }
+    else
+    {
         std::cout << "Download cancelled." << std::endl;
         return false;
     }
@@ -472,11 +530,13 @@ bool KolosalCLI::handleDirectGGUFUrl(const std::string& url)
 int KolosalCLI::run(const std::string &repoId)
 {
     showWelcome();
-      // Initialize Kolosal server first
-    if (!initializeServer()) {
-        std::cerr << "Failed to initialize Kolosal server. Exiting." << std::endl;        return 1;
+    // Initialize Kolosal server first
+    if (!initializeServer())
+    {
+        std::cerr << "Failed to initialize Kolosal server. Exiting." << std::endl;
+        return 1;
     }
-    
+
     // If a repository ID is provided, go directly to file selection
     if (!repoId.empty())
     {
@@ -507,17 +567,17 @@ int KolosalCLI::run(const std::string &repoId)
                 std::cout << "No .gguf files found in repository: " << modelId << "\n";
                 std::cout << "This repository may not contain quantized models.\n";
                 return 1; // Exit with error code
-            }            else
+            }
+            else
             {
                 std::cout << "Found " << modelFiles.size() << " .gguf file(s) in " << modelId << "\n\n";
-                
+
                 // Show model files with real-time async memory updates
                 int fileResult = ModelFileUtils::displayAsyncModelFileList(modelFiles, "Select a .gguf file to download:");
-                
+
                 // Cache the files with completed memory information (runs in background)
-                std::thread cacheThread([modelId, modelFiles]() mutable {
-                    ModelFileUtils::cacheModelFilesWithMemory(modelId, modelFiles);
-                });
+                std::thread cacheThread([modelId, modelFiles]() mutable
+                                        { ModelFileUtils::cacheModelFilesWithMemory(modelId, modelFiles); });
                 cacheThread.detach();
 
                 if (fileResult >= 0 && fileResult < static_cast<int>(modelFiles.size()))
@@ -559,35 +619,75 @@ int KolosalCLI::run(const std::string &repoId)
 
 void KolosalCLI::cancelActiveDownloads()
 {
-    if (m_activeDownloads.empty()) {
+    if (m_activeDownloads.empty())
+    {
         return;
     }
-    
+
     std::cout << "Cancelling " << m_activeDownloads.size() << " active download(s)..." << std::endl;
-    
-    for (const std::string& downloadId : m_activeDownloads) {
-        if (m_serverClient && m_serverClient->cancelDownload(downloadId)) {
+
+    for (const std::string &downloadId : m_activeDownloads)
+    {
+        if (m_serverClient && m_serverClient->cancelDownload(downloadId))
+        {
             std::cout << "Cancelled download: " << downloadId << std::endl;
-        } else {
+        }
+        else
+        {
             std::cerr << "Failed to cancel download: " << downloadId << std::endl;
         }
     }
-    
+
     m_activeDownloads.clear();
 }
 
 void KolosalCLI::signalHandler(int signal)
 {
     std::cout << "\nReceived signal " << signal << ". Performing cleanup..." << std::endl;
-    
-    if (s_instance) {
+
+    if (s_instance)
+    {
         s_instance->cancelActiveDownloads();
-        
+
         // Note: We don't stop the server here since it should continue running
         // even after the CLI exits (background server model)
     }
-    
+
     // Reset signal handler to default and re-raise signal for clean exit
     std::signal(signal, SIG_DFL);
     std::raise(signal);
+}
+
+bool KolosalCLI::ensureServerConnection()
+{
+    if (!m_serverClient)
+    {
+        std::cerr << "Server client not initialized." << std::endl;
+        return false;
+    }
+
+    // First check if server is already healthy
+    if (m_serverClient->isServerHealthy())
+    {
+        return true;
+    }
+
+    std::cout << "Connecting to Kolosal server..." << std::endl;
+
+    // Try to start the server if it's not running
+    if (!m_serverClient->startServer())
+    {
+        std::cerr << "Failed to start Kolosal server." << std::endl;
+        return false;
+    }
+
+    // Wait for server to become ready with a shorter timeout for downloads
+    std::cout << "Waiting for server to become ready..." << std::endl;
+    if (!m_serverClient->waitForServerReady(15))
+    {
+        std::cerr << "Server failed to become ready within 15 seconds." << std::endl;
+        return false;
+    }
+
+    return true;
 }

@@ -111,6 +111,12 @@ private:
     bool initializeServer();
     
     /**
+     * @brief Ensure server is running and connected
+     * @return True if server is ready, false otherwise
+     */
+    bool ensureServerConnection();
+    
+    /**
      * @brief Process model selection and send to server for download
      * @param modelId The selected model ID
      * @param modelFile The selected model file
