@@ -41,8 +41,19 @@ static std::string formatFileSize(long long bytes) {
     return oss.str();
 }
 
+void KolosalCLI::ensureConsoleEncoding()
+{
+    // Set console to UTF-8 mode for proper character display
+#ifdef _WIN32
+    SetConsoleOutputCP(CP_UTF8);
+    SetConsoleCP(CP_UTF8);
+#endif
+}
+
 void KolosalCLI::initialize()
 {
+    ensureConsoleEncoding();
+    
     HttpClient::initialize();
     CacheManager::initialize();
     
@@ -73,9 +84,15 @@ void KolosalCLI::cleanup()
     // Cancel any active downloads before cleanup
     cancelActiveDownloads();
     
-    // Reset signal instance
+    // Reset signal instance before destroying server client
     s_instance = nullptr;
     
+    // Cleanup server client (this will properly close handles)
+    if (m_serverClient) {
+        m_serverClient.reset();
+    }
+    
+    // Cleanup other components
     CacheManager::cleanup();
     HttpClient::cleanup();
 }
@@ -87,22 +104,15 @@ bool KolosalCLI::stopBackgroundServer()
         return false;
     }
     
-    // Check if server is running
-    if (!m_serverClient->isServerHealthy()) {
-        std::cout << "No server is currently running." << std::endl;
-        return true;
-    }
-    
     std::cout << "Stopping background Kolosal server..." << std::endl;
     
-    // Try graceful shutdown first
+    // Try to stop the server
     if (m_serverClient->shutdownServer()) {
-        std::cout << "Server stopped successfully." << std::endl;
         return true;
-    } else {
-        std::cerr << "Failed to stop server gracefully." << std::endl;
-        return false;
     }
+    
+    std::cerr << "Failed to stop server." << std::endl;
+    return false;
 }
 
 void KolosalCLI::showWelcome()
@@ -153,6 +163,19 @@ std::vector<ModelFile> KolosalCLI::generateSampleFiles(const std::string &modelI
 
 bool KolosalCLI::initializeServer()
 {
+    if (!m_serverClient) {
+        std::cerr << "Server client not initialized." << std::endl;
+        return false;
+    }
+    
+    // Check if server is already running
+    if (m_serverClient->isServerHealthy()) {
+        std::cout << "Kolosal server is already running." << std::endl;
+        return true;
+    }
+    
+    std::cout << "Starting Kolosal server..." << std::endl;
+    
     // Try to start the server
     if (!m_serverClient->startServer()) {
         std::cerr << "Failed to start server." << std::endl;
@@ -160,11 +183,13 @@ bool KolosalCLI::initializeServer()
     }
     
     // Wait for server to become ready
+    std::cout << "Waiting for server to become ready..." << std::endl;
     if (!m_serverClient->waitForServerReady(30)) {
-        std::cerr << "Server failed to become ready." << std::endl;
+        std::cerr << "Server failed to become ready within 30 seconds." << std::endl;
         return false;
     }
     
+    std::cout << "Server is ready!" << std::endl;
     return true;
 }
 
@@ -180,7 +205,7 @@ bool KolosalCLI::processModelDownload(const std::string& modelId, const ModelFil
     std::cout << "From: " << modelId << std::endl;
     
     // Send engine creation request to server
-    if (!m_serverClient->addEngine(engineId, downloadUrl, "./models/" + modelFile.filename, true)) {
+    if (!m_serverClient->addEngine(engineId, downloadUrl, "./models/" + modelFile.filename)) {
         std::cerr << "Failed to send download request." << std::endl;
         return false;
     }
@@ -191,8 +216,10 @@ bool KolosalCLI::processModelDownload(const std::string& modelId, const ModelFil
     // Monitor download progress
       bool downloadSuccess = m_serverClient->monitorDownloadProgress(
         engineId,
-        [](double percentage, const std::string& status, long long downloadedBytes, long long totalBytes) {
+        [this](double percentage, const std::string& status, long long downloadedBytes, long long totalBytes) {
             // Progress callback - update display
+            ensureConsoleEncoding(); // Ensure proper encoding before each update
+            
             std::cout << "\r";
               // Create progress bar
             int barWidth = 50;
@@ -211,6 +238,10 @@ bool KolosalCLI::processModelDownload(const std::string& modelId, const ModelFil
             
             if (status == "creating_engine") {
                 std::cout << "(loading)";
+            } else if (status == "engine_created") {
+                std::cout << "(registered)";
+            } else if (status == "completed") {
+                std::cout << "(complete)";
             }
             
             std::cout.flush();
@@ -419,7 +450,7 @@ bool KolosalCLI::handleDirectGGUFUrl(const std::string& url)
         }
         
         // Process download through server
-        if (!m_serverClient->addEngine(engineId, url, "./models/" + filename, true)) {
+        if (!m_serverClient->addEngine(engineId, url, "./models/" + filename)) {
             std::cerr << "Failed to start download." << std::endl;
             return false;
         }
@@ -551,8 +582,12 @@ void KolosalCLI::signalHandler(int signal)
     
     if (s_instance) {
         s_instance->cancelActiveDownloads();
+        
+        // Note: We don't stop the server here since it should continue running
+        // even after the CLI exits (background server model)
     }
     
-    // Exit gracefully
-    exit(signal);
+    // Reset signal handler to default and re-raise signal for clean exit
+    std::signal(signal, SIG_DFL);
+    std::raise(signal);
 }

@@ -124,6 +124,11 @@ private:
     void cancelActiveDownloads();
     
     /**
+     * @brief Ensure console encoding is set to UTF-8
+     */
+    void ensureConsoleEncoding();
+    
+    /**
      * @brief Signal handler for graceful shutdown
      * @param signal Signal number
      */

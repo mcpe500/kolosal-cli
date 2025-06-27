@@ -61,7 +61,8 @@ if(WIN32)
         COMMAND ${CMAKE_COMMAND} -E copy_if_different
         "${CURL_DIR}/bin/libcurl.dll"
         $<TARGET_FILE_DIR:kolosal-cli>)
-      # Copy Kolosal server files from built submodule to output directory
+    
+    # Copy Kolosal server files from built submodule to output directory
     add_custom_command(TARGET kolosal-cli POST_BUILD
         COMMAND ${CMAKE_COMMAND} -E copy_if_different
         $<TARGET_FILE:kolosal_server>
@@ -71,17 +72,6 @@ if(WIN32)
         COMMAND ${CMAKE_COMMAND} -E copy_if_different
         $<TARGET_FILE:kolosal_server_exe>
         $<TARGET_FILE_DIR:kolosal-cli>/kolosal-server.exe)
-      # Copy libcurl.dll from kolosal-server build if available
-    add_custom_command(TARGET kolosal-cli POST_BUILD
-        COMMAND ${CMAKE_COMMAND} -E copy_if_different
-        $<TARGET_FILE_DIR:kolosal_server_exe>/libcurl.dll
-        $<TARGET_FILE_DIR:kolosal-cli>/libcurl.dll)
-        
-    # Copy config.yaml to output directory
-    add_custom_command(TARGET kolosal-cli POST_BUILD
-        COMMAND ${CMAKE_COMMAND} -E copy_if_different
-        "${CMAKE_CURRENT_SOURCE_DIR}/config.yaml"
-        $<TARGET_FILE_DIR:kolosal-cli>/config.yaml)
 endif()
 
 # Copy config.yaml to output directory for all platforms

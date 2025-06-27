@@ -21,18 +21,12 @@ public:
      * @brief Destructor
      */
     ~KolosalServerClient();    /**
-     * @brief Start the Kolosal server in the background
+     * @brief Start the Kolosal server in the background if not already running
      * @param serverPath Path to kolosal-server executable
      * @param port Port to run the server on (default: 8080)
-     * @return True if server started successfully, false otherwise
+     * @return True if server started successfully or is already running, false otherwise
      */
     bool startServer(const std::string& serverPath = "", int port = 8080);
-    
-    /**
-     * @brief Stop the Kolosal server
-     * @return True if server stopped successfully, false otherwise
-     */
-    bool stopServer();
     
     /**
      * @brief Gracefully shutdown the server via API call
@@ -58,11 +52,10 @@ public:
      * @param engineId Unique identifier for the engine
      * @param modelUrl URL to download the model from
      * @param modelPath Local path where the model will be saved
-     * @param loadAtStartup Whether to load the model immediately after download
      * @return True if engine creation was initiated successfully, false otherwise
      */
     bool addEngine(const std::string& engineId, const std::string& modelUrl, 
-                   const std::string& modelPath, bool loadAtStartup = true);
+                   const std::string& modelPath);
     
     /**
      * @brief Get download progress for a specific model
@@ -102,8 +95,6 @@ public:
 private:
     std::string m_baseUrl;
     std::string m_apiKey;
-    void* m_serverProcess; // HANDLE on Windows, will be cast as needed
-    bool m_serverStartedByUs;
     
     /**
      * @brief Make HTTP GET request to the server
