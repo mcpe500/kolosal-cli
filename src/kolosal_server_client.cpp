@@ -1,11 +1,13 @@
 #include "kolosal_server_client.h"
 #include "http_client.h"
+#include "loading_animation.h"
 #include <iostream>
 #include <thread>
 #include <chrono>
 #include <regex>
 #include <fstream>
 #include <filesystem>
+#include <vector>
 #include <windows.h>
 #include <tlhelp32.h>
 #include <nlohmann/json.hpp>
@@ -94,20 +96,16 @@ bool KolosalServerClient::startServer(const std::string &serverPath, int port)
     if (!result)
     {
         DWORD error = GetLastError();
-        std::cerr << "Failed to start Kolosal server. Error code: " << error << std::endl;
-
         switch (error)
         {
         case ERROR_FILE_NOT_FOUND:
-            std::cerr << "Server executable not found: " << actualServerPath << std::endl;
-            std::cerr << "Please ensure kolosal-server.exe is in the same directory as the CLI." << std::endl;
+            std::cerr << "Error: Server executable not found. Please ensure kolosal-server.exe is available." << std::endl;
             break;
         case ERROR_ACCESS_DENIED:
-            std::cerr << "Access denied when trying to start server." << std::endl;
-            std::cerr << "Please check file permissions and run as administrator if necessary." << std::endl;
+            std::cerr << "Error: Access denied. Please run as administrator if necessary." << std::endl;
             break;
         default:
-            std::cerr << "Unknown error occurred while starting server." << std::endl;
+            std::cerr << "Error: Failed to start server (code: " << error << ")" << std::endl;
             break;
         }
         return false;
@@ -144,16 +142,96 @@ bool KolosalServerClient::waitForServerReady(int timeoutSeconds)
     auto startTime = std::chrono::steady_clock::now();
     auto timeout = std::chrono::seconds(timeoutSeconds);
 
+    LoadingAnimation loading("Waiting for server to start");
+    loading.start();
+
     while (std::chrono::steady_clock::now() - startTime < timeout)
     {
         if (isServerHealthy())
         {
+            loading.complete("Server started successfully");
             return true;
         }
 
         std::this_thread::sleep_for(std::chrono::milliseconds(1000));
     }
 
+    loading.stop();
+    return false;
+}
+
+bool KolosalServerClient::getEngines(std::vector<std::string>& engines)
+{
+    std::string response;
+    
+    // Try both /v1/engines and /engines endpoints
+    if (!makeGetRequest("/v1/engines", response))
+    {
+        if (!makeGetRequest("/engines", response))
+        {
+            return false;
+        }
+    }
+
+    try
+    {
+        json enginesJson = json::parse(response);
+        engines.clear();
+        
+        // Handle different possible response formats
+        if (enginesJson.is_array())
+        {
+            for (const auto& engine : enginesJson)
+            {
+                if (engine.contains("id"))
+                {
+                    engines.push_back(engine["id"].get<std::string>());
+                }
+                else if (engine.contains("engine_id"))
+                {
+                    engines.push_back(engine["engine_id"].get<std::string>());
+                }
+            }
+        }
+        else if (enginesJson.contains("engines") && enginesJson["engines"].is_array())
+        {
+            for (const auto& engine : enginesJson["engines"])
+            {
+                if (engine.contains("id"))
+                {
+                    engines.push_back(engine["id"].get<std::string>());
+                }
+                else if (engine.contains("engine_id"))
+                {
+                    engines.push_back(engine["engine_id"].get<std::string>());
+                }
+            }
+        }
+        
+        return true;
+    }
+    catch (const std::exception&)
+    {
+        return false;
+    }
+}
+
+bool KolosalServerClient::engineExists(const std::string& engineId)
+{
+    std::vector<std::string> engines;
+    if (!getEngines(engines))
+    {
+        return false;
+    }
+    
+    for (const auto& engine : engines)
+    {
+        if (engine == engineId)
+        {
+            return true;
+        }
+    }
+    
     return false;
 }
 
@@ -162,6 +240,15 @@ bool KolosalServerClient::addEngine(const std::string &engineId, const std::stri
 {
     try
     {
+        // Check if engine already exists
+        if (engineExists(engineId))
+        {
+            return true;
+        }
+
+        LoadingAnimation loading("Creating engine");
+        loading.start();
+
         json payload;
         payload["engine_id"] = engineId;
         payload["model_path"] = modelUrl; // For download, we pass URL as model_path
@@ -173,17 +260,18 @@ bool KolosalServerClient::addEngine(const std::string &engineId, const std::stri
         std::string response;
         if (!makePostRequest("/engines", payload.dump(), response))
         {
+            loading.stop();
             return false;
         }
         
         std::string pathToStore = modelPath.empty() ? modelUrl : modelPath;
         updateConfigWithNewModel(engineId, pathToStore);
         
+        loading.complete("Engine created successfully");
         return true;
     }
-    catch (const std::exception &e)
+    catch (const std::exception &)
     {
-        std::cerr << "Error creating engine: " << e.what() << std::endl;
         return false;
     }
 }
@@ -220,9 +308,8 @@ bool KolosalServerClient::getDownloadProgress(const std::string &modelId, long l
         }
         return true;
     }
-    catch (const std::exception &e)
+    catch (const std::exception &)
     {
-        std::cerr << "Error parsing download progress: " << e.what() << std::endl;
         return false;
     }
 }
@@ -238,7 +325,6 @@ bool KolosalServerClient::monitorDownloadProgress(const std::string &modelId,
     {
         // Check for timeout
         if (std::chrono::steady_clock::now() - startTime > maxDuration) {
-            std::cerr << "Download monitoring timed out after 30 minutes" << std::endl;
             return false;
         }
         
@@ -263,10 +349,6 @@ bool KolosalServerClient::monitorDownloadProgress(const std::string &modelId,
         else if (status == "failed" || status == "cancelled" || status == "engine_creation_failed")
         {
             return false;
-        }
-        // For debugging: log unknown status after 100%
-        else if (percentage >= 100.0 && status != "downloading") {
-            std::cerr << "Debug: Unknown status '" << status << "' at 100% completion" << std::endl;
         }
 
         std::this_thread::sleep_for(std::chrono::milliseconds(checkIntervalMs));
@@ -343,7 +425,6 @@ bool KolosalServerClient::shutdownServer()
     HANDLE hSnapshot = CreateToolhelp32Snapshot(TH32CS_SNAPPROCESS, 0);
     if (hSnapshot == INVALID_HANDLE_VALUE)
     {
-        std::cout << "No Kolosal server is currently running." << std::endl;
         return true;
     }
 
@@ -353,7 +434,6 @@ bool KolosalServerClient::shutdownServer()
     if (!Process32FirstW(hSnapshot, &pe32))
     {
         CloseHandle(hSnapshot);
-        std::cout << "No Kolosal server is currently running." << std::endl;
         return true;
     }
 
@@ -373,48 +453,53 @@ bool KolosalServerClient::shutdownServer()
 
     if (!processFound)
     {
-        std::cout << "No Kolosal server is currently running." << std::endl;
         return true;
     }
 
-    // Process found, try graceful shutdown first (skip API check for now)
-    // Future: Add graceful shutdown API when server supports it
-    
+    LoadingAnimation loading("Shutting down server");
+    loading.start();
+
     // Terminate the process directly
     HANDLE hProcess = OpenProcess(PROCESS_TERMINATE, FALSE, serverPid);
     if (hProcess != NULL)
     {
         if (TerminateProcess(hProcess, 0))
         {
-            std::cout << "Kolosal server process terminated successfully." << std::endl;
+            loading.complete("Server shutdown successfully");
             CloseHandle(hProcess);
             return true;
         }
         else
         {
-            std::cerr << "Failed to terminate server process. Error code: " << GetLastError() << std::endl;
+            loading.stop();
+            std::cerr << "Error: Failed to terminate server process" << std::endl;
             CloseHandle(hProcess);
             return false;
         }
     }
     else
     {
-        std::cerr << "Failed to open server process for termination. Error code: " << GetLastError() << std::endl;
+        loading.stop();
+        std::cerr << "Error: Failed to access server process for termination" << std::endl;
         return false;
     }
 #else
-    std::cerr << "Server termination not implemented for this platform." << std::endl;
+    std::cerr << "Error: Server termination not supported on this platform" << std::endl;
     return false;
 #endif
 }
 
 bool KolosalServerClient::cancelDownload(const std::string &modelId)
 {
+    LoadingAnimation loading("Cancelling download");
+    loading.start();
+
     std::string response;
     std::string endpoint = "/downloads/" + modelId + "/cancel";
 
     if (!makePostRequest(endpoint, "{}", response))
     {
+        loading.stop();
         return false;
     }
 
@@ -422,22 +507,31 @@ bool KolosalServerClient::cancelDownload(const std::string &modelId)
     {
         json cancelJson = json::parse(response);
         bool success = cancelJson.value("success", false);
+        if (success) {
+            loading.complete("Download cancelled");
+        } else {
+            loading.stop();
+        }
         return success;
     }
-    catch (const std::exception &e)
+    catch (const std::exception &)
     {
-        std::cerr << "Error parsing cancel response: " << e.what() << std::endl;
+        loading.stop();
         return false;
     }
 }
 
 bool KolosalServerClient::cancelAllDownloads()
 {
+    LoadingAnimation loading("Cancelling all downloads");
+    loading.start();
+
     std::string response;
     std::string endpoint = "/downloads";
 
     if (!makePostRequest(endpoint, "{}", response))
     {
+        loading.stop();
         return false;
     }
 
@@ -445,11 +539,12 @@ bool KolosalServerClient::cancelAllDownloads()
     {
         json cancelJson = json::parse(response);
         int cancelledCount = cancelJson.value("cancelled_count", 0);
+        loading.complete("All downloads cancelled");
         return true;
     }
-    catch (const std::exception &e)
+    catch (const std::exception &)
     {
-        std::cerr << "Error parsing cancel all response: " << e.what() << std::endl;
+        loading.stop();
         return false;
     }
 }

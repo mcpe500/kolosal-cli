@@ -4,6 +4,7 @@
 #include <string>
 #include <memory>
 #include <functional>
+#include <vector>
 
 /**
  * @brief Client for communicating with Kolosal Server
@@ -56,6 +57,20 @@ public:
      */
     bool addEngine(const std::string& engineId, const std::string& modelUrl, 
                    const std::string& modelPath);
+    
+    /**
+     * @brief Get list of existing engines from the server
+     * @param engines Output: vector of engine IDs that exist on the server
+     * @return True if engines list was retrieved successfully, false otherwise
+     */
+    bool getEngines(std::vector<std::string>& engines);
+    
+    /**
+     * @brief Check if an engine with the given ID already exists on the server
+     * @param engineId Engine ID to check
+     * @return True if engine exists, false otherwise
+     */
+    bool engineExists(const std::string& engineId);
     
     /**
      * @brief Get download progress for a specific model

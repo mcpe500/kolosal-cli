@@ -78,7 +78,6 @@ bool UrlDataSource::read(char* buffer, size_t size) {
 
         CURLcode res = curl_easy_perform(curl);
         if (res != CURLE_OK && res != CURLE_WRITE_ERROR) {
-            std::cerr << "curl_easy_perform() failed: " << curl_easy_strerror(res) << std::endl;
             return false;
         }
 

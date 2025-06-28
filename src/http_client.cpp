@@ -20,7 +20,6 @@ size_t HttpClient::writeCallback(void* contents, size_t size, size_t nmemb, void
 bool HttpClient::get(const std::string& url, HttpResponse& response) {
     CURL* curl = curl_easy_init();
     if (!curl) {
-        std::cerr << "Failed to initialize curl" << std::endl;
         return false;
     }
     
@@ -41,7 +40,6 @@ bool HttpClient::get(const std::string& url, HttpResponse& response) {
     CURLcode res = curl_easy_perform(curl);
     
     if (res != CURLE_OK) {
-        std::cerr << "curl_easy_perform() failed: " << curl_easy_strerror(res) << std::endl;
         curl_easy_cleanup(curl);
         return false;
     }
@@ -53,10 +51,10 @@ bool HttpClient::get(const std::string& url, HttpResponse& response) {
     curl_easy_cleanup(curl);
     
     if (response_code != 200) {
-        std::cerr << "HTTP request failed with status code: " << response_code << std::endl;
         return false;
     }
-      return true;
+    
+    return true;
 }
 
 size_t HttpClient::writeStringCallback(void* contents, size_t size, size_t nmemb, void* userp) {
@@ -69,7 +67,6 @@ size_t HttpClient::writeStringCallback(void* contents, size_t size, size_t nmemb
 bool HttpClient::get(const std::string& url, std::string& response, const std::vector<std::string>& headers) {
     CURL* curl = curl_easy_init();
     if (!curl) {
-        std::cerr << "Failed to initialize curl" << std::endl;
         return false;
     }
     
@@ -104,7 +101,6 @@ bool HttpClient::get(const std::string& url, std::string& response, const std::v
     }
     
     if (res != CURLE_OK) {
-        std::cerr << "curl_easy_perform() failed: " << curl_easy_strerror(res) << std::endl;
         curl_easy_cleanup(curl);
         return false;
     }
@@ -117,7 +113,6 @@ bool HttpClient::get(const std::string& url, std::string& response, const std::v
     
     // Accept 200-299 status codes as successful
     if (response_code < 200 || response_code >= 300) {
-        std::cerr << "HTTP GET request failed with status code: " << response_code << std::endl;
         return false;
     }
     
@@ -127,7 +122,6 @@ bool HttpClient::get(const std::string& url, std::string& response, const std::v
 bool HttpClient::post(const std::string& url, const std::string& payload, std::string& response, const std::vector<std::string>& headers) {
     CURL* curl = curl_easy_init();
     if (!curl) {
-        std::cerr << "Failed to initialize curl" << std::endl;
         return false;
     }
     
@@ -163,7 +157,6 @@ bool HttpClient::post(const std::string& url, const std::string& payload, std::s
     }
     
     if (res != CURLE_OK) {
-        std::cerr << "curl_easy_perform() failed: " << curl_easy_strerror(res) << std::endl;
         curl_easy_cleanup(curl);
         return false;
     }
@@ -176,7 +169,6 @@ bool HttpClient::post(const std::string& url, const std::string& payload, std::s
     
     // Accept 200-299 status codes as successful
     if (response_code < 200 || response_code >= 300) {
-        std::cerr << "HTTP POST request failed with status code: " << response_code << std::endl;
         return false;
     }
     

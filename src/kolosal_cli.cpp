@@ -125,12 +125,7 @@ bool KolosalCLI::stopBackgroundServer()
 
 void KolosalCLI::showWelcome()
 {
-    std::cout << "Kolosal CLI - Browse and download GGUF models\n";
-    if (CacheManager::hasAnyCachedData())
-    {
-        std::cout << "Cached data available\n";
-    }
-    std::cout << std::endl;
+    // Welcome message removed for cleaner output
 }
 
 std::vector<std::string> KolosalCLI::generateSampleModels()
@@ -186,8 +181,6 @@ bool KolosalCLI::initializeServer()
         return true;
     }
 
-    std::cout << "Starting Kolosal server..." << std::endl;
-
     // Try to start the server
     if (!m_serverClient->startServer())
     {
@@ -196,14 +189,12 @@ bool KolosalCLI::initializeServer()
     }
 
     // Wait for server to become ready
-    std::cout << "Waiting for server to become ready..." << std::endl;
     if (!m_serverClient->waitForServerReady(30))
     {
         std::cerr << "Server failed to become ready within 30 seconds." << std::endl;
         return false;
     }
 
-    std::cout << "Server is ready!" << std::endl;
     return true;
 }
 
@@ -224,6 +215,14 @@ bool KolosalCLI::processModelDownload(const std::string &modelId, const ModelFil
     std::string engineId = modelName + ":" + quantType;
     std::cout << "\nDownloading: " << modelFile.filename << std::endl;
     std::cout << "From: " << modelId << std::endl;
+
+    // Check if engine already exists before attempting download
+    if (m_serverClient->engineExists(engineId))
+    {
+        std::cout << "\n✓ Engine '" << engineId << "' already exists on the server." << std::endl;
+        std::cout << "✓ Model is ready to use!" << std::endl;
+        return true;
+    }
 
     // Send engine creation request to server
     if (!m_serverClient->addEngine(engineId, downloadUrl, "./models/" + modelFile.filename))
@@ -504,6 +503,14 @@ bool KolosalCLI::handleDirectGGUFUrl(const std::string &url)
             engineId = engineId.substr(0, dotPos);
         }
 
+        // Check if engine already exists before attempting download
+        if (m_serverClient->engineExists(engineId))
+        {
+            std::cout << "\n✓ Engine '" << engineId << "' already exists on the server." << std::endl;
+            std::cout << "✓ Model is ready to use!" << std::endl;
+            return true;
+        }
+
         // Process download through server
         if (!m_serverClient->addEngine(engineId, url, "./models/" + filename))
         {
@@ -682,7 +689,6 @@ bool KolosalCLI::ensureServerConnection()
     }
 
     // Wait for server to become ready with a shorter timeout for downloads
-    std::cout << "Waiting for server to become ready..." << std::endl;
     if (!m_serverClient->waitForServerReady(15))
     {
         std::cerr << "Server failed to become ready within 15 seconds." << std::endl;
