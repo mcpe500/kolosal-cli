@@ -130,6 +130,15 @@ private:
     void cancelActiveDownloads();
     
     /**
+     * @brief Update config.yaml to add a new model entry
+     * @param engineId The engine ID to add
+     * @param modelPath The local path to the model file
+     * @param loadImmediately Whether to load the model immediately on server start
+     * @return True if config was updated successfully, false otherwise
+     */
+    bool updateConfigWithModel(const std::string& engineId, const std::string& modelPath, bool loadImmediately = false);
+    
+    /**
      * @brief Ensure console encoding is set to UTF-8
      */
     void ensureConsoleEncoding();

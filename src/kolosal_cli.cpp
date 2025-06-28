@@ -17,6 +17,9 @@
 #include <signal.h>
 #include <csignal>
 #include <thread>
+#include <fstream>
+#include <filesystem>
+#include <yaml-cpp/yaml.h>
 
 // Static member initialization
 KolosalCLI *KolosalCLI::s_instance = nullptr;
@@ -125,7 +128,17 @@ bool KolosalCLI::stopBackgroundServer()
 
 void KolosalCLI::showWelcome()
 {
-    // Welcome message removed for cleaner output
+    std::cout << R"(
+       ██     ██   ██   ███████   ██         ███████    ████████     ██     ██
+     ██░     ░██  ██   ██░░░░░██ ░██        ██░░░░░██  ██░░░░░░     ████   ░██
+   ██░       ░██ ██   ██     ░░██░██       ██     ░░██░██          ██░░██  ░██
+ ██░         ░████   ░██      ░██░██      ░██      ░██░█████████  ██  ░░██ ░██
+░░ ██        ░██░██  ░██      ░██░██      ░██      ░██░░░░░░░░██ ██████████░██
+  ░░ ██      ░██░░██ ░░██     ██ ░██      ░░██     ██        ░██░██░░░░░░██░██
+    ░░ ██    ░██ ░░██ ░░███████  ░████████ ░░███████   ████████ ░██     ░██░████████
+      ░░     ░░   ░░   ░░░░░░░   ░░░░░░░░   ░░░░░░░   ░░░░░░░░  ░░      ░░ ░░░░░░░░
+
+)" << std::endl;
 }
 
 std::vector<std::string> KolosalCLI::generateSampleModels()
@@ -213,13 +226,12 @@ bool KolosalCLI::processModelDownload(const std::string &modelId, const ModelFil
     std::string quantType = modelFile.quant.type;                                                          // Use full quantization type
 
     std::string engineId = modelName + ":" + quantType;
-    std::cout << "\nDownloading: " << modelFile.filename << std::endl;
-    std::cout << "From: " << modelId << std::endl;
+    std::cout << "\nProcessing: " << modelFile.filename << std::endl;
 
     // Check if engine already exists before attempting download
     if (m_serverClient->engineExists(engineId))
     {
-        std::cout << "\n✓ Engine '" << engineId << "' already exists on the server." << std::endl;
+        std::cout << "✓ Engine '" << engineId << "' already exists on the server." << std::endl;
         std::cout << "✓ Model is ready to use!" << std::endl;
         return true;
     }
@@ -242,40 +254,47 @@ bool KolosalCLI::processModelDownload(const std::string &modelId, const ModelFil
             // Progress callback - update display
             ensureConsoleEncoding(); // Ensure proper encoding before each update
 
-            std::cout << "\r";
-            // Create progress bar
-            int barWidth = 50;
-            int pos = static_cast<int>(barWidth * percentage / 100.0);
-
-            std::cout << "|";
-            for (int i = 0; i < barWidth; ++i)
+            // Handle special case where no download was needed
+            if (status == "not_found")
             {
-                if (i < pos)
-                    std::cout << "█";
-                else
-                    std::cout << "-";
-            }
-            std::cout << "| " << std::fixed << std::setprecision(1) << percentage << "% ";
-            // Show file sizes if available
-            if (totalBytes > 0)
-            {
-                std::cout << "(" << formatFileSize(downloadedBytes) << "/" << formatFileSize(totalBytes) << ") ";
+                std::cout << "✓ Model file already exists locally. Registering engine..." << std::endl;
+                return;
             }
 
-            if (status == "creating_engine")
+            // Only show progress for actual downloads
+            if (status == "downloading" && totalBytes > 0)
             {
-                std::cout << "(loading)";
+                std::cout << "\r";
+                // Create progress bar
+                int barWidth = 40;
+                int pos = static_cast<int>(barWidth * percentage / 100.0);
+
+                std::cout << "[";
+                for (int i = 0; i < barWidth; ++i)
+                {
+                    if (i < pos)
+                        std::cout << "█";
+                    else
+                        std::cout << "-";
+                }
+                std::cout << "] " << std::fixed << std::setprecision(1) << percentage << "%";
+                
+                // Show file sizes
+                std::cout << " (" << formatFileSize(downloadedBytes) << "/" << formatFileSize(totalBytes) << ")";
+                std::cout.flush();
+            }
+            else if (status == "creating_engine")
+            {
+                std::cout << "\r✓ Download complete. Registering engine...                                      " << std::endl;
             }
             else if (status == "engine_created")
             {
-                std::cout << "(registered)";
+                std::cout << "✓ Engine registered successfully." << std::endl;
             }
             else if (status == "completed")
             {
-                std::cout << "(complete)";
+                std::cout << "✓ Process completed." << std::endl;
             }
-
-            std::cout.flush();
         },
         1000 // Check every 1 second
     );
@@ -290,7 +309,11 @@ bool KolosalCLI::processModelDownload(const std::string &modelId, const ModelFil
     std::cout << std::endl; // New line after progress bar
     if (downloadSuccess)
     {
-        std::cout << "✓ Download completed. Model ready for inference." << std::endl;
+        std::cout << "✓ Model ready for inference." << std::endl;
+        
+        // Update config.yaml to persist the model across server restarts
+        std::string localPath = "./models/" + modelFile.filename;
+        updateConfigWithModel(engineId, localPath, false); // load_immediately = false for lazy loading
     }
     else
     {
@@ -524,6 +547,10 @@ bool KolosalCLI::handleDirectGGUFUrl(const std::string &url)
         std::cout << "Engine ID: " << engineId << std::endl;
         std::cout << "Downloading to: ./models/" << filename << std::endl;
         std::cout << "\nDownload initiated. Check server logs for progress." << std::endl;
+        
+        // Update config.yaml to persist the model across server restarts
+        std::string localPath = "./models/" + filename;
+        updateConfigWithModel(engineId, localPath, false); // load_immediately = false for lazy loading
 
         return true;
     }
@@ -696,4 +723,92 @@ bool KolosalCLI::ensureServerConnection()
     }
 
     return true;
+}
+
+bool KolosalCLI::updateConfigWithModel(const std::string& engineId, const std::string& modelPath, bool loadImmediately)
+{
+    try
+    {
+        std::string configPath = "config.yaml";
+        YAML::Node config;
+        
+        // Try to load existing config
+        if (std::filesystem::exists(configPath))
+        {
+            config = YAML::LoadFile(configPath);
+        }
+        else
+        {
+            // Create a minimal config structure if file doesn't exist
+            config["models"] = YAML::Node(YAML::NodeType::Sequence);
+        }
+        
+        // Ensure models section exists
+        if (!config["models"])
+        {
+            config["models"] = YAML::Node(YAML::NodeType::Sequence);
+        }
+        
+        // Check if model with this ID already exists
+        bool modelExists = false;
+        for (const auto& model : config["models"])
+        {
+            if (model["id"] && model["id"].as<std::string>() == engineId)
+            {
+                modelExists = true;
+                break;
+            }
+        }
+        
+        // Only add if model doesn't already exist in config
+        if (!modelExists)
+        {
+            YAML::Node newModel;
+            newModel["id"] = engineId;
+            newModel["path"] = modelPath;
+            newModel["load_immediately"] = loadImmediately;
+            newModel["main_gpu_id"] = 0;
+            newModel["preload_context"] = false;
+            
+            // Add basic load_params
+            YAML::Node loadParams;
+            loadParams["n_ctx"] = 4096;
+            loadParams["n_keep"] = 2048;
+            loadParams["use_mmap"] = true;
+            loadParams["use_mlock"] = false;
+            loadParams["n_parallel"] = 1;
+            loadParams["cont_batching"] = true;
+            loadParams["warmup"] = false;
+            loadParams["n_gpu_layers"] = 50;
+            loadParams["n_batch"] = 2048;
+            loadParams["n_ubatch"] = 512;
+            newModel["load_params"] = loadParams;
+            
+            config["models"].push_back(newModel);
+            
+            // Write updated config back to file
+            std::ofstream configFile(configPath);
+            if (!configFile.is_open())
+            {
+                std::cerr << "Failed to open config file for writing: " << configPath << std::endl;
+                return false;
+            }
+            
+            configFile << config;
+            configFile.close();
+            
+            std::cout << "✓ Added model '" << engineId << "' to config.yaml" << std::endl;
+            return true;
+        }
+        else
+        {
+            // Model already exists in config - no need to announce this
+            return true;
+        }
+    }
+    catch (const std::exception& e)
+    {
+        std::cerr << "Failed to update config.yaml: " << e.what() << std::endl;
+        return false;
+    }
 }

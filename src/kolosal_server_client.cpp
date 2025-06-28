@@ -246,9 +246,7 @@ bool KolosalServerClient::addEngine(const std::string &engineId, const std::stri
             return true;
         }
 
-        LoadingAnimation loading("Creating engine");
-        loading.start();
-
+        // No loading animation for cleaner output - just show final result
         json payload;
         payload["engine_id"] = engineId;
         payload["model_path"] = modelUrl; // For download, we pass URL as model_path
@@ -260,14 +258,11 @@ bool KolosalServerClient::addEngine(const std::string &engineId, const std::stri
         std::string response;
         if (!makePostRequest("/engines", payload.dump(), response))
         {
-            loading.stop();
             return false;
         }
         
         std::string pathToStore = modelPath.empty() ? modelUrl : modelPath;
         updateConfigWithNewModel(engineId, pathToStore);
-        
-        loading.complete("Engine created successfully");
         return true;
     }
     catch (const std::exception &)
@@ -284,6 +279,30 @@ bool KolosalServerClient::getDownloadProgress(const std::string &modelId, long l
 
     if (!makeGetRequest(endpoint, response))
     {
+        // Check if response contains error indicating download not found
+        if (!response.empty())
+        {
+            try
+            {
+                json errorJson = json::parse(response);
+                if (errorJson.contains("error") && errorJson["error"].contains("code"))
+                {
+                    std::string errorCode = errorJson["error"]["code"];
+                    if (errorCode == "download_not_found")
+                    {
+                        status = "not_found";
+                        downloadedBytes = 0;
+                        totalBytes = 0;
+                        percentage = 0.0;
+                        return true; // Return true to indicate we successfully determined there's no download
+                    }
+                }
+            }
+            catch (const std::exception &)
+            {
+                // If we can't parse the error response, fall through to return false
+            }
+        }
         return false;
     }
 
@@ -349,6 +368,11 @@ bool KolosalServerClient::monitorDownloadProgress(const std::string &modelId,
         else if (status == "failed" || status == "cancelled" || status == "engine_creation_failed")
         {
             return false;
+        }
+        // No download found - this happens when a model file already exists and no download was needed
+        else if (status == "not_found")
+        {
+            return true; // This is actually a success case - no download was needed
         }
 
         std::this_thread::sleep_for(std::chrono::milliseconds(checkIntervalMs));

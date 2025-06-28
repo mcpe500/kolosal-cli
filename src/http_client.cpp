@@ -105,13 +105,13 @@ bool HttpClient::get(const std::string& url, std::string& response, const std::v
         return false;
     }
     
-    // Check HTTP status code
+    // Check HTTP status code but don't clear response for error codes
     long response_code;
     curl_easy_getinfo(curl, CURLINFO_RESPONSE_CODE, &response_code);
     
     curl_easy_cleanup(curl);
     
-    // Accept 200-299 status codes as successful
+    // Accept 200-299 status codes as successful, but preserve response for error analysis
     if (response_code < 200 || response_code >= 300) {
         return false;
     }

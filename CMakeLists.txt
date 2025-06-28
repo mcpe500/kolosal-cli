@@ -21,6 +21,7 @@ set(NLOHMANN_JSON_DIR ${CMAKE_CURRENT_SOURCE_DIR}/external)
 include_directories(${CURL_DIR}/include)
 include_directories(${NLOHMANN_JSON_DIR})
 include_directories(${CMAKE_CURRENT_SOURCE_DIR}/include)
+include_directories(${CMAKE_CURRENT_SOURCE_DIR}/kolosal-server/external/yaml-cpp/include)
 
 # Find curl library
 find_library(CURL_LIBRARY
@@ -51,6 +52,9 @@ add_dependencies(kolosal-cli kolosal_server_exe kolosal_server)
 
 # Link libraries
 target_link_libraries(kolosal-cli ${CURL_LIBRARY})
+
+# Link yaml-cpp library from kolosal-server
+target_link_libraries(kolosal-cli yaml-cpp)
 
 # On Windows, we might need additional libraries
 if(WIN32)

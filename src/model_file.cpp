@@ -519,7 +519,11 @@ bool ModelFileUtils::waitForAsyncMemoryCalculations(std::vector<ModelFile>& mode
         return true; // No async calculations in progress
     }
     
-    std::cout << "Calculating memory usage for " << totalFiles << " file(s)";
+    // Only show progress for multiple files and suppress detailed progress during other operations
+    bool showProgress = totalFiles > 1;
+    if (showProgress) {
+        std::cout << "Calculating memory usage..." << std::endl;
+    }
     
     while (true)
     {
@@ -536,16 +540,16 @@ bool ModelFileUtils::waitForAsyncMemoryCalculations(std::vector<ModelFile>& mode
             }
         }
         
-        // Show progress
+        // Show progress only for multiple files and avoid frequent updates
         if (completedFiles < totalFiles)
         {
-            std::cout << "\rCalculating memory usage for " << totalFiles << " file(s) [" 
-                      << completedFiles << "/" << totalFiles << "]";
-            std::cout.flush();
+            // No progress output to avoid overlapping with other operations
         }
         else
         {
-            std::cout << "\rMemory usage calculated for all " << totalFiles << " file(s) ✓" << std::endl;
+            if (showProgress) {
+                std::cout << "✓ Memory usage calculated" << std::endl;
+            }
             return true;
         }
         
@@ -553,7 +557,9 @@ bool ModelFileUtils::waitForAsyncMemoryCalculations(std::vector<ModelFile>& mode
         auto currentTime = std::chrono::steady_clock::now();
         if (currentTime - startTime >= timeoutDuration)
         {
-            std::cout << "\rMemory calculation timeout (showing partial results)" << std::endl;
+            if (showProgress) {
+                std::cout << "⚠ Memory calculation timeout (showing partial results)" << std::endl;
+            }
             return false;
         }
         
@@ -663,9 +669,8 @@ void ModelFileUtils::cacheModelFilesWithMemory(const std::string& modelId, std::
     // Wait for async calculations to complete before caching
     waitForAsyncMemoryCalculations(modelFiles, 30);
     
-    // Cache the results with completed memory information
+    // Cache the results with completed memory information (silently)
     if (!modelFiles.empty()) {
         CacheManager::cacheModelFiles(modelId, modelFiles);
-        std::cout << "✓ Cached " << modelFiles.size() << " model files with memory information" << std::endl;
     }
 }
