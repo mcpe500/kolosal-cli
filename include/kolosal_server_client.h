@@ -107,6 +107,25 @@ public:
      */
     bool cancelAllDownloads();
 
+    /**
+     * @brief Send a chat completion request to the server
+     * @param engineId Engine ID to use for chat completion
+     * @param message User message to send
+     * @param response Output: assistant's response
+     * @return True if chat completion was successful, false otherwise
+     */
+    bool chatCompletion(const std::string& engineId, const std::string& message, std::string& response);
+
+    /**
+     * @brief Send a streaming chat completion request to the server
+     * @param engineId Engine ID to use for chat completion
+     * @param message User message to send
+     * @param responseCallback Callback function called for each token/chunk received
+     * @return True if chat completion was successful, false otherwise
+     */
+    bool streamingChatCompletion(const std::string& engineId, const std::string& message, 
+                               std::function<void(const std::string&)> responseCallback);
+
 private:
     std::string m_baseUrl;
     std::string m_apiKey;

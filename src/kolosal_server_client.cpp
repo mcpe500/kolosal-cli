@@ -250,10 +250,23 @@ bool KolosalServerClient::addEngine(const std::string &engineId, const std::stri
         json payload;
         payload["engine_id"] = engineId;
         payload["model_path"] = modelUrl; // For download, we pass URL as model_path
-        payload["n_ctx"] = 4096;
-        payload["n_gpu_layers"] = 50;
-        payload["main_gpu_id"] = 0;
         payload["load_immediately"] = false;
+        payload["main_gpu_id"] = 0;
+        
+        // Set comprehensive loading parameters
+        json loadParams;
+        loadParams["n_ctx"] = 4096;
+        loadParams["n_keep"] = 2048;
+        loadParams["use_mmap"] = true;
+        loadParams["use_mlock"] = true;
+        loadParams["n_parallel"] = 4;
+        loadParams["cont_batching"] = true;
+        loadParams["warmup"] = false;
+        loadParams["n_gpu_layers"] = 50;
+        loadParams["n_batch"] = 2048;
+        loadParams["n_ubatch"] = 512;
+        
+        payload["loading_parameters"] = loadParams;
 
         std::string response;
         if (!makePostRequest("/engines", payload.dump(), response))
@@ -608,13 +621,13 @@ bool KolosalServerClient::updateConfigWithNewModel(const std::string& engineId, 
                                    "    path: \"" + modelPath + "\"\n"
                                    "    load_immediately: false\n"
                                    "    main_gpu_id: 0\n"
-                                   "    preload_context: false\n"
+                                   "    preload_context: true\n"
                                    "    load_params:\n"
                                    "      n_ctx: 4096\n"
                                    "      n_keep: 2048\n"
                                    "      use_mmap: true\n"
-                                   "      use_mlock: false\n"
-                                   "      n_parallel: 1\n"
+                                   "      use_mlock: true\n"
+                                   "      n_parallel: 4\n"
                                    "      cont_batching: true\n"
                                    "      warmup: false\n"
                                    "      n_gpu_layers: 50\n"
@@ -666,6 +679,108 @@ bool KolosalServerClient::updateConfigWithNewModel(const std::string& engineId, 
         
         return true;
         
+    } catch (const std::exception&) {
+        return false;
+    }
+}
+
+bool KolosalServerClient::chatCompletion(const std::string& engineId, const std::string& message, std::string& response)
+{
+    try {
+        json requestBody = {
+            {"model", engineId},
+            {"messages", json::array({
+                {{"role", "user"}, {"content", message}}
+            })},
+            {"stream", false},
+            {"max_tokens", 2048},
+            {"temperature", 0.7}
+        };
+
+        std::string jsonResponse;
+        if (!makePostRequest("/v1/chat/completions", requestBody.dump(), jsonResponse)) {
+            return false;
+        }
+
+        // Parse the response
+        json responseJson = json::parse(jsonResponse);
+        if (responseJson.contains("choices") && !responseJson["choices"].empty()) {
+            if (responseJson["choices"][0].contains("message") && 
+                responseJson["choices"][0]["message"].contains("content")) {
+                response = responseJson["choices"][0]["message"]["content"];
+                return true;
+            }
+        }
+
+        return false;
+    } catch (const std::exception&) {
+        return false;
+    }
+}
+
+bool KolosalServerClient::streamingChatCompletion(const std::string& engineId, const std::string& message, 
+                                                std::function<void(const std::string&)> responseCallback)
+{
+    try {
+        json requestBody = {
+            {"model", engineId},
+            {"messages", json::array({
+                {{"role", "user"}, {"content", message}}
+            })},
+            {"stream", true},
+            {"max_tokens", 2048},
+            {"temperature", 0.7}
+        };
+
+        // For streaming, we need to make a custom HTTP request to handle Server-Sent Events
+        std::string url = m_baseUrl + "/v1/chat/completions";
+        std::string headers = "Content-Type: application/json\r\n";
+        if (!m_apiKey.empty()) {
+            headers += "Authorization: Bearer " + m_apiKey + "\r\n";
+        }
+
+        // Use a basic streaming implementation
+        std::string buffer;
+        bool success = HttpClient::getInstance().makeStreamingRequest(url, requestBody.dump(), headers, 
+            [&](const std::string& chunk) {
+                buffer += chunk;
+                
+                // Simple SSE parsing - look for data: lines
+                size_t pos = 0;
+                while ((pos = buffer.find("data: ", pos)) != std::string::npos) {
+                    size_t lineEnd = buffer.find("\n", pos);
+                    if (lineEnd == std::string::npos) {
+                        break; // Incomplete line, wait for more data
+                    }
+                    
+                    std::string dataLine = buffer.substr(pos + 6, lineEnd - pos - 6);
+                    if (dataLine.find("[DONE]") == std::string::npos && !dataLine.empty()) {
+                        try {
+                            json chunkJson = json::parse(dataLine);
+                            
+                            if (chunkJson.contains("choices") && !chunkJson["choices"].empty()) {
+                                if (chunkJson["choices"][0].contains("delta") && 
+                                    chunkJson["choices"][0]["delta"].contains("content")) {
+                                    std::string content = chunkJson["choices"][0]["delta"]["content"];
+                                    if (!content.empty()) {
+                                        responseCallback(content);
+                                    }
+                                }
+                            }
+                        } catch (const std::exception&) {
+                            // Ignore parsing errors for individual chunks
+                        }
+                    }
+                    pos = lineEnd + 1;
+                }
+                
+                // Keep only the incomplete part in buffer
+                if (pos > 0) {
+                    buffer = buffer.substr(pos);
+                }
+            });
+
+        return success;
     } catch (const std::exception&) {
         return false;
     }

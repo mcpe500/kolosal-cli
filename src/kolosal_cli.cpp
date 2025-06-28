@@ -233,6 +233,10 @@ bool KolosalCLI::processModelDownload(const std::string &modelId, const ModelFil
     {
         std::cout << "✓ Engine '" << engineId << "' already exists on the server." << std::endl;
         std::cout << "✓ Model is ready to use!" << std::endl;
+        
+        // Start chat interface directly
+        std::cout << "\nStarting chat interface..." << std::endl;
+        startChatInterface(engineId);
         return true;
     }
 
@@ -314,6 +318,11 @@ bool KolosalCLI::processModelDownload(const std::string &modelId, const ModelFil
         // Update config.yaml to persist the model across server restarts
         std::string localPath = "./models/" + modelFile.filename;
         updateConfigWithModel(engineId, localPath, false); // load_immediately = false for lazy loading
+        
+        // Start chat interface
+        std::cout << "\n🎉 Model downloaded and registered successfully!" << std::endl;
+        std::cout << "Starting chat interface..." << std::endl;
+        startChatInterface(engineId);
     }
     else
     {
@@ -768,15 +777,15 @@ bool KolosalCLI::updateConfigWithModel(const std::string& engineId, const std::s
             newModel["path"] = modelPath;
             newModel["load_immediately"] = loadImmediately;
             newModel["main_gpu_id"] = 0;
-            newModel["preload_context"] = false;
+            newModel["preload_context"] = true;
             
-            // Add basic load_params
+            // Add load_params with specified configuration
             YAML::Node loadParams;
             loadParams["n_ctx"] = 4096;
             loadParams["n_keep"] = 2048;
             loadParams["use_mmap"] = true;
-            loadParams["use_mlock"] = false;
-            loadParams["n_parallel"] = 1;
+            loadParams["use_mlock"] = true;
+            loadParams["n_parallel"] = 4;
             loadParams["cont_batching"] = true;
             loadParams["warmup"] = false;
             loadParams["n_gpu_layers"] = 50;
@@ -806,9 +815,120 @@ bool KolosalCLI::updateConfigWithModel(const std::string& engineId, const std::s
             return true;
         }
     }
-    catch (const std::exception& e)
+    catch (const std::exception &e)
     {
-        std::cerr << "Failed to update config.yaml: " << e.what() << std::endl;
+        std::cerr << "Error updating config: " << e.what() << std::endl;
         return false;
     }
+}
+
+bool KolosalCLI::startChatInterface(const std::string& engineId)
+{
+    std::cout << "\n" << std::string(60, '=') << std::endl;
+    std::cout << "🤖 Starting chat with model: " << engineId << std::endl;
+    std::cout << "Type '/exit' or press Ctrl+C to quit" << std::endl;
+    std::cout << std::string(60, '=') << std::endl;
+
+    // Set up signal handling for graceful exit
+    bool shouldExit = false;
+    
+#ifdef _WIN32
+    // Windows-specific console control handler
+    auto consoleHandler = [](DWORD dwCtrlType) -> BOOL {
+        if (dwCtrlType == CTRL_C_EVENT || dwCtrlType == CTRL_BREAK_EVENT) {
+            std::cout << "\n\n👋 Chat session ended. Goodbye!" << std::endl;
+            ExitProcess(0);
+            return TRUE;
+        }
+        return FALSE;
+    };
+    
+    SetConsoleCtrlHandler(consoleHandler, TRUE);
+#else
+    // Unix-style signal handling
+    signal(SIGINT, [](int) {
+        std::cout << "\n\n👋 Chat session ended. Goodbye!" << std::endl;
+        exit(0);
+    });
+#endif
+
+    std::vector<std::pair<std::string, std::string>> chatHistory;
+
+    while (!shouldExit)
+    {
+        std::cout << "\nuser\n> ";
+        std::string userInput;
+        
+        // Get user input
+        if (!std::getline(std::cin, userInput))
+        {
+            // Handle EOF (Ctrl+C or stream closed)
+            break;
+        }
+
+        // Trim whitespace
+        userInput.erase(0, userInput.find_first_not_of(" \t\n\r\f\v"));
+        userInput.erase(userInput.find_last_not_of(" \t\n\r\f\v") + 1);
+
+        // Check for exit commands
+        if (userInput == "/exit" || userInput == "exit" || userInput == "quit" || userInput == "/quit")
+        {
+            shouldExit = true;
+            break;
+        }
+
+        // Skip empty messages
+        if (userInput.empty())
+        {
+            continue;
+        }
+
+        // Add user message to history
+        chatHistory.push_back({"user", userInput});
+
+        std::cout << "assistant\n> ";
+        std::cout.flush();
+
+        // Use streaming chat completion for a more interactive experience
+        std::string fullResponse;
+        bool success = m_serverClient->streamingChatCompletion(engineId, userInput, 
+            [&](const std::string& chunk) {
+                std::cout << chunk;
+                std::cout.flush();
+                fullResponse += chunk;
+            });
+
+        if (!success)
+        {
+            // Fallback to non-streaming if streaming fails
+            std::string response;
+            if (m_serverClient->chatCompletion(engineId, userInput, response))
+            {
+                std::cout << response;
+                fullResponse = response;
+                success = true;
+            }
+            else
+            {
+                std::cout << "❌ Error: Failed to get response from the model. Please try again.";
+                continue;
+            }
+        }
+
+        // Add assistant response to history
+        if (!fullResponse.empty())
+        {
+            chatHistory.push_back({"assistant", fullResponse});
+        }
+
+        std::cout << std::endl;
+    }
+
+#ifdef _WIN32
+    // Restore default console control handler
+    SetConsoleCtrlHandler(nullptr, FALSE);
+#endif
+
+    std::cout << "\n👋 Chat session ended. Goodbye!" << std::endl;
+    return true;
 }

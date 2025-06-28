@@ -3,6 +3,8 @@
 
 #include <string>
 #include <vector>
+#include <functional>
+#include <functional>
 
 /**
  * @brief Structure to hold HTTP response data
@@ -51,6 +53,23 @@ public:
      * @return true if the request was successful, false otherwise
      */
     bool post(const std::string& url, const std::string& payload, std::string& response, const std::vector<std::string>& headers = {});
+
+    /**
+     * @brief Get singleton instance of HttpClient
+     * @return Reference to the singleton instance
+     */
+    static HttpClient& getInstance();
+
+    /**
+     * @brief Make a streaming POST request with a callback for each chunk
+     * @param url The URL to request
+     * @param payload JSON payload to send
+     * @param headers Custom headers string (format: "Header: Value\r\n")
+     * @param chunkCallback Callback function called for each chunk received
+     * @return true if the request was successful, false otherwise
+     */
+    bool makeStreamingRequest(const std::string& url, const std::string& payload, 
+                            const std::string& headers, std::function<void(const std::string&)> chunkCallback);
 
 private:
     /**

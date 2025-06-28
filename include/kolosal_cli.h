@@ -139,6 +139,13 @@ private:
     bool updateConfigWithModel(const std::string& engineId, const std::string& modelPath, bool loadImmediately = false);
     
     /**
+     * @brief Start an interactive chat session with the given model
+     * @param engineId The engine ID to use for chat
+     * @return True if chat session completed successfully, false if there was an error
+     */
+    bool startChatInterface(const std::string& engineId);
+    
+    /**
      * @brief Ensure console encoding is set to UTF-8
      */
     void ensureConsoleEncoding();
