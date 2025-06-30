@@ -91,6 +91,27 @@ public:
      * @param history Reference to chat history
      */
     void setChatHistory(std::vector<std::pair<std::string, std::string>>* history);
+    
+    /**
+     * @brief Check if input is a partial command (starts with "/" but incomplete)
+     * @param input The user input
+     * @return True if it's a partial command, false otherwise
+     */
+    bool isPartialCommand(const std::string& input) const;
+    
+    /**
+     * @brief Get command suggestions based on partial input
+     * @param partialInput Partial command input starting with "/"
+     * @return Vector of matching command names (without the "/")
+     */
+    std::vector<std::string> getCommandSuggestions(const std::string& partialInput) const;
+    
+    /**
+     * @brief Get formatted command suggestions for display
+     * @param partialInput Partial command input starting with "/"
+     * @return Vector of formatted suggestion strings with descriptions
+     */
+    std::vector<std::string> getFormattedCommandSuggestions(const std::string& partialInput) const;
 
 private:
     std::map<std::string, CommandInfo> m_commands;

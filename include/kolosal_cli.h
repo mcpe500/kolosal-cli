@@ -148,6 +148,59 @@ private:
     bool startChatInterface(const std::string& engineId);
     
     /**
+     * @brief Get user input with real-time command autocomplete
+     * @param prompt The prompt to display
+     * @return The complete user input string
+     */
+    std::string getInputWithRealTimeAutocomplete(const std::string& prompt);
+    
+    /**
+     * @brief Update real-time command suggestions display
+     * @param input Current input string
+     * @param showingSuggestions Reference to flag tracking suggestion display state
+     * @param suggestionStartRow Reference to row where suggestions start
+     * @param prompt The input prompt
+     */
+    void updateRealTimeSuggestions(const std::string& input, bool& showingSuggestions, int& suggestionStartRow, const std::string& prompt);
+    
+    /**
+     * @brief Clear command suggestions from display
+     * @param showingSuggestions Reference to flag tracking suggestion display state
+     * @param suggestionStartRow Row where suggestions start
+     * @param prompt The input prompt
+     * @param input Current input string
+     */
+    void clearSuggestions(bool& showingSuggestions, int suggestionStartRow, const std::string& prompt, const std::string& input);
+    
+    /**
+     * @brief Clear current input line for rewriting
+     * @param input Current input string to clear
+     * @param showingSuggestions Reference to flag tracking suggestion display state
+     * @param suggestionStartRow Row where suggestions start
+     * @param prompt The input prompt
+     */
+    void clearCurrentInput(const std::string& input, bool& showingSuggestions, int suggestionStartRow, const std::string& prompt);
+    
+    /**
+     * @brief Force clear any lingering command suggestions from console
+     */
+    void forceClearSuggestions();
+    
+    /**
+     * @brief Display hint text in the input area
+     * @param hintText The hint text to display
+     * @param showingHint Reference to bool tracking hint visibility
+     */
+    void displayHintText(const std::string& hintText, bool& showingHint);
+    
+    /**
+     * @brief Clear hint text from the input area
+     * @param hintText The hint text that was displayed
+     * @param showingHint Reference to bool tracking hint visibility
+     */
+    void clearHintText(bool& showingHint);
+    
+    /**
      * @brief Ensure console encoding is set to UTF-8
      */
     void ensureConsoleEncoding();

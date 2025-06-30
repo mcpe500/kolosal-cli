@@ -383,3 +383,49 @@ CommandResult CommandManager::handleReset(const std::vector<std::string>& args) 
     }
     return CommandResult(false, "Chat history not available.");
 }
+
+bool CommandManager::isPartialCommand(const std::string& input) const {
+    return !input.empty() && input[0] == '/' && input.find(' ') == std::string::npos;
+}
+
+std::vector<std::string> CommandManager::getCommandSuggestions(const std::string& partialInput) const {
+    std::vector<std::string> suggestions;
+    
+    if (partialInput.empty() || partialInput[0] != '/') {
+        return suggestions;
+    }
+    
+    // Get the command part without the '/'
+    std::string prefix = partialInput.substr(1);
+    
+    // Find all commands that start with the prefix
+    for (const auto& [commandName, commandInfo] : m_commands) {
+        if (commandName.substr(0, prefix.length()) == prefix) {
+            suggestions.push_back(commandName);
+        }
+    }
+    
+    // Sort suggestions alphabetically
+    std::sort(suggestions.begin(), suggestions.end());
+    
+    return suggestions;
+}
+
+std::vector<std::string> CommandManager::getFormattedCommandSuggestions(const std::string& partialInput) const {
+    std::vector<std::string> formatted;
+    auto suggestions = getCommandSuggestions(partialInput);
+    
+    for (const std::string& commandName : suggestions) {
+        auto it = m_commands.find(commandName);
+        if (it != m_commands.end()) {
+            std::string formatted_line = "/" + commandName;
+            if (formatted_line.length() < 15) {
+                formatted_line += std::string(15 - formatted_line.length(), ' ');
+            }
+            formatted_line += " - " + it->second.description;
+            formatted.push_back(formatted_line);
+        }
+    }
+    
+    return formatted;
+}

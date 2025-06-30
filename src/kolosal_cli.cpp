@@ -856,7 +856,6 @@ bool KolosalCLI::startChatInterface(const std::string& engineId)
     // Windows-specific console control handler
     auto consoleHandler = [](DWORD dwCtrlType) -> BOOL {
         if (dwCtrlType == CTRL_C_EVENT || dwCtrlType == CTRL_BREAK_EVENT) {
-            std::cout << "\n\n👋 Chat session ended. Goodbye!" << std::endl;
             ExitProcess(0);
             return TRUE;
         }
@@ -867,7 +866,6 @@ bool KolosalCLI::startChatInterface(const std::string& engineId)
 #else
     // Unix-style signal handling
     signal(SIGINT, [](int) {
-        std::cout << "\n\n👋 Chat session ended. Goodbye!" << std::endl;
         exit(0);
     });
 #endif
@@ -879,11 +877,12 @@ bool KolosalCLI::startChatInterface(const std::string& engineId)
 
     while (!shouldExit)
     {
-        std::cout << "\nuser\n> ";
-        std::string userInput;
+        // Get user input with real-time autocomplete support
+        std::cout << "\n";
+        std::string userInput = getInputWithRealTimeAutocomplete("");
         
-        // Get user input
-        if (!std::getline(std::cin, userInput))
+        // Check if input was cancelled (empty string returned)
+        if (userInput.empty() && std::cin.eof())
         {
             // Handle EOF (Ctrl+C or stream closed)
             break;
@@ -905,7 +904,7 @@ bool KolosalCLI::startChatInterface(const std::string& engineId)
             CommandResult result = m_commandManager->executeCommand(userInput);
             
             if (!result.message.empty()) {
-                std::cout << "system\n> " << result.message << std::endl;
+                std::cout << "\n\033[33m> " << result.message << "\033[0m\n" << std::endl;
             }
             
             if (result.shouldExit) {
@@ -931,7 +930,10 @@ bool KolosalCLI::startChatInterface(const std::string& engineId)
         // Add user message to history
         chatHistory.push_back({"user", userInput});
 
-        std::cout << "assistant\n> ";
+        // Force clear any lingering suggestions before showing AI response
+        forceClearSuggestions();
+
+        std::cout << "\n\033[32m> \033[32m";
         std::cout.flush();
 
         // Use streaming chat completion for a more interactive experience
@@ -955,7 +957,7 @@ bool KolosalCLI::startChatInterface(const std::string& engineId)
             chatHistory.push_back({"assistant", fullResponse});
         }
 
-        std::cout << std::endl;
+        std::cout << "\033[0m" << std::endl;
     }
 
 #ifdef _WIN32
@@ -963,6 +965,389 @@ bool KolosalCLI::startChatInterface(const std::string& engineId)
     SetConsoleCtrlHandler(nullptr, FALSE);
 #endif
 
-    std::cout << "\n👋 Chat session ended. Goodbye!" << std::endl;
     return true;
+}
+
+std::string KolosalCLI::getInputWithRealTimeAutocomplete(const std::string& prompt) {
+    std::cout << prompt;
+    std::string input;
+    
+#ifdef _WIN32
+    HANDLE hConsole = GetStdHandle(STD_INPUT_HANDLE);
+    HANDLE hOut = GetStdHandle(STD_OUTPUT_HANDLE);
+    DWORD mode;
+    GetConsoleMode(hConsole, &mode);
+    
+    // Enable input processing for character-by-character reading
+    SetConsoleMode(hConsole, mode & ~(ENABLE_LINE_INPUT | ENABLE_ECHO_INPUT));
+    
+    bool showingSuggestions = false;
+    int suggestionStartRow = 0;
+    bool showingHint = false;  // Track if we're showing hint text (should start as false)
+    const std::string hintText = "Type your message or use /help for commands...";
+    
+    // Get initial cursor position and ensure we have enough screen space
+    CONSOLE_SCREEN_BUFFER_INFO csbi;
+    GetConsoleScreenBufferInfo(hOut, &csbi);
+    COORD promptPos = csbi.dwCursorPosition;
+    
+    // Pre-allocate space for suggestions by positioning cursor lower, then returning
+    if (csbi.dwCursorPosition.Y > csbi.dwSize.Y - 8) {
+        // If we're too close to bottom, scroll up
+        std::cout << "\n\n\n\n\n";
+        GetConsoleScreenBufferInfo(hOut, &csbi);
+        promptPos = csbi.dwCursorPosition;
+        // Move cursor back up to where we want the input line
+        promptPos.Y -= 5;
+        SetConsoleCursorPosition(hOut, promptPos);
+    }
+    
+    // Show initial hint text only if input is empty
+    if (input.empty()) {
+        displayHintText(hintText, showingHint);
+    }
+    
+    while (true) {
+        INPUT_RECORD inputRecord;
+        DWORD eventsRead;
+        ReadConsoleInput(hConsole, &inputRecord, 1, &eventsRead);
+        
+        if (inputRecord.EventType == KEY_EVENT && inputRecord.Event.KeyEvent.bKeyDown) {
+            WORD keyCode = inputRecord.Event.KeyEvent.wVirtualKeyCode;
+            char ch = inputRecord.Event.KeyEvent.uChar.AsciiChar;
+            
+            if (keyCode == VK_RETURN) {
+                // Enter pressed - finalize input
+                if (showingHint) {
+                    clearHintText(showingHint);
+                }
+                if (showingSuggestions) {
+                    clearSuggestions(showingSuggestions, suggestionStartRow, prompt, input);
+                    // Force flush any remaining output
+                    std::cout.flush();
+                }
+                std::cout << std::endl;
+                break;
+            } else if (keyCode == VK_ESCAPE) {
+                // Escape pressed - clear suggestions and continue
+                if (showingSuggestions) {
+                    clearSuggestions(showingSuggestions, suggestionStartRow, prompt, input);
+                }
+                continue;
+            } else if (keyCode == VK_TAB) {
+                // Tab pressed - show interactive selection for commands
+                if (input.length() >= 2 && input[0] == '/') {
+                    auto suggestions = m_commandManager->getCommandSuggestions(input);
+                    if (suggestions.size() >= 1) {
+                        if (showingSuggestions) {
+                            clearSuggestions(showingSuggestions, suggestionStartRow, prompt, input);
+                        }
+                        
+                        if (suggestions.size() == 1) {
+                            // Auto-complete single match
+                            clearCurrentInput(input, showingSuggestions, suggestionStartRow, prompt);
+                            input = "/" + suggestions[0];
+                            std::cout << "\033[96m" << input << "\033[0m";
+                            // Update cursor position
+                            GetConsoleScreenBufferInfo(hOut, &csbi);
+                            promptPos = csbi.dwCursorPosition;
+                        } else {
+                            // Show interactive selection for multiple suggestions
+                            if (showingSuggestions) {
+                                clearSuggestions(showingSuggestions, suggestionStartRow, prompt, input);
+                            }
+                            std::cout << std::endl;
+                            
+                            auto formattedSuggestions = m_commandManager->getFormattedCommandSuggestions(input);
+                            formattedSuggestions.push_back("Continue with '" + input + "'");
+                            
+                            InteractiveList suggestionList(formattedSuggestions);
+                            int selected = suggestionList.run();
+                            
+                            if (selected >= 0 && selected < static_cast<int>(suggestions.size())) {
+                                // User selected a command
+                                input = "/" + suggestions[selected];
+                                std::cout << "U: \033[96m" << input << "\033[0m";
+                            } else if (selected == static_cast<int>(suggestions.size())) {
+                                // User chose to continue with their input
+                                std::cout << "U: \033[96m" << input << "\033[0m";
+                            } else {
+                                // User cancelled - return empty
+                                SetConsoleMode(hConsole, mode);
+                                return "";
+                            }
+                            
+                            // Update cursor position after interactive selection
+                            GetConsoleScreenBufferInfo(hOut, &csbi);
+                            promptPos = csbi.dwCursorPosition;
+                            showingSuggestions = false; // Reset suggestion state
+                        }
+                    }
+                }
+                continue;
+            } else if (keyCode == VK_BACK) {
+                // Backspace pressed
+                if (!input.empty()) {
+                    input.pop_back();
+                    // Move cursor back and clear the character
+                    std::cout << "\b \b";
+                    
+                    // Update cursor position
+                    GetConsoleScreenBufferInfo(hOut, &csbi);
+                    promptPos = csbi.dwCursorPosition;
+                    
+                    // If input becomes empty, show hint text again
+                    if (input.empty() && !showingHint) {
+                        displayHintText(hintText, showingHint);
+                    }
+                    
+                    // Update or clear suggestions
+                    if (input.length() >= 2 && input[0] == '/') {
+                        updateRealTimeSuggestions(input, showingSuggestions, suggestionStartRow, prompt);
+                    } else if (showingSuggestions) {
+                        clearSuggestions(showingSuggestions, suggestionStartRow, prompt, input);
+                    }
+                }
+                continue;
+            } else if (ch >= 32 && ch <= 126) {
+                // Regular printable character
+                
+                // Clear hint text on any character typed (whether first or subsequent)
+                if (showingHint) {
+                    clearHintText(showingHint);
+                }
+                
+                input += ch;
+                
+                // Display user input in cyan color
+                std::cout << "\033[96m" << ch << "\033[0m";
+                
+                // Update cursor position
+                GetConsoleScreenBufferInfo(hOut, &csbi);
+                promptPos = csbi.dwCursorPosition;
+                
+                // Show suggestions for commands
+                if (input.length() >= 2 && input[0] == '/') {
+                    updateRealTimeSuggestions(input, showingSuggestions, suggestionStartRow, prompt);
+                } else if (showingSuggestions) {
+                    clearSuggestions(showingSuggestions, suggestionStartRow, prompt, input);
+                }
+            }
+        }
+    }
+    
+    // Restore console mode
+    SetConsoleMode(hConsole, mode);
+#else
+    // For non-Windows systems, fall back to simple line input
+    if (!std::getline(std::cin, input)) {
+        return "";
+    }
+#endif
+    
+    return input;
+}
+
+void KolosalCLI::updateRealTimeSuggestions(const std::string& input, bool& showingSuggestions, int& suggestionStartRow, const std::string& prompt) {
+    auto suggestions = m_commandManager->getCommandSuggestions(input);
+    
+    if (suggestions.empty()) {
+        if (showingSuggestions) {
+            clearSuggestions(showingSuggestions, suggestionStartRow, prompt, input);
+        }
+        return;
+    }
+    
+#ifdef _WIN32
+    CONSOLE_SCREEN_BUFFER_INFO csbi;
+    HANDLE hConsole = GetStdHandle(STD_OUTPUT_HANDLE);
+    GetConsoleScreenBufferInfo(hConsole, &csbi);
+    
+    // Store current cursor position (input line)
+    COORD inputPos = csbi.dwCursorPosition;
+    
+    if (!showingSuggestions) {
+        // First time showing suggestions - reserve space below input
+        suggestionStartRow = inputPos.Y + 1;
+        showingSuggestions = true;
+        
+        // Move cursor down to create space for suggestions without printing newlines
+        COORD newPos = {0, static_cast<SHORT>(suggestionStartRow + 5)}; // Reserve 5 lines for suggestions
+        SetConsoleCursorPosition(hConsole, newPos);
+        SetConsoleCursorPosition(hConsole, inputPos); // Move back to input position
+    }
+    
+    // Clear and update suggestion area
+    COORD suggestionPos = {0, static_cast<SHORT>(suggestionStartRow)};
+    SetConsoleCursorPosition(hConsole, suggestionPos);
+    
+    // Clear the suggestion area first
+    DWORD written;
+    COORD clearPos = {0, static_cast<SHORT>(suggestionStartRow)};
+    for (int i = 0; i < 5; ++i) {
+        SetConsoleCursorPosition(hConsole, clearPos);
+        FillConsoleOutputCharacter(hConsole, ' ', 80, clearPos, &written);
+        clearPos.Y++;
+    }
+    
+    // Position cursor at suggestion area and display new suggestions
+    SetConsoleCursorPosition(hConsole, suggestionPos);
+    
+    auto formattedSuggestions = m_commandManager->getFormattedCommandSuggestions(input);
+    size_t maxDisplay = 3;
+    size_t displayCount = (formattedSuggestions.size() < maxDisplay) ? formattedSuggestions.size() : maxDisplay;
+    
+    // Write suggestions line by line at specific positions with darker color
+    COORD writePos = suggestionPos;
+    
+    // Set text color to dark gray for suggestions
+    CONSOLE_SCREEN_BUFFER_INFO originalCsbi;
+    GetConsoleScreenBufferInfo(hConsole, &originalCsbi);
+    WORD originalAttributes = originalCsbi.wAttributes;
+    WORD darkGrayAttributes = (originalAttributes & 0xF0) | 8; // Keep background, set foreground to dark gray
+    
+    for (size_t i = 0; i < displayCount; ++i) {
+        SetConsoleCursorPosition(hConsole, writePos);
+        SetConsoleTextAttribute(hConsole, darkGrayAttributes);
+        std::string suggestionText = "  " + formattedSuggestions[i];
+        std::cout << suggestionText;
+        writePos.Y++;
+    }
+    
+    if (formattedSuggestions.size() > maxDisplay) {
+        SetConsoleCursorPosition(hConsole, writePos);
+        SetConsoleTextAttribute(hConsole, darkGrayAttributes);
+        std::string moreText = "  ... and " + std::to_string(formattedSuggestions.size() - maxDisplay) + " more";
+        std::cout << moreText;
+    }
+    
+    // Restore original text color
+    SetConsoleTextAttribute(hConsole, originalAttributes);
+    
+    // Move cursor back to input line at the correct position
+    SetConsoleCursorPosition(hConsole, inputPos);
+#endif
+}
+
+void KolosalCLI::clearSuggestions(bool& showingSuggestions, int suggestionStartRow, const std::string& prompt, const std::string& input) {
+    if (!showingSuggestions) return;
+    
+#ifdef _WIN32
+    CONSOLE_SCREEN_BUFFER_INFO csbi;
+    HANDLE hConsole = GetStdHandle(STD_OUTPUT_HANDLE);
+    GetConsoleScreenBufferInfo(hConsole, &csbi);
+    
+    // Store current cursor position
+    COORD inputPos = csbi.dwCursorPosition;
+    
+    // Clear suggestions by using FillConsoleOutputCharacter and reset attributes
+    DWORD written;
+    COORD clearPos = {0, static_cast<SHORT>(suggestionStartRow)};
+    
+    // Clear multiple lines efficiently and more thoroughly
+    for (int i = 0; i < 8; ++i) { // Increased from 5 to 8 lines to be more thorough
+        FillConsoleOutputCharacter(hConsole, ' ', 120, clearPos, &written); // Increased from 80 to 120 chars
+        // Also reset attributes to default
+        FillConsoleOutputAttribute(hConsole, csbi.wAttributes, 120, clearPos, &written);
+        clearPos.Y++;
+    }
+    
+    // Move cursor back to original input position
+    SetConsoleCursorPosition(hConsole, inputPos);
+    
+    // Force flush the console buffer
+    std::cout.flush();
+#endif
+    
+    showingSuggestions = false;
+}
+
+void KolosalCLI::clearCurrentInput(const std::string& input, bool& showingSuggestions, int suggestionStartRow, const std::string& prompt) {
+#ifdef _WIN32
+    // Clear only the user input part (after the '> ')
+    for (size_t i = 0; i < input.length(); ++i) {
+        std::cout << "\b \b";
+    }
+    
+    // Clear suggestions if showing
+    if (showingSuggestions) {
+        clearSuggestions(showingSuggestions, suggestionStartRow, prompt, "");
+    }
+#endif
+}
+
+void KolosalCLI::forceClearSuggestions() {
+#ifdef _WIN32
+    CONSOLE_SCREEN_BUFFER_INFO csbi;
+    HANDLE hConsole = GetStdHandle(STD_OUTPUT_HANDLE);
+    GetConsoleScreenBufferInfo(hConsole, &csbi);
+    
+    // Store current cursor position
+    COORD currentPos = csbi.dwCursorPosition;
+    
+    // Clear several lines below current position to ensure suggestions are gone
+    DWORD written;
+    for (int i = 1; i <= 10; ++i) {
+        COORD clearPos = {0, static_cast<SHORT>(currentPos.Y + i)};
+        FillConsoleOutputCharacter(hConsole, ' ', 120, clearPos, &written);
+        FillConsoleOutputAttribute(hConsole, csbi.wAttributes, 120, clearPos, &written);
+    }
+    
+    // Restore cursor position
+    SetConsoleCursorPosition(hConsole, currentPos);
+    std::cout.flush();
+#endif
+}
+
+void KolosalCLI::displayHintText(const std::string& hintText, bool& showingHint) {
+#ifdef _WIN32
+    if (showingHint) return; // Already showing hint
+    
+    CONSOLE_SCREEN_BUFFER_INFO csbi;
+    HANDLE hConsole = GetStdHandle(STD_OUTPUT_HANDLE);
+    GetConsoleScreenBufferInfo(hConsole, &csbi);
+    
+    // Store current cursor position (where user will type)
+    COORD inputPos = csbi.dwCursorPosition;
+    
+    // Get original attributes for restoration
+    WORD originalAttributes = csbi.wAttributes;
+    
+    // Set dark gray color for hint text (same as command suggestions)
+    WORD hintAttributes = (originalAttributes & 0xF0) | 8; // Dark gray
+    SetConsoleTextAttribute(hConsole, hintAttributes);
+    
+    // Display hint text at current cursor position
+    std::cout << hintText;
+    
+    // Restore original attributes
+    SetConsoleTextAttribute(hConsole, originalAttributes);
+    
+    // Move cursor back to the beginning (where user should type)
+    SetConsoleCursorPosition(hConsole, inputPos);
+    
+    showingHint = true;
+    std::cout.flush();
+#endif
+}
+
+void KolosalCLI::clearHintText(bool& showingHint) {
+    #ifdef _WIN32
+    if (!showingHint) return; // No hint to clear
+    const std::string hintText = "Type your message or use /help for commands...";
+    CONSOLE_SCREEN_BUFFER_INFO csbi;
+    HANDLE hConsole = GetStdHandle(STD_OUTPUT_HANDLE);
+    GetConsoleScreenBufferInfo(hConsole, &csbi);
+    COORD inputPos = csbi.dwCursorPosition;
+    // Move to start of input (where hint was drawn)
+    SetConsoleCursorPosition(hConsole, inputPos);
+    // Overwrite hint text with spaces
+    DWORD written;
+    std::string clearLine(hintText.length(), ' ');
+    WriteConsoleA(hConsole, clearLine.c_str(), static_cast<DWORD>(clearLine.length()), &written, NULL);
+    // Move cursor back to start
+    SetConsoleCursorPosition(hConsole, inputPos);
+    showingHint = false;
+    std::cout.flush();
+    #endif
 }
