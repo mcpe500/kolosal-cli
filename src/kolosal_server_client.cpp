@@ -729,58 +729,57 @@ bool KolosalServerClient::streamingChatCompletion(const std::string& engineId, c
             })},
             {"stream", true},
             {"max_tokens", 2048},
-            {"temperature", 0.7}
+            {"temperature", 0.7},
+            {"top_p", 0.9}
         };
 
         // For streaming, we need to make a custom HTTP request to handle Server-Sent Events
         std::string url = m_baseUrl + "/v1/chat/completions";
         std::string headers = "Content-Type: application/json\r\n";
+        headers += "Accept: text/event-stream\r\n";
+        headers += "Cache-Control: no-cache\r\n";
         if (!m_apiKey.empty()) {
             headers += "Authorization: Bearer " + m_apiKey + "\r\n";
         }
 
         // Use a basic streaming implementation
         std::string buffer;
-        bool success = HttpClient::getInstance().makeStreamingRequest(url, requestBody.dump(), headers, 
-            [&](const std::string& chunk) {
-                buffer += chunk;
-                
-                // Simple SSE parsing - look for data: lines
-                size_t pos = 0;
-                while ((pos = buffer.find("data: ", pos)) != std::string::npos) {
-                    size_t lineEnd = buffer.find("\n", pos);
-                    if (lineEnd == std::string::npos) {
-                        break; // Incomplete line, wait for more data
-                    }
+        bool receivedContent = false;
+        bool streamComplete = false;
+        bool httpSuccess = HttpClient::getInstance().makeStreamingRequest(url, requestBody.dump(), headers, 
+            [&](const std::string& jsonData) {
+                try {
+                    json chunkJson = json::parse(jsonData);
                     
-                    std::string dataLine = buffer.substr(pos + 6, lineEnd - pos - 6);
-                    if (dataLine.find("[DONE]") == std::string::npos && !dataLine.empty()) {
-                        try {
-                            json chunkJson = json::parse(dataLine);
-                            
-                            if (chunkJson.contains("choices") && !chunkJson["choices"].empty()) {
-                                if (chunkJson["choices"][0].contains("delta") && 
-                                    chunkJson["choices"][0]["delta"].contains("content")) {
-                                    std::string content = chunkJson["choices"][0]["delta"]["content"];
-                                    if (!content.empty()) {
-                                        responseCallback(content);
-                                    }
+                    if (chunkJson.contains("choices") && !chunkJson["choices"].empty()) {
+                        auto& choice = chunkJson["choices"][0];
+                        if (choice.contains("delta")) {
+                            auto& delta = choice["delta"];
+                            if (delta.contains("content")) {
+                                std::string content = delta["content"];
+                                if (!content.empty()) {
+                                    responseCallback(content);
+                                    receivedContent = true;
                                 }
                             }
-                        } catch (const std::exception&) {
-                            // Ignore parsing errors for individual chunks
+                            // Also check for role in first chunk
+                            if (delta.contains("role")) {
+                                receivedContent = true; // Mark as having received valid streaming data
+                            }
+                        }
+                        
+                        // Check for finish_reason to detect end of stream
+                        if (choice.contains("finish_reason") && !choice["finish_reason"].is_null()) {
+                            streamComplete = true;
                         }
                     }
-                    pos = lineEnd + 1;
-                }
-                
-                // Keep only the incomplete part in buffer
-                if (pos > 0) {
-                    buffer = buffer.substr(pos);
+                } catch (const std::exception& e) {
+                    // Silently ignore JSON parse errors for malformed chunks
                 }
             });
 
-        return success;
+        // Consider streaming successful if we received any content or completed stream, regardless of HTTP status
+        return receivedContent || streamComplete;
     } catch (const std::exception&) {
         return false;
     }

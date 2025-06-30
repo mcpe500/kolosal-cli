@@ -128,17 +128,29 @@ bool KolosalCLI::stopBackgroundServer()
 
 void KolosalCLI::showWelcome()
 {
-    std::cout << R"(
-       ██     ██   ██   ███████   ██         ███████    ████████     ██     ██
-     ██░     ░██  ██   ██░░░░░██ ░██        ██░░░░░██  ██░░░░░░     ████   ░██
-   ██░       ░██ ██   ██     ░░██░██       ██     ░░██░██          ██░░██  ░██
- ██░         ░████   ░██      ░██░██      ░██      ░██░█████████  ██  ░░██ ░██
-░░ ██        ░██░██  ░██      ░██░██      ░██      ░██░░░░░░░░██ ██████████░██
-  ░░ ██      ░██░░██ ░░██     ██ ░██      ░░██     ██        ░██░██░░░░░░██░██
-    ░░ ██    ░██ ░░██ ░░███████  ░████████ ░░███████   ████████ ░██     ░██░████████
-      ░░     ░░   ░░   ░░░░░░░   ░░░░░░░░   ░░░░░░░   ░░░░░░░░  ░░      ░░ ░░░░░░░░
-
-)" << std::endl;
+    // ANSI color codes for gradient effect (cyan to blue to purple)
+    const std::string colors[] = {
+        "\033[38;5;51m",   // Bright cyan
+        "\033[38;5;45m",   // Cyan
+        "\033[38;5;39m",   // Light blue
+        "\033[38;5;33m",   // Blue
+        "\033[38;5;27m",   // Dark blue
+        "\033[38;5;21m",   // Blue-purple
+        "\033[38;5;57m",   // Purple
+        "\033[38;5;93m"    // Dark purple
+    };
+    const std::string reset = "\033[0m";
+    
+    std::cout << "\n";
+    std::cout << colors[0] << "       ██     ██   ██   ███████   ██         ███████    ████████     ██     ██" << reset << "\n";
+    std::cout << colors[1] << "     ██░     ░██  ██   ██░░░░░██ ░██        ██░░░░░██  ██░░░░░░     ████   ░██" << reset << "\n";
+    std::cout << colors[2] << "   ██░       ░██ ██   ██     ░░██░██       ██     ░░██░██          ██░░██  ░██" << reset << "\n";
+    std::cout << colors[3] << " ██░         ░████   ░██      ░██░██      ░██      ░██░█████████  ██  ░░██ ░██" << reset << "\n";
+    std::cout << colors[4] << "░░ ██        ░██░██  ░██      ░██░██      ░██      ░██░░░░░░░░██ ██████████░██" << reset << "\n";
+    std::cout << colors[5] << "  ░░ ██      ░██░░██ ░░██     ██ ░██      ░░██     ██        ░██░██░░░░░░██░██" << reset << "\n";
+    std::cout << colors[6] << "    ░░ ██    ░██ ░░██ ░░███████  ░████████ ░░███████   ████████ ░██     ░██░████████" << reset << "\n";
+    std::cout << colors[7] << "      ░░     ░░   ░░   ░░░░░░░   ░░░░░░░░   ░░░░░░░   ░░░░░░░░  ░░      ░░ ░░░░░░░░" << reset << "\n";
+    std::cout << "\n";
 }
 
 std::vector<std::string> KolosalCLI::generateSampleModels()
@@ -898,21 +910,10 @@ bool KolosalCLI::startChatInterface(const std::string& engineId)
                 fullResponse += chunk;
             });
 
-        if (!success)
+        if (!success && fullResponse.empty())
         {
-            // Fallback to non-streaming if streaming fails
-            std::string response;
-            if (m_serverClient->chatCompletion(engineId, userInput, response))
-            {
-                std::cout << response;
-                fullResponse = response;
-                success = true;
-            }
-            else
-            {
-                std::cout << "❌ Error: Failed to get response from the model. Please try again.";
-                continue;
-            }
+            std::cout << "❌ Error: Failed to get response from the model. Please try again.";
+            continue;
         }
 
         // Add assistant response to history
