@@ -840,15 +840,28 @@ bool KolosalCLI::updateConfigWithModel(const std::string& engineId, const std::s
 
 bool KolosalCLI::startChatInterface(const std::string& engineId)
 {
-    std::cout << "\n" << std::string(60, '=') << std::endl;
-    std::cout << "🤖 Starting chat with model: " << engineId << std::endl;
+    // Clear the console screen (Windows only)
+#ifdef _WIN32
+    HANDLE hConsole = GetStdHandle(STD_OUTPUT_HANDLE);
+    CONSOLE_SCREEN_BUFFER_INFO csbi;
+    GetConsoleScreenBufferInfo(hConsole, &csbi);
+    DWORD consoleSize = csbi.dwSize.X * csbi.dwSize.Y;
+    COORD topLeft = {0, 0};
+    DWORD written;
+    FillConsoleOutputCharacter(hConsole, ' ', consoleSize, topLeft, &written);
+    FillConsoleOutputAttribute(hConsole, csbi.wAttributes, consoleSize, topLeft, &written);
+    SetConsoleCursorPosition(hConsole, topLeft);
+#endif
+
+    // Print minimal chat header
+    std::cout << "Running: ";
+    // Model id in magenta
+    std::cout << "\033[35m" << engineId << "\033[0m" << std::endl;
     std::cout << "Type '/exit' or press Ctrl+C to quit" << std::endl;
     std::cout << "Type '/help' to see available commands" << std::endl;
-    std::cout << std::string(60, '=') << std::endl;
 
     // Set up signal handling for graceful exit
     bool shouldExit = false;
-    
     // Initialize command manager with current context
     m_commandManager->setCurrentEngine(engineId);
     
