@@ -6,6 +6,7 @@
 #include "cache_manager.h"
 #include "loading_animation.h"
 #include "kolosal_server_client.h"
+#include "command_manager.h"
 #include <iostream>
 #include <conio.h>
 #include <windows.h>
@@ -67,6 +68,9 @@ void KolosalCLI::initialize()
 
     // Initialize server client
     m_serverClient = std::make_unique<KolosalServerClient>();
+    
+    // Initialize command manager
+    m_commandManager = std::make_unique<CommandManager>();
 
     // Set up signal handling for graceful shutdown
     s_instance = this;
@@ -839,10 +843,14 @@ bool KolosalCLI::startChatInterface(const std::string& engineId)
     std::cout << "\n" << std::string(60, '=') << std::endl;
     std::cout << "🤖 Starting chat with model: " << engineId << std::endl;
     std::cout << "Type '/exit' or press Ctrl+C to quit" << std::endl;
+    std::cout << "Type '/help' to see available commands" << std::endl;
     std::cout << std::string(60, '=') << std::endl;
 
     // Set up signal handling for graceful exit
     bool shouldExit = false;
+    
+    // Initialize command manager with current context
+    m_commandManager->setCurrentEngine(engineId);
     
 #ifdef _WIN32
     // Windows-specific console control handler
@@ -865,6 +873,9 @@ bool KolosalCLI::startChatInterface(const std::string& engineId)
 #endif
 
     std::vector<std::pair<std::string, std::string>> chatHistory;
+    
+    // Set chat history reference for command manager
+    m_commandManager->setChatHistory(&chatHistory);
 
     while (!shouldExit)
     {
@@ -882,17 +893,39 @@ bool KolosalCLI::startChatInterface(const std::string& engineId)
         userInput.erase(0, userInput.find_first_not_of(" \t\n\r\f\v"));
         userInput.erase(userInput.find_last_not_of(" \t\n\r\f\v") + 1);
 
-        // Check for exit commands
-        if (userInput == "/exit" || userInput == "exit" || userInput == "quit" || userInput == "/quit")
-        {
-            shouldExit = true;
-            break;
-        }
-
         // Skip empty messages
         if (userInput.empty())
         {
             continue;
+        }
+
+        // Check if input is a command
+        if (m_commandManager->isCommand(userInput))
+        {
+            CommandResult result = m_commandManager->executeCommand(userInput);
+            
+            if (!result.message.empty()) {
+                std::cout << "system\n> " << result.message << std::endl;
+            }
+            
+            if (result.shouldExit) {
+                shouldExit = true;
+                break;
+            }
+            
+            if (!result.shouldContinueChat) {
+                continue;
+            }
+            
+            // Don't add commands to chat history unless they're conversation-related
+            continue;
+        }
+
+        // Check for legacy exit commands (for backward compatibility)
+        if (userInput == "exit" || userInput == "quit")
+        {
+            shouldExit = true;
+            break;
         }
 
         // Add user message to history

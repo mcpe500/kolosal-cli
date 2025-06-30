@@ -6,6 +6,7 @@
 #include <memory>
 #include "model_file.h"
 #include "kolosal_server_client.h"
+#include "command_manager.h"
 
 /**
  * @brief Main application class for Kolosal CLI
@@ -102,6 +103,7 @@ private:
 private:
     std::unique_ptr<KolosalServerClient> m_serverClient;
     std::vector<std::string> m_activeDownloads; // Track active download IDs
+    std::unique_ptr<CommandManager> m_commandManager; // Command manager for chat commands
     static KolosalCLI* s_instance; // For signal handling
     
     /**
