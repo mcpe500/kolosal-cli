@@ -893,7 +893,7 @@ bool KolosalCLI::startChatInterface(const std::string& engineId)
         // Get user input with real-time autocomplete support
         std::cout << "\n";
         std::string userInput = getInputWithRealTimeAutocomplete("");
-        
+
         // Check if input was cancelled (empty string returned)
         if (userInput.empty() && std::cin.eof())
         {
@@ -915,20 +915,20 @@ bool KolosalCLI::startChatInterface(const std::string& engineId)
         if (m_commandManager->isCommand(userInput))
         {
             CommandResult result = m_commandManager->executeCommand(userInput);
-            
+
             if (!result.message.empty()) {
                 std::cout << "\n\033[33m> " << result.message << "\033[0m\n" << std::endl;
             }
-            
+
             if (result.shouldExit) {
                 shouldExit = true;
                 break;
             }
-            
+
             if (!result.shouldContinueChat) {
                 continue;
             }
-            
+
             // Don't add commands to chat history unless they're conversation-related
             continue;
         }
@@ -946,17 +946,45 @@ bool KolosalCLI::startChatInterface(const std::string& engineId)
         // Force clear any lingering suggestions before showing AI response
         forceClearSuggestions();
 
-        std::cout << "\n\033[32m> \033[32m";
-        std::cout.flush();
 
-        // Use streaming chat completion for a more interactive experience
+
+        // Add an empty line to visually separate user input from spinner/assistant response
+        std::cout << std::endl;
+        // Show loading spinner using LoadingAnimation until first model response
+        std::atomic<bool> gotFirstChunk{false};
+        LoadingAnimation loadingAnim("");
         std::string fullResponse;
-        bool success = m_serverClient->streamingChatCompletion(engineId, userInput, 
+        bool printedPrompt = false;
+
+        // Start spinner in a thread, but print prompt and clear spinner on first token
+        std::thread loadingThread([&gotFirstChunk, &loadingAnim]() {
+            loadingAnim.start();
+            while (!gotFirstChunk) {
+                std::this_thread::sleep_for(std::chrono::milliseconds(10));
+            }
+            // Spinner will be cleared by main thread after first token
+        });
+        bool success = m_serverClient->streamingChatCompletion(engineId, userInput,
             [&](const std::string& chunk) {
+                if (!gotFirstChunk) {
+                    gotFirstChunk = true;
+                    // Move to start of spinner line, clear it, then print prompt and first token
+                    loadingAnim.stop();
+                    std::cout << "\r\033[32m> \033[32m";
+                    printedPrompt = true;
+                }
                 std::cout << chunk;
                 std::cout.flush();
                 fullResponse += chunk;
             });
+        gotFirstChunk = true;
+        if (loadingThread.joinable()) loadingThread.join();
+        // If the model never sent any chunk, still print the prompt for consistency and clear spinner
+        if (!printedPrompt) {
+            loadingAnim.stop();
+            std::cout << "\n\033[32m> \033[32m";
+            std::cout.flush();
+        }
 
         if (!success && fullResponse.empty())
         {
