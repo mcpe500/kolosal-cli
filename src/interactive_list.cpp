@@ -534,17 +534,6 @@ int InteractiveList::runWithUpdates(std::function<bool()> updateCallback)
             switch (key)
             {
             case 72: // Up arrow
-#else
-        if (key == 27) // ESC sequence on Linux
-        {
-            key = getch();
-            if (key == '[')
-            {
-                key = getch();
-                switch (key)
-                {
-                case 'A': // Up arrow
-#endif
                 if (isSearchMode)
                 {
                     // Do nothing when in search mode and pressing up
@@ -567,11 +556,7 @@ int InteractiveList::runWithUpdates(std::function<bool()> updateCallback)
                     isSearchMode = true;
                 }
                 break;
-#ifdef _WIN32
             case 80: // Down arrow
-#else
-                case 'B': // Down arrow
-#endif
                 if (isSearchMode)
                 {
                     // Exit search mode and go to first item
@@ -591,37 +576,73 @@ int InteractiveList::runWithUpdates(std::function<bool()> updateCallback)
                 }
                 break;
             }
-#ifdef _WIN32
         }
 #else
-            }
-        }
-#endif
-        else
+        if (key == 27) // ESC sequence on Linux
         {
-            switch (key)
+            // Check if there's more input available (arrow key sequence)
+            if (kbhit())
             {
-            case 13: // Enter
-                if (isSearchMode)
+                key = getch();
+                if (key == '[' && kbhit())
                 {
-                    // Exit search mode
-                    isSearchMode = false;
-                }
-                else if (!filteredItems.empty())
-                { // Select item
-                    showCursor();
-                    clearScreen();
-                    // Find the original index in the items array
-                    auto it = std::find(items.begin(), items.end(), filteredItems[selectedIndex]);
-                    if (it != items.end())
+                    key = getch();
+                    switch (key)
                     {
-                        return static_cast<int>(std::distance(items.begin(), it));
+                    case 'A': // Up arrow
+                        if (isSearchMode)
+                        {
+                            // Do nothing when in search mode and pressing up
+                        }
+                        else if (!filteredItems.empty())
+                        {
+                            if (selectedIndex > 0)
+                            {
+                                selectedIndex--;
+                            }
+                            else
+                            {
+                                // When at top of list, go to search input
+                                isSearchMode = true;
+                            }
+                        }
+                        else
+                        {
+                            // If no items, go to search input
+                            isSearchMode = true;
+                        }
+                        break;
+                    case 'B': // Down arrow
+                        if (isSearchMode)
+                        {
+                            // Exit search mode and go to first item
+                            isSearchMode = false;
+                            if (!filteredItems.empty())
+                            {
+                                selectedIndex = 0;
+                            }
+                        }
+                        else if (!filteredItems.empty())
+                        {
+                            if (selectedIndex < filteredItems.size() - 1)
+                            {
+                                selectedIndex++;
+                            }
+                            // No wrapping - stay at the last item when at the end
+                        }
+                        break;
                     }
-                    return -1;
                 }
-                break;
-            case 27: // Escape
-#ifdef _WIN32
+                else
+                {
+                    // Not an arrow key sequence, treat as standalone ESC
+                    goto handle_escape;
+                }
+            }
+            else
+            {
+                // Standalone ESC key
+                handle_escape:
                 if (isSearchMode)
                 {
                     // Exit search mode
@@ -633,9 +654,40 @@ int InteractiveList::runWithUpdates(std::function<bool()> updateCallback)
                     clearScreen();
                     return -1;
                 }
+            }
+        }
+#endif
+        else
+        {
+            switch (key)
+            {
+#ifdef _WIN32
+            case 13: // Enter (Windows)
 #else
-                // On Linux, we need to check if this is a standalone ESC or part of an arrow key sequence
-                // If we already handled arrow keys above, this won't be reached for arrow keys
+            case 10: // Enter (Linux - Line Feed)
+            case 13: // Enter (also handle Carriage Return for compatibility)
+#endif
+                if (isSearchMode)
+                {
+                    // Exit search mode
+                    isSearchMode = false;
+                }
+                else if (!filteredItems.empty())
+                {
+                    // Select item
+                    showCursor();
+                    clearScreen();
+                    // Find the original index in the items array
+                    auto it = std::find(items.begin(), items.end(), filteredItems[selectedIndex]);
+                    if (it != items.end())
+                    {
+                        return static_cast<int>(std::distance(items.begin(), it));
+                    }
+                    return -1;
+                }
+                break;
+            case 27: // Escape - only handle for Windows since Linux handles it above
+#ifdef _WIN32
                 if (isSearchMode)
                 {
                     // Exit search mode
@@ -653,7 +705,8 @@ int InteractiveList::runWithUpdates(std::function<bool()> updateCallback)
                 showCursor();
                 clearScreen();
                 return -1;
-            case 8: // Backspace
+            case 8:   // Backspace (BS)
+            case 127: // Backspace (DEL) - common on Linux
                 if (isSearchMode && !searchQuery.empty())
                 {
                     searchQuery.pop_back();

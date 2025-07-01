@@ -855,7 +855,7 @@ bool KolosalCLI::updateConfigWithModel(const std::string& engineId, const std::s
 
 bool KolosalCLI::startChatInterface(const std::string& engineId)
 {
-    // Clear the console screen (Windows only)
+    // Clear the console screen
 #ifdef _WIN32
     HANDLE hConsole = GetStdHandle(STD_OUTPUT_HANDLE);
     CONSOLE_SCREEN_BUFFER_INFO csbi;
@@ -866,6 +866,9 @@ bool KolosalCLI::startChatInterface(const std::string& engineId)
     FillConsoleOutputCharacter(hConsole, ' ', consoleSize, topLeft, &written);
     FillConsoleOutputAttribute(hConsole, csbi.wAttributes, consoleSize, topLeft, &written);
     SetConsoleCursorPosition(hConsole, topLeft);
+#else
+    // Clear screen on Linux using ANSI escape sequences
+    std::cout << "\033[2J\033[H" << std::flush;
 #endif
 
     // Print minimal chat header
@@ -1195,10 +1198,134 @@ std::string KolosalCLI::getInputWithRealTimeAutocomplete(const std::string& prom
     // Restore console mode
     SetConsoleMode(hConsole, mode);
 #else
-    // For non-Windows systems, fall back to simple line input
-    if (!std::getline(std::cin, input)) {
-        return "";
+    // Linux implementation with hint text support
+    bool showingHint = false;
+    bool showingSuggestions = false;
+    int suggestionStartRow = 0;
+    const std::string hintText = "Type your message or use /help for commands...";
+    
+    // Set terminal to raw mode for character-by-character input
+    struct termios oldt, newt;
+    tcgetattr(STDIN_FILENO, &oldt);
+    newt = oldt;
+    newt.c_lflag &= ~(ICANON | ECHO);
+    tcsetattr(STDIN_FILENO, TCSANOW, &newt);
+    
+    // Show initial hint text if input is empty
+    if (input.empty()) {
+        displayHintTextLinux(hintText, showingHint);
     }
+    
+    while (true) {
+        int ch = getchar();
+        
+        if (ch == 10 || ch == 13) { // Enter (LF or CR)
+            if (showingHint) {
+                clearHintTextLinux(hintText, showingHint);
+            }
+            if (showingSuggestions) {
+                clearSuggestionsLinux(showingSuggestions, suggestionStartRow, prompt, input);
+            }
+            std::cout << std::endl;
+            break;
+        } else if (ch == 27) { // ESC sequence
+            // Handle arrow keys or standalone ESC
+            int next1 = getchar();
+            if (next1 == '[') {
+                int next2 = getchar();
+                // Ignore arrow keys in input mode, just continue
+                continue;
+            } else {
+                // Standalone ESC - ignore for now, continue
+                ungetc(next1, stdin);
+                continue;
+            }
+        } else if (ch == 127 || ch == 8) { // Backspace (DEL or BS)
+            if (!input.empty()) {
+                input.pop_back();
+                std::cout << "\b \b" << std::flush;
+                
+                // If input becomes empty, show hint text again
+                if (input.empty() && !showingHint) {
+                    displayHintTextLinux(hintText, showingHint);
+                }
+                
+                // Update or clear suggestions
+                if (input.length() >= 2 && input[0] == '/') {
+                    updateRealTimeSuggestionsLinux(input, showingSuggestions, suggestionStartRow, prompt);
+                } else if (showingSuggestions) {
+                    clearSuggestionsLinux(showingSuggestions, suggestionStartRow, prompt, input);
+                }
+            }
+        } else if (ch == 9) { // Tab - for command suggestions
+            if (input.length() >= 2 && input[0] == '/') {
+                auto suggestions = m_commandManager->getCommandSuggestions(input);
+                if (!suggestions.empty()) {
+                    if (showingHint) {
+                        clearHintTextLinux(hintText, showingHint);
+                    }
+                    if (showingSuggestions) {
+                        clearSuggestionsLinux(showingSuggestions, suggestionStartRow, prompt, input);
+                    }
+                    
+                    // Clear current input line for interactive selection
+                    for (size_t i = 0; i < input.length(); ++i) {
+                        std::cout << "\b \b";
+                    }
+                    std::cout << std::flush;
+                    
+                    if (suggestions.size() == 1) {
+                        // Auto-complete single match
+                        input = "/" + suggestions[0];
+                        std::cout << "\033[96m" << input << "\033[0m" << std::flush;
+                    } else {
+                        // Show interactive selection
+                        std::cout << std::endl;
+                        auto formattedSuggestions = m_commandManager->getFormattedCommandSuggestions(input);
+                        formattedSuggestions.push_back("Continue with '" + input + "'");
+                        
+                        InteractiveList suggestionList(formattedSuggestions);
+                        int selected = suggestionList.run();
+                        
+                        if (selected >= 0 && selected < static_cast<int>(suggestions.size())) {
+                            input = "/" + suggestions[selected];
+                            std::cout << "U: \033[96m" << input << "\033[0m" << std::flush;
+                        } else if (selected == static_cast<int>(suggestions.size())) {
+                            std::cout << "U: \033[96m" << input << "\033[0m" << std::flush;
+                        } else {
+                            // User cancelled
+                            tcsetattr(STDIN_FILENO, TCSANOW, &oldt);
+                            return "";
+                        }
+                        showingSuggestions = false; // Reset suggestion state
+                    }
+                }
+            }
+        } else if (ch >= 32 && ch <= 126) { // Printable characters
+            // Clear hint text on any character typed
+            if (showingHint) {
+                clearHintTextLinux(hintText, showingHint);
+            }
+            
+            input += ch;
+            // Display user input in cyan color
+            std::cout << "\033[96m" << static_cast<char>(ch) << "\033[0m" << std::flush;
+            
+            // Show suggestions for commands
+            if (input.length() >= 2 && input[0] == '/') {
+                updateRealTimeSuggestionsLinux(input, showingSuggestions, suggestionStartRow, prompt);
+            } else if (showingSuggestions) {
+                clearSuggestionsLinux(showingSuggestions, suggestionStartRow, prompt, input);
+            }
+        } else if (ch == 3) { // Ctrl+C
+            tcsetattr(STDIN_FILENO, TCSANOW, &oldt);
+            return "";
+        }
+        // Ignore other control characters
+    }
+    
+    // Restore terminal mode
+    tcsetattr(STDIN_FILENO, TCSANOW, &oldt);
 #endif
     
     return input;
@@ -1282,6 +1409,110 @@ void KolosalCLI::updateRealTimeSuggestions(const std::string& input, bool& showi
     
     // Move cursor back to input line at the correct position
     SetConsoleCursorPosition(hConsole, inputPos);
+#else
+    // Linux implementation
+    if (suggestions.empty()) {
+        if (showingSuggestions) {
+            clearSuggestionsLinux(showingSuggestions, suggestionStartRow, prompt, input);
+        }
+        return;
+    }
+    
+    if (!showingSuggestions) {
+        showingSuggestions = true;
+        suggestionStartRow = 1; // Reserve space below input line
+    }
+    
+    // Save current cursor position
+    printf("\033[s"); // Save cursor position
+    
+    // Move to suggestion area and display suggestions
+    printf("\033[%d;1H", suggestionStartRow + 1); // Move to suggestion line
+    
+    auto formattedSuggestions = m_commandManager->getFormattedCommandSuggestions(input);
+    size_t maxDisplay = 3;
+    size_t displayCount = (formattedSuggestions.size() < maxDisplay) ? formattedSuggestions.size() : maxDisplay;
+    
+    // Clear the suggestion area first (3-4 lines)
+    for (int i = 0; i < 4; ++i) {
+        printf("\033[%d;1H\033[K", suggestionStartRow + 1 + i); // Move and clear line
+    }
+    
+    // Display suggestions in dark gray
+    for (size_t i = 0; i < displayCount; ++i) {
+        printf("\033[%d;1H", suggestionStartRow + 1 + (int)i); // Move to line
+        printf("\033[90m  %s\033[0m", formattedSuggestions[i].c_str()); // Dark gray
+    }
+    
+    if (formattedSuggestions.size() > maxDisplay) {
+        printf("\033[%d;1H", suggestionStartRow + 1 + (int)displayCount);
+        printf("\033[90m  ... and %zu more\033[0m", formattedSuggestions.size() - maxDisplay);
+    }
+    
+    // Restore cursor position
+    printf("\033[u"); // Restore cursor position
+    fflush(stdout);
+#endif
+}
+
+void KolosalCLI::updateRealTimeSuggestionsLinux(const std::string& input, bool& showingSuggestions, int& suggestionStartRow, const std::string& prompt) {
+#ifndef _WIN32
+    auto suggestions = m_commandManager->getCommandSuggestions(input);
+    
+    if (suggestions.empty()) {
+        if (showingSuggestions) {
+            clearSuggestionsLinux(showingSuggestions, suggestionStartRow, prompt, input);
+        }
+        return;
+    }
+    
+    if (!showingSuggestions) {
+        showingSuggestions = true;
+        suggestionStartRow = 1; // Mark that we're showing suggestions below
+    }
+    
+    // Save current cursor position (input line)
+    printf("\033[s");
+    
+    // Move cursor down one line to start suggestions below input
+    printf("\033[B");  // Move cursor down one line
+    printf("\033[1G"); // Move to beginning of line
+    
+    auto formattedSuggestions = m_commandManager->getFormattedCommandSuggestions(input);
+    size_t maxDisplay = 3;
+    size_t displayCount = (formattedSuggestions.size() < maxDisplay) ? formattedSuggestions.size() : maxDisplay;
+    
+    // Clear the suggestion area first (4 lines should be enough)
+    for (int i = 0; i < 4; ++i) {
+        printf("\033[K"); // Clear current line
+        if (i < 3) printf("\033[B"); // Move to next line
+    }
+    
+    // Move back up to start of suggestions area
+    for (int i = 0; i < 3; ++i) {
+        printf("\033[A"); // Move cursor up
+    }
+    printf("\033[1G"); // Move to beginning of line
+    
+    // Display suggestions in dark gray
+    for (size_t i = 0; i < displayCount; ++i) {
+        printf("\033[K"); // Clear current line
+        printf("\033[90m  %s\033[0m", formattedSuggestions[i].c_str()); // Dark gray
+        if (i < displayCount - 1) {
+            printf("\033[B"); // Move to next line for next suggestion
+            printf("\033[1G"); // Move to beginning of line
+        }
+    }
+    
+    if (formattedSuggestions.size() > maxDisplay) {
+        printf("\033[B"); // Move to next line
+        printf("\033[1G\033[K"); // Beginning of line and clear
+        printf("\033[90m  ... and %zu more\033[0m", formattedSuggestions.size() - maxDisplay);
+    }
+    
+    // Restore cursor position to input line
+    printf("\033[u");
+    fflush(stdout);
 #endif
 }
 
@@ -1316,6 +1547,34 @@ void KolosalCLI::clearSuggestions(bool& showingSuggestions, int suggestionStartR
 #endif
     
     showingSuggestions = false;
+}
+
+void KolosalCLI::clearSuggestionsLinux(bool& showingSuggestions, int suggestionStartRow, const std::string& prompt, const std::string& input) {
+#ifndef _WIN32
+    if (!showingSuggestions) return;
+    
+    // Save current cursor position (input line)
+    printf("\033[s");
+    
+    // Move cursor down one line to start clearing suggestions below input
+    printf("\033[B");  // Move cursor down one line
+    printf("\033[1G"); // Move to beginning of line
+    
+    // Clear the suggestion area (4 lines should be enough)
+    for (int i = 0; i < 4; ++i) {
+        printf("\033[K"); // Clear current line
+        if (i < 3) {
+            printf("\033[B"); // Move to next line
+            printf("\033[1G"); // Move to beginning of line
+        }
+    }
+    
+    // Restore cursor position to input line
+    printf("\033[u");
+    fflush(stdout);
+    
+    showingSuggestions = false;
+#endif
 }
 
 void KolosalCLI::clearCurrentInput(const std::string& input, bool& showingSuggestions, int suggestionStartRow, const std::string& prompt) {
@@ -1387,8 +1646,25 @@ void KolosalCLI::displayHintText(const std::string& hintText, bool& showingHint)
 #endif
 }
 
+void KolosalCLI::displayHintTextLinux(const std::string& hintText, bool& showingHint) {
+#ifndef _WIN32
+    if (showingHint) return; // Already showing hint
+    
+    // Display hint text in dark gray color
+    std::cout << "\033[90m" << hintText << "\033[0m" << std::flush;
+    
+    // Move cursor back to the beginning (where user should type)
+    for (size_t i = 0; i < hintText.length(); ++i) {
+        std::cout << "\b";
+    }
+    std::cout << std::flush;
+    
+    showingHint = true;
+#endif
+}
+
 void KolosalCLI::clearHintText(bool& showingHint) {
-    #ifdef _WIN32
+#ifdef _WIN32
     if (!showingHint) return; // No hint to clear
     const std::string hintText = "Type your message or use /help for commands...";
     CONSOLE_SCREEN_BUFFER_INFO csbi;
@@ -1405,5 +1681,23 @@ void KolosalCLI::clearHintText(bool& showingHint) {
     SetConsoleCursorPosition(hConsole, inputPos);
     showingHint = false;
     std::cout.flush();
-    #endif
+#endif
+}
+
+void KolosalCLI::clearHintTextLinux(const std::string& hintText, bool& showingHint) {
+#ifndef _WIN32
+    if (!showingHint) return; // No hint to clear
+    
+    // Overwrite hint text with spaces
+    std::string clearText(hintText.length(), ' ');
+    std::cout << clearText << std::flush;
+    
+    // Move cursor back to start
+    for (size_t i = 0; i < hintText.length(); ++i) {
+        std::cout << "\b";
+    }
+    std::cout << std::flush;
+    
+    showingHint = false;
+#endif
 }

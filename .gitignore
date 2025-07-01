@@ -19,6 +19,7 @@
 build/
 Build/
 out/
+build*/
 
 # Model files
 *.gguf

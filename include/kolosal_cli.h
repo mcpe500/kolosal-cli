@@ -201,6 +201,38 @@ private:
     void clearHintText(bool& showingHint);
     
     /**
+     * @brief Display hint text in the input area (Linux implementation)
+     * @param hintText The hint text to display
+     * @param showingHint Reference to bool tracking hint visibility
+     */
+    void displayHintTextLinux(const std::string& hintText, bool& showingHint);
+    
+    /**
+     * @brief Clear hint text from the input area (Linux implementation)
+     * @param hintText The hint text that was displayed
+     * @param showingHint Reference to bool tracking hint visibility
+     */
+    void clearHintTextLinux(const std::string& hintText, bool& showingHint);
+    
+    /**
+     * @brief Update real-time suggestions for Linux
+     * @param input Current input string
+     * @param showingSuggestions Reference to bool tracking suggestion visibility
+     * @param suggestionStartRow Starting row for suggestions
+     * @param prompt Input prompt string
+     */
+    void updateRealTimeSuggestionsLinux(const std::string& input, bool& showingSuggestions, int& suggestionStartRow, const std::string& prompt);
+    
+    /**
+     * @brief Clear suggestions for Linux
+     * @param showingSuggestions Reference to bool tracking suggestion visibility
+     * @param suggestionStartRow Starting row for suggestions
+     * @param prompt Input prompt string
+     * @param input Current input string
+     */
+    void clearSuggestionsLinux(bool& showingSuggestions, int suggestionStartRow, const std::string& prompt, const std::string& input);
+    
+    /**
      * @brief Ensure console encoding is set to UTF-8
      */
     void ensureConsoleEncoding();
