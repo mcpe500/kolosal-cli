@@ -2,14 +2,39 @@
 #include <iostream>
 #include <algorithm>
 #include <iomanip>
+
+#ifdef _WIN32
 #include <conio.h>
+#include <windows.h>
+#else
+#include <termios.h>
+#include <unistd.h>
+#include <sys/ioctl.h>
+#include <sys/time.h>
+#include <sys/select.h>
+#include <fcntl.h>
+#include <cstdio>
+#include <cstdlib>
+#include <cstring>
+#endif
 
 InteractiveList::InteractiveList(const std::vector<std::string> &listItems)
     : items(listItems), filteredItems(listItems), searchQuery(""), selectedIndex(0),
       viewportTop(0), maxDisplayItems(20), isSearchMode(false)
 {
+#ifdef _WIN32
     hConsole = GetStdHandle(STD_OUTPUT_HANDLE);
     GetConsoleScreenBufferInfo(hConsole, &csbi);
+#else
+    // Get terminal size
+    struct winsize w;
+    ioctl(STDOUT_FILENO, TIOCGWINSZ, &w);
+    terminalWidth = w.ws_col;
+    terminalHeight = w.ws_row;
+    
+    // Save original terminal settings
+    tcgetattr(STDIN_FILENO, &originalTermios);
+#endif
 
     // Calculate max display items dynamically based on actual content
     maxDisplayItems = calculateMaxDisplayItems();
@@ -17,41 +42,104 @@ InteractiveList::InteractiveList(const std::vector<std::string> &listItems)
 
 void InteractiveList::hideCursor()
 {
+#ifdef _WIN32
     CONSOLE_CURSOR_INFO cursorInfo;
     GetConsoleCursorInfo(hConsole, &cursorInfo);
     cursorInfo.bVisible = false;
     SetConsoleCursorInfo(hConsole, &cursorInfo);
+#else
+    std::cout << "\033[?25l" << std::flush;
+#endif
 }
 
 void InteractiveList::showCursor()
 {
+#ifdef _WIN32
     CONSOLE_CURSOR_INFO cursorInfo;
     GetConsoleCursorInfo(hConsole, &cursorInfo);
     cursorInfo.bVisible = true;
     SetConsoleCursorInfo(hConsole, &cursorInfo);
+#else
+    std::cout << "\033[?25h" << std::flush;
+#endif
 }
 
 void InteractiveList::clearScreen()
 {
+#ifdef _WIN32
     system("cls");
+#else
+    int result = system("clear");
+    (void)result; // Suppress unused result warning
+#endif
 }
 
 void InteractiveList::moveCursor(int x, int y)
 {
+#ifdef _WIN32
     COORD coord;
     coord.X = x;
     coord.Y = y;
     SetConsoleCursorPosition(hConsole, coord);
+#else
+    printf("\033[%d;%dH", y + 1, x + 1);
+    fflush(stdout);
+#endif
 }
 
 void InteractiveList::setColor(int color)
 {
+#ifdef _WIN32
     SetConsoleTextAttribute(hConsole, color);
+#else
+    // Convert Windows color codes to ANSI escape sequences
+    // Handle combined colors (bitwise OR operations)
+    if (color == (BACKGROUND_GREEN | FOREGROUND_INTENSITY)) {
+        // Green background with bright text (search mode)
+        std::cout << "\033[42;97m";  // Green background, bright white text
+    } else if (color == (BACKGROUND_BLUE | FOREGROUND_RED | FOREGROUND_GREEN | FOREGROUND_BLUE)) {
+        // Blue background with white text (highlighted selection)
+        std::cout << "\033[44;97m";  // Blue background, bright white text
+    } else if (color == FOREGROUND_INTENSITY) {
+        // Bright/intense foreground
+        std::cout << "\033[90m";     // Dark gray (dim)
+    } else if (color == 112) {
+        // Black on white (highlighted) - original Windows value
+        std::cout << "\033[47;30m";
+    } else {
+        // Handle individual colors
+        switch(color) {
+            case 7:  // White on black (default)
+                std::cout << "\033[0m";
+                break;
+            case 14: // Yellow
+                std::cout << "\033[93m";
+                break;
+            case 10: // Green
+                std::cout << "\033[92m";
+                break;
+            case 12: // Red
+                std::cout << "\033[91m";
+                break;
+            case 9:  // Blue
+                std::cout << "\033[94m";
+                break;
+            default:
+                std::cout << "\033[0m";
+                break;
+        }
+    }
+    std::cout << std::flush;
+#endif
 }
 
 void InteractiveList::resetColor()
 {
+#ifdef _WIN32
     SetConsoleTextAttribute(hConsole, csbi.wAttributes);
+#else
+    std::cout << "\033[0m" << std::flush;
+#endif
 }
 
 void InteractiveList::updateViewport()
@@ -124,7 +212,14 @@ int InteractiveList::calculateItemLines(const std::string& item) {
 }
 
 size_t InteractiveList::calculateMaxDisplayItems() {
+#ifdef _WIN32
     int totalHeight = csbi.srWindow.Bottom - csbi.srWindow.Top + 1;
+#else
+    // Update terminal size for Linux
+    struct winsize w;
+    ioctl(STDOUT_FILENO, TIOCGWINSZ, &w);
+    int totalHeight = w.ws_row;
+#endif
     
     // Calculate reserved lines more precisely:
     // 1. Title (1 line)
@@ -355,7 +450,11 @@ int InteractiveList::runWithUpdates(std::function<bool()> updateCallback)
     {
         displayList();
         std::cout << "\nPress any key to exit...";
+#ifdef _WIN32
         _getch();
+#else
+        getch();
+#endif
         showCursor();
         return -1;
     }
@@ -369,21 +468,39 @@ int InteractiveList::runWithUpdates(std::function<bool()> updateCallback)
         int key = 0;
         
         // Check for input periodically, allowing for updates
+#ifdef _WIN32
         auto startTime = GetTickCount();
         const DWORD UPDATE_INTERVAL_MS = 200; // Check for updates every 200ms
+#else
+        auto startTime = getTickCount();
+        const unsigned long UPDATE_INTERVAL_MS = 200; // Check for updates every 200ms
+#endif
         
         while (true)
         {
             // Check if key is available without blocking
+#ifdef _WIN32
             if (_kbhit())
             {
                 key = _getch();
                 hasInput = true;
                 break;
             }
+#else
+            if (kbhit())
+            {
+                key = getch();
+                hasInput = true;
+                break;
+            }
+#endif
             
             // Check if it's time for an update
+#ifdef _WIN32
             DWORD currentTime = GetTickCount();
+#else
+            unsigned long currentTime = getTickCount();
+#endif
             if (currentTime - startTime >= UPDATE_INTERVAL_MS)
             {
                 // Call update callback and refresh display if needed
@@ -396,7 +513,11 @@ int InteractiveList::runWithUpdates(std::function<bool()> updateCallback)
             }
             
             // Small sleep to prevent busy waiting
+#ifdef _WIN32
             Sleep(10);
+#else
+            msleep(10);
+#endif
         }
         
         // If no input was received, continue to redraw
@@ -406,12 +527,24 @@ int InteractiveList::runWithUpdates(std::function<bool()> updateCallback)
         }
 
         // Handle special keys (arrow keys)
+#ifdef _WIN32
         if (key == 224)
-        { // Special key prefix
+        { // Special key prefix on Windows
             key = _getch();
             switch (key)
             {
             case 72: // Up arrow
+#else
+        if (key == 27) // ESC sequence on Linux
+        {
+            key = getch();
+            if (key == '[')
+            {
+                key = getch();
+                switch (key)
+                {
+                case 'A': // Up arrow
+#endif
                 if (isSearchMode)
                 {
                     // Do nothing when in search mode and pressing up
@@ -434,7 +567,11 @@ int InteractiveList::runWithUpdates(std::function<bool()> updateCallback)
                     isSearchMode = true;
                 }
                 break;
+#ifdef _WIN32
             case 80: // Down arrow
+#else
+                case 'B': // Down arrow
+#endif
                 if (isSearchMode)
                 {
                     // Exit search mode and go to first item
@@ -454,7 +591,12 @@ int InteractiveList::runWithUpdates(std::function<bool()> updateCallback)
                 }
                 break;
             }
+#ifdef _WIN32
         }
+#else
+            }
+        }
+#endif
         else
         {
             switch (key)
@@ -479,6 +621,7 @@ int InteractiveList::runWithUpdates(std::function<bool()> updateCallback)
                 }
                 break;
             case 27: // Escape
+#ifdef _WIN32
                 if (isSearchMode)
                 {
                     // Exit search mode
@@ -490,6 +633,21 @@ int InteractiveList::runWithUpdates(std::function<bool()> updateCallback)
                     clearScreen();
                     return -1;
                 }
+#else
+                // On Linux, we need to check if this is a standalone ESC or part of an arrow key sequence
+                // If we already handled arrow keys above, this won't be reached for arrow keys
+                if (isSearchMode)
+                {
+                    // Exit search mode
+                    isSearchMode = false;
+                }
+                else
+                {
+                    showCursor();
+                    clearScreen();
+                    return -1;
+                }
+#endif
                 break;
             case 3: // Ctrl+C
                 showCursor();
@@ -542,3 +700,53 @@ void InteractiveList::updateItems(const std::vector<std::string>& newItems)
     // Recalculate display parameters
     maxDisplayItems = calculateMaxDisplayItems();
 }
+
+#ifndef _WIN32
+// Linux-specific helper functions
+int getch() {
+    struct termios oldt, newt;
+    int ch;
+    tcgetattr(STDIN_FILENO, &oldt);
+    newt = oldt;
+    newt.c_lflag &= ~(ICANON | ECHO);
+    tcsetattr(STDIN_FILENO, TCSANOW, &newt);
+    ch = getchar();
+    tcsetattr(STDIN_FILENO, TCSANOW, &oldt);
+    return ch;
+}
+
+int kbhit() {
+    struct termios oldt, newt;
+    int ch;
+    int oldf;
+
+    tcgetattr(STDIN_FILENO, &oldt);
+    newt = oldt;
+    newt.c_lflag &= ~(ICANON | ECHO);
+    tcsetattr(STDIN_FILENO, TCSANOW, &newt);
+    oldf = fcntl(STDIN_FILENO, F_GETFL, 0);
+    fcntl(STDIN_FILENO, F_SETFL, oldf | O_NONBLOCK);
+
+    ch = getchar();
+
+    tcsetattr(STDIN_FILENO, TCSANOW, &oldt);
+    fcntl(STDIN_FILENO, F_SETFL, oldf);
+
+    if(ch != EOF) {
+        ungetc(ch, stdin);
+        return 1;
+    }
+
+    return 0;
+}
+
+void msleep(int milliseconds) {
+    usleep(milliseconds * 1000);
+}
+
+unsigned long getTickCount() {
+    struct timeval tv;
+    gettimeofday(&tv, NULL);
+    return (tv.tv_sec * 1000) + (tv.tv_usec / 1000);
+}
+#endif

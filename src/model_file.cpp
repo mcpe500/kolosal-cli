@@ -10,9 +10,15 @@
 #include <future>
 #include <chrono>
 #include <iostream>
+#include <curl/curl.h>
+
+#ifdef _WIN32
 #include <windows.h>
 #include <conio.h>
-#include <curl/curl.h>
+#else
+#include <termios.h>
+#include <unistd.h>
+#endif
 
 std::string ModelFile::getDisplayName() const
 {

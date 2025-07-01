@@ -15,8 +15,34 @@
 *.mod
 *.smod
 
-build
+# Build directories
+build/
+Build/
+out/
 
+# Model files
 *.gguf
 
-.vs
+# IDE files
+.vs/
+.vscode/
+*.vcxproj.user
+.idea/
+
+# Linux specific
+kolosal-cli
+kolosal-server
+*.so
+*.so.*
+
+# Windows specific  
+*.exe
+*.dll
+*.pdb
+*.ilk
+
+# Logs
+*.log
+
+# Cache files
+.cache/

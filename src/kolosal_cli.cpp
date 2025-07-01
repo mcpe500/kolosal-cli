@@ -8,8 +8,6 @@
 #include "kolosal_server_client.h"
 #include "command_manager.h"
 #include <iostream>
-#include <conio.h>
-#include <windows.h>
 #include <regex>
 #include <algorithm>
 #include <iomanip>
@@ -21,6 +19,15 @@
 #include <fstream>
 #include <filesystem>
 #include <yaml-cpp/yaml.h>
+
+#ifdef _WIN32
+#include <conio.h>
+#include <windows.h>
+#else
+#include <termios.h>
+#include <unistd.h>
+#include <sys/ioctl.h>
+#endif
 
 // Static member initialization
 KolosalCLI *KolosalCLI::s_instance = nullptr;
@@ -360,7 +367,11 @@ std::string KolosalCLI::selectModel()
 
         // Fallback to sample menu
         models = generateSampleModels();
+#ifdef _WIN32
         Sleep(2000);
+#else
+        sleep(2);
+#endif
     }
 
     // Add navigation option
@@ -388,7 +399,11 @@ ModelFile KolosalCLI::selectModelFile(const std::string &modelId)
         std::cout << "No .gguf files found. Showing sample files...\n\n";
         // Fallback to sample files with quantization info
         modelFiles = generateSampleFiles(modelId);
+#ifdef _WIN32
         Sleep(2000);
+#else
+        sleep(2);
+#endif
     }
     std::cout << "Found " << modelFiles.size() << " .gguf file(s)!\n\n";
 

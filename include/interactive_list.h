@@ -4,7 +4,33 @@
 #include <string>
 #include <vector>
 #include <functional>
+
+#ifdef _WIN32
 #include <windows.h>
+#include <conio.h>
+#else
+#include <termios.h>
+#include <unistd.h>
+#include <sys/ioctl.h>
+#include <sys/time.h>
+#include <sys/select.h>
+
+// Define Windows-style color constants for Linux compatibility
+#define FOREGROUND_BLUE         1
+#define FOREGROUND_GREEN        2
+#define FOREGROUND_RED          4
+#define FOREGROUND_INTENSITY    8
+#define BACKGROUND_BLUE         16
+#define BACKGROUND_GREEN        32
+#define BACKGROUND_RED          64
+#define BACKGROUND_INTENSITY    128
+
+// Linux-specific function declarations
+int getch();
+int kbhit();
+void msleep(int milliseconds);
+unsigned long getTickCount();
+#endif
 
 /**
  * @brief Interactive console-based list widget with search functionality
@@ -18,8 +44,15 @@ private:
     size_t viewportTop;
     size_t maxDisplayItems;
     bool isSearchMode;
+    
+#ifdef _WIN32
     HANDLE hConsole;
     CONSOLE_SCREEN_BUFFER_INFO csbi;
+#else
+    struct termios originalTermios;
+    int terminalWidth;
+    int terminalHeight;
+#endif
 
 public:
     /**
