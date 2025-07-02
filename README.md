@@ -2,14 +2,16 @@
 
 **Cross-Platform Model Management** - Available for Windows and Linux  
 **Model Discovery** - Automatically fetches Kolosal models from Hugging Face  
+**Model Download & Deployment** - Download and run models locally with built-in server  
 **Interactive Selection** - Navigate through models and files with keyboard controls  
 **Smart Search** - Real-time filtering with search functionality  
 **Quantization Info** - Detailed information about model quantization types  
-**Fast Navigation** - Efficient viewport handling for large model lists  
-**User-Friendly** - Clear visual indicators and helpful instructions  
+**Chat Interface** - Direct chat interaction with loaded models  
+**Server Management** - Start, stop, and manage background inference server  
 **Smart Caching** - Intelligent caching system reduces API calls and improves performance  
+**Configuration System** - Comprehensive YAML/JSON configuration support  
 
-A cross-platform command-line interface for browsing and managing Kolosal language models from Hugging Face. Features an interactive console interface for selecting models and quantized .gguf files. **Now with full Linux support!**
+A cross-platform command-line interface for browsing, downloading, and running Kolosal language models from Hugging Face. Features an interactive console interface for selecting models, automatic downloading, and built-in inference server capabilities. **Now with full Linux support and local model execution!**
 
 ## Platform Support
 
@@ -19,12 +21,16 @@ A cross-platform command-line interface for browsing and managing Kolosal langua
 
 ## Features
 
-**Model Discovery** - Automatically fetches Kolosal models from Hugging Face
-**Interactive Selection** - Navigate through models and files with keyboard controls
-**Smart Search** - Real-time filtering with search functionality
-**Quantization Info** - Detailed information about model quantization types
-**Fast Navigation** - Efficient viewport handling for large model lists
-**User-Friendly** - Clear visual indicators and helpful instructions
+**Model Discovery** - Automatically fetches Kolosal models from Hugging Face  
+**Model Download** - Download GGUF model files directly to your local machine  
+**Server Management** - Built-in inference server with start/stop capabilities  
+**Chat Interface** - Direct chat interaction with loaded models via CLI or API  
+**Interactive Selection** - Navigate through models and files with keyboard controls  
+**Smart Search** - Real-time filtering with search functionality  
+**Quantization Info** - Detailed information about model quantization types  
+**Configuration System** - Comprehensive YAML/JSON configuration support  
+**Progress Monitoring** - Real-time download progress with size estimates  
+**Background Operations** - Server runs in background for continuous availability
 
 ## Supported Quantization Types
 
@@ -49,6 +55,9 @@ include/           # Header files
 ├── hugging_face_client.h # Hugging Face API client
 ├── interactive_list.h    # Console UI component
 ├── cache_manager.h       # Smart caching system
+├── kolosal_server_client.h # Server management and communication
+├── command_manager.h     # Command parsing and execution
+├── loading_animation.h   # Progress indicators
 └── kolosal_cli.h        # Main application logic
 
 src/              # Implementation files
@@ -57,33 +66,60 @@ src/              # Implementation files
 ├── hugging_face_client.cpp
 ├── interactive_list.cpp
 ├── cache_manager.cpp
+├── kolosal_server_client.cpp
+├── command_manager.cpp
+├── loading_animation.cpp
 ├── kolosal_cli.cpp
 └── main.cpp             # Entry point
+
+kolosal-server/   # Integrated inference server
+├── src/                 # Server source code
+├── include/             # Server headers
+├── docs/                # Server documentation
+└── config.yaml          # Server configuration
 ```
+
+### Integrated Components
+
+- **CLI Interface**: Interactive model browsing and selection
+- **Download Engine**: Multi-threaded model file downloading
+- **Inference Server**: Built-in HTTP server for model inference
+- **Configuration System**: YAML/JSON-based configuration management
+- **Cache Management**: Intelligent caching for offline capability
 
 See [ARCHITECTURE.md](docs/ARCHITECTURE.md) for detailed documentation.
 
-## Smart Caching System
+## Smart Caching & Model Management
 
-Kolosal CLI includes an intelligent caching mechanism that significantly improves performance:
+Kolosal CLI includes an intelligent caching and model management system that significantly improves performance:
 
-### Features
+### Caching Features
 - **Two-Level Cache**: In-memory and persistent disk storage
 - **Automatic TTL**: Models (1 hour), Model Files (30 minutes)
-- **Cache Management**: Interactive menu for cache operations
+- **Download Cache**: Downloaded models are cached locally
+- **Configuration Cache**: Server and model configurations are cached
 - **Cross-Platform**: Works on Windows, Linux, and macOS
+
+### Model Storage
+- **Local Storage**: Downloaded models stored in user directory
+- **Automatic Organization**: Models organized by repository and version
+- **Space Management**: Built-in tools for managing disk usage
+- **Integrity Checking**: Automatic validation of downloaded files
 
 ### Benefits
 - **Faster Startup**: Cached data loads instantly
 - **Reduced API Calls**: Less network traffic to Hugging Face
 - **Offline Capability**: Access recently cached data without internet
-- **User Control**: Clear cache when needed
+- **Local Inference**: Run models locally without internet connection
+- **Bandwidth Efficiency**: Resume interrupted downloads
 
-### Cache Management Menu
-- Continue to Model Selection
-- Clear Cache
-- View Cache Status
-- Exit Application
+### Cache Management
+The application provides interactive cache management:
+- **Continue to Model Selection** - Proceed with normal operation
+- **Clear Cache** - Remove all cached data
+- **View Cache Status** - See current cache usage and statistics
+- **Model Management** - Remove specific downloaded models
+- **Exit Application** - Clean shutdown
 
 See [CACHING.md](docs/CACHING.md) for detailed information.
 
@@ -110,11 +146,6 @@ See [CACHING.md](docs/CACHING.md) for detailed information.
 
 1. **Install dependencies:**
    ```bash
-   # Run the automated installer
-   chmod +x install-linux-deps.sh
-   ./install-linux-deps.sh
-   
-   # Or install manually:
    # Ubuntu/Debian:
    sudo apt install build-essential cmake git libcurl4-openssl-dev libssl-dev zlib1g-dev
    
@@ -127,11 +158,6 @@ See [CACHING.md](docs/CACHING.md) for detailed information.
 
 2. **Build the project:**
    ```bash
-   # Run the automated build script
-   chmod +x build-linux.sh
-   ./build-linux.sh
-   
-   # Or build manually:
    mkdir build && cd build
    cmake .. -DCMAKE_BUILD_TYPE=Release
    make -j$(nproc)
@@ -139,7 +165,6 @@ See [CACHING.md](docs/CACHING.md) for detailed information.
 
 3. **Run the application:**
    ```bash
-   cd build
    ./kolosal-cli
    ```
 
@@ -299,11 +324,77 @@ dpkg -l | grep kolosal
 
 3. **Build fails with permission errors:**
    ```bash
-   # Ensure scripts are executable
-   chmod +x build-linux.sh install-linux-deps.sh
+   # Make sure you have proper permissions for the build directory
+   sudo chown -R $USER:$USER ./build
+   ```
+
+4. **Server fails to start:**
+   ```bash
+   # Check if port is available
+   netstat -tlnp | grep :8080
+   
+   # Or use a different port in config.yaml
+   server:
+     port: "8081"
+   ```
+
+#### Server Issues
+
+1. **Port already in use:**
+   ```bash
+   # Find process using the port
+   lsof -i :8080
+   
+   # Kill the process or change port in config.yaml
+   ```
+
+2. **Model loading failures:**
+   ```bash
+   # Check model file integrity
+   file ./models/model.gguf
+   
+   # Verify disk space
+   df -h ./models/
+   ```
+
+3. **Memory issues:**
+   ```bash
+   # Monitor memory usage
+   htop
+   
+   # Reduce model context size in config.yaml
+   models:
+     - load_params:
+         n_ctx: 1024  # Reduce from 2048
+   ```
+
+4. **Permission denied errors:**
+   ```bash
+   # Fix file permissions
+   chmod +x kolosal-cli
+   chmod -R 755 ./models/
    ```
 
 ## Usage
+
+### Command Line Options
+
+```bash
+kolosal-cli [options] [repository_url_or_id]
+
+Options:
+  --help, -h        Show help message
+  --stop-server     Stop the background Kolosal server
+
+Examples:
+  kolosal-cli                                    # Browse all kolosal models
+  kolosal-cli microsoft/DialoGPT-medium          # Direct access to model
+  kolosal-cli https://huggingface.co/microsoft/DialoGPT-medium
+  kolosal-cli --stop-server                      # Stop the background server
+
+Arguments:
+  repository_url_or_id  Hugging Face repository URL or ID (e.g., owner/model-name)
+```
 
 ### Navigation Controls
 
@@ -318,8 +409,9 @@ dpkg -l | grep kolosal
 
 1. **Model Selection**: Browse available Kolosal models from Hugging Face
 2. **File Selection**: Choose from available .gguf files for the selected model
-3. **Information Display**: View details about the selected model and file
-4. **Download URL**: Get the direct download link for the model file
+3. **Download**: Automatic download of selected model file to local storage
+4. **Server Management**: Option to start/stop the background inference server
+5. **Chat Interface**: Direct interaction with loaded models
 
 ### Search Functionality
 
@@ -327,27 +419,87 @@ dpkg -l | grep kolosal
 - Type to filter models/files in real-time
 - Press `Backspace` to edit or clear search
 - Press `Enter` or arrow keys to exit search mode
+- Search works across model names, descriptions, and file types
 
-## Error Handling
+### Download Progress
+
+When downloading models, the CLI displays:
+- **Real-time Progress** - Current download status and speed
+- **Size Information** - Downloaded vs. total file size
+- **Time Estimates** - Estimated time remaining
+- **Background Operation** - Downloads continue while browsing other models
+- **Cancellation** - Ability to cancel active downloads
+
+### Server Configuration
+
+The application includes a built-in inference server that can be configured via `config.yaml`:
+
+```yaml
+server:
+  port: "8080"
+  host: "0.0.0.0"
+  max_connections: 100
+
+logging:
+  level: "INFO"
+  file: "server.log"
+
+models:
+  - id: "example-model"
+    path: "./models/model.gguf"
+    load_immediately: false
+```
+
+For complete configuration options, see the [server documentation](kolosal-server/docs/CONFIGURATION.md).
+
+## Error Handling & Reliability
 
 The application gracefully handles various error conditions:
 
-- **Network Issues**: Falls back to sample data when API requests fail
-- **Empty Results**: Provides helpful messages and suggestions
+### Network & API Issues
+- **Connection Failures**: Automatic retry with exponential backoff
 - **API Errors**: Clear error reporting with debug information
+- **Rate Limiting**: Respects Hugging Face API limits with automatic throttling
+- **Timeout Handling**: Configurable timeouts for downloads and API calls
+
+### Download Management
+- **Resume Support**: Interrupted downloads can be resumed
+- **Corruption Detection**: Automatic validation of downloaded files
+- **Disk Space**: Pre-download space checking and management
+- **Permission Errors**: Clear guidance for file system issues
+
+### Server Operations
+- **Port Conflicts**: Automatic port detection and alternative suggestions
+- **Model Loading**: Graceful fallback when models fail to load
+- **Memory Management**: Automatic cleanup and memory optimization
+- **Configuration Errors**: Detailed validation with helpful error messages
+
+### Fallback Mechanisms
+- **Sample Data**: Falls back to sample data when API requests fail
+- **Offline Mode**: Cached data remains available without internet
+- **Default Configuration**: Sensible defaults when configuration is missing
+- **Emergency Stop**: Safe shutdown procedures for all operations
 
 ## Dependencies
 
 ### Windows
 - [libcurl](https://curl.se/libcurl/) - HTTP client library (bundled)
 - [nlohmann/json](https://github.com/nlohmann/json) - JSON parsing library (bundled)
+- [yaml-cpp](https://github.com/jbeder/yaml-cpp) - YAML configuration parsing (bundled)
 - Windows Console API - For interactive terminal features
 
 ### Linux  
 - [libcurl](https://curl.se/libcurl/) - HTTP client library (system package)
 - [nlohmann/json](https://github.com/nlohmann/json) - JSON parsing library (bundled)
+- [yaml-cpp](https://github.com/jbeder/yaml-cpp) - YAML configuration parsing (bundled)
 - OpenSSL/TLS - For secure connections
 - Standard POSIX libraries - For terminal and system operations
+
+### Server Components
+- **llama.cpp** - High-performance LLM inference engine (integrated)
+- **HTTP Server** - Custom lightweight HTTP server for API endpoints
+- **Model Management** - Automatic model loading and memory management
+- **Authentication** - API key and rate limiting support
 
 ## Linux-Specific Features
 
@@ -360,23 +512,152 @@ The application gracefully handles various error conditions:
 
 For detailed Linux setup and usage instructions, see [LINUX.md](LINUX.md).
 
-## Future Features
+## Current Features
 
-- **File Download** - Direct downloading of selected model files
-- **Configuration** - Customizable settings and preferences
-- **Progress Bars** - Visual progress indicators for downloads
-- **Model Management** - Local model organization and management
-- **Cross-Platform UI** - Enhanced compatibility across operating systems
+- **Model Discovery & Download** - Browse and download GGUF model files from Hugging Face
+- **Integrated Inference Server** - Built-in HTTP server for local model inference
+- **Chat Interface** - Direct chat interaction with loaded models
+- **Server Management** - Start, stop, and configure background server operations
+- **Configuration System** - Comprehensive YAML/JSON configuration support
+- **Progress Monitoring** - Real-time download progress with detailed information
+- **Authentication** - API key support and rate limiting for server endpoints
+- **CORS Support** - Cross-origin resource sharing for web integration
+
+## Roadmap & Future Features
+
+- **Model Management UI** - Web-based interface for model administration
+- **Multiple Model Support** - Concurrent loading and switching between models
+- **Plugin System** - Extensible architecture for custom model providers
+- **Docker Integration** - Containerized deployment options
+- **Performance Metrics** - Real-time inference performance monitoring
+- **Model Quantization** - Built-in quantization tools for model optimization
 
 ## Contributing
 
 Contributions are welcome! The modular architecture makes it easy to add new features:
 
-- Add new API endpoints in `HuggingFaceClient`
-- Enhance UI components in `InteractiveList`
-- Extend model file utilities in `ModelFileUtils`
-- Improve error handling and user experience
+- **Add new API endpoints** in `KolosalServerClient` and server components
+- **Enhance UI components** in `InteractiveList` and command management
+- **Extend model file utilities** in `ModelFileUtils` and download management
+- **Improve server functionality** in the `kolosal-server` submodule
+- **Add configuration options** in the YAML/JSON configuration system
+- **Enhance error handling** and user experience across all components
+
+### Development Setup
+
+1. Fork the repository
+2. Create a feature branch
+3. Follow the existing code style and architecture
+4. Add tests for new functionality
+5. Update documentation as needed
+6. Submit a pull request
+
+For server development, see [kolosal-server/docs/DEVELOPER_GUIDE.md](kolosal-server/docs/DEVELOPER_GUIDE.md).
 
 ## License
 
 This project is licensed under the MIT License - see the [LICENSE](LICENSE) file for details.
+
+## Kolosal Server Integration
+
+Kolosal CLI includes a fully integrated inference server that provides:
+
+### Server Features
+- **HTTP API** - RESTful API for model inference and management
+- **Model Loading** - Automatic loading and management of GGUF models
+- **Chat Completions** - OpenAI-compatible chat completion endpoints
+- **Streaming Responses** - Real-time streaming for interactive applications
+- **Multi-Model Support** - Load and manage multiple models simultaneously
+- **GPU Acceleration** - CUDA support for high-performance inference
+- **Rate Limiting** - Configurable rate limiting and authentication
+- **CORS Support** - Cross-origin requests for web applications
+
+### API Endpoints
+
+The server provides several key endpoints:
+
+```
+GET  /health                     # Server health check
+GET  /v1/engines                 # List available models
+POST /v1/engines                 # Add new model/engine
+POST /v1/chat/completions        # Chat completion (OpenAI compatible)
+GET  /v1/download-progress/{id}  # Download progress monitoring
+POST /v1/cancel-download/{id}    # Cancel model download
+```
+
+### Configuration
+
+Server behavior is controlled via `config.yaml`:
+
+```yaml
+server:
+  port: "8080"
+  host: "0.0.0.0"
+  max_connections: 100
+  worker_threads: 0  # Auto-detect CPU cores
+
+logging:
+  level: "INFO"
+  file: "server.log"
+  access_log: false
+
+auth:
+  enabled: true
+  require_api_key: false
+  rate_limit:
+    enabled: true
+    max_requests: 100
+    window_size: 60
+
+models:
+  - id: "default-model"
+    path: "./models/model.gguf"
+    load_immediately: false
+    load_params:
+      n_ctx: 2048
+      n_gpu_layers: 100
+```
+
+For complete configuration documentation, see [kolosal-server/docs/CONFIGURATION.md](kolosal-server/docs/CONFIGURATION.md).
+
+### Server Management
+
+The CLI provides commands to manage the server:
+
+```bash
+# Start with model browsing (server starts automatically)
+kolosal-cli
+
+# Stop the background server
+kolosal-cli --stop-server
+
+# Direct model specification
+kolosal-cli owner/model-name
+```
+
+### Integration Examples
+
+**Curl Example:**
+```bash
+# Chat with a loaded model
+curl -X POST http://localhost:8080/v1/chat/completions \
+  -H "Content-Type: application/json" \
+  -d '{
+    "engine": "model-id",
+    "messages": [{"role": "user", "content": "Hello!"}]
+  }'
+```
+
+**Python Example:**
+```python
+import requests
+
+response = requests.post(
+    "http://localhost:8080/v1/chat/completions",
+    json={
+        "engine": "model-id",
+        "messages": [{"role": "user", "content": "Hello!"}]
+    }
+)
+print(response.json())
+```
