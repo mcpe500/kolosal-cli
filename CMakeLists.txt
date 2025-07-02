@@ -6,9 +6,18 @@ project(kolosal-cli
   DESCRIPTION "Kolosal CLI - A Command Line Interface to use, deploy, and manage LLMs locally"
 )
 
+# Include UCM for runtime library management
+include(${CMAKE_SOURCE_DIR}/cmake/ucm.cmake)
+
+# Static link the runtime libraries
+ucm_set_runtime(STATIC)
+
 # Set C++ standard
 set(CMAKE_CXX_STANDARD 17)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
+
+# Print UCM flags for debugging
+ucm_print_flags()
 
 # Add the kolosal-server submodule
 add_subdirectory(kolosal-server)
@@ -61,75 +70,75 @@ file(GLOB_RECURSE HEADERS
 )
 
 # Add executable
-add_executable(kolosal-cli ${SOURCES} ${HEADERS})
+add_executable(kolosal ${SOURCES} ${HEADERS})
 
-# Make kolosal-cli depend on the server targets to ensure proper build order
-add_dependencies(kolosal-cli kolosal_server_exe kolosal_server)
+# Make kolosal depend on the server targets to ensure proper build order
+add_dependencies(kolosal kolosal_server_exe kolosal_server)
 
 # Link libraries
-target_link_libraries(kolosal-cli ${CURL_LIBRARY})
+target_link_libraries(kolosal ${CURL_LIBRARY})
 
 # Link yaml-cpp library from kolosal-server
-target_link_libraries(kolosal-cli yaml-cpp)
+target_link_libraries(kolosal yaml-cpp)
 
 # Platform-specific linking and post-build steps
 if(WIN32)
     # Windows-specific libraries
-    target_link_libraries(kolosal-cli ws2_32 wldap32 crypt32 normaliz)
+    target_link_libraries(kolosal ws2_32 wldap32 crypt32 normaliz)
     
     # Copy curl DLL to output directory
-    add_custom_command(TARGET kolosal-cli POST_BUILD
+    add_custom_command(TARGET kolosal POST_BUILD
         COMMAND ${CMAKE_COMMAND} -E copy_if_different
         "${CURL_DIR}/bin/libcurl.dll"
-        $<TARGET_FILE_DIR:kolosal-cli>)
+        $<TARGET_FILE_DIR:kolosal>)
     
     # Copy Kolosal server files from built submodule to output directory
-    add_custom_command(TARGET kolosal-cli POST_BUILD
+    add_custom_command(TARGET kolosal POST_BUILD
         COMMAND ${CMAKE_COMMAND} -E copy_if_different
         $<TARGET_FILE:kolosal_server>
-        $<TARGET_FILE_DIR:kolosal-cli>/kolosal_server.dll)
+        $<TARGET_FILE_DIR:kolosal>/kolosal_server.dll)
     
-    add_custom_command(TARGET kolosal-cli POST_BUILD
+    add_custom_command(TARGET kolosal POST_BUILD
         COMMAND ${CMAKE_COMMAND} -E copy_if_different
         $<TARGET_FILE:kolosal_server_exe>
-        $<TARGET_FILE_DIR:kolosal-cli>/kolosal-server.exe)
+        $<TARGET_FILE_DIR:kolosal>/kolosal-server.exe)
 else()
     # Linux-specific libraries
-    target_link_libraries(kolosal-cli pthread dl)
+    target_link_libraries(kolosal pthread dl)
     
     # On Linux, check for required system libraries
     find_package(OpenSSL)
     if(OpenSSL_FOUND)
-        target_link_libraries(kolosal-cli OpenSSL::SSL OpenSSL::Crypto)
+        target_link_libraries(kolosal OpenSSL::SSL OpenSSL::Crypto)
     endif()
     
     find_package(ZLIB)
     if(ZLIB_FOUND)
-        target_link_libraries(kolosal-cli ZLIB::ZLIB)
+        target_link_libraries(kolosal ZLIB::ZLIB)
     endif()
     
     # Copy Kolosal server files from built submodule to output directory
-    add_custom_command(TARGET kolosal-cli POST_BUILD
+    add_custom_command(TARGET kolosal POST_BUILD
         COMMAND ${CMAKE_COMMAND} -E copy_if_different
         $<TARGET_FILE:kolosal_server>
-        $<TARGET_FILE_DIR:kolosal-cli>/libkolosal_server.so)
+        $<TARGET_FILE_DIR:kolosal>/libkolosal_server.so)
     
-    add_custom_command(TARGET kolosal-cli POST_BUILD
+    add_custom_command(TARGET kolosal POST_BUILD
         COMMAND ${CMAKE_COMMAND} -E copy_if_different
         $<TARGET_FILE:kolosal_server_exe>
-        $<TARGET_FILE_DIR:kolosal-cli>/kolosal-server)
+        $<TARGET_FILE_DIR:kolosal>/kolosal-server)
 endif()
 
 # Copy config.yaml to output directory for all platforms
-add_custom_command(TARGET kolosal-cli POST_BUILD
+add_custom_command(TARGET kolosal POST_BUILD
     COMMAND ${CMAKE_COMMAND} -E copy_if_different
     "${CMAKE_CURRENT_SOURCE_DIR}/config.yaml"
-    $<TARGET_FILE_DIR:kolosal-cli>/config.yaml)
+    $<TARGET_FILE_DIR:kolosal>/config.yaml)
 
 # Installation rules
 if(UNIX)
-    # Install the main executable
-    install(TARGETS kolosal-cli 
+    # Install the main executable (now named kolosal)
+    install(TARGETS kolosal
         RUNTIME DESTINATION bin
     )
     
@@ -152,8 +161,8 @@ Version=1.0
 Type=Application
 Name=Kolosal CLI
 Comment=Command Line Interface for Kolosal LLM Management
-Exec=kolosal-cli
-Icon=kolosal-cli
+Exec=kolosal
+Icon=kolosal
 Terminal=true
 Categories=Development;Science;
 ")
@@ -181,3 +190,38 @@ endif()
 message(STATUS "  Install prefix: ${CMAKE_INSTALL_PREFIX}")
 message(STATUS "=====================================================")
 message(STATUS "")
+
+# CPack configuration for packaging
+set(CPACK_GENERATOR "DEB")
+set(CPACK_PACKAGE_NAME "kolosal")
+set(CPACK_PACKAGE_VERSION "${PROJECT_VERSION}")
+set(CPACK_PACKAGE_DESCRIPTION_SUMMARY "Kolosal CLI - Command Line Interface for LLM Management")
+set(CPACK_PACKAGE_DESCRIPTION "A Command Line Interface to use, deploy, and manage Large Language Models (LLMs) locally with the Kolosal framework.")
+set(CPACK_PACKAGE_VENDOR "Kolosal Project")
+set(CPACK_PACKAGE_CONTACT "dev@kolosal.com")
+set(CPACK_PACKAGE_HOMEPAGE_URL "https://github.com/kolosal/kolosal-cli")
+
+# DEB package specific settings
+set(CPACK_DEBIAN_PACKAGE_MAINTAINER "Kolosal Project <dev@kolosal.com>")
+set(CPACK_DEBIAN_PACKAGE_SECTION "devel")
+set(CPACK_DEBIAN_PACKAGE_PRIORITY "optional")
+set(CPACK_DEBIAN_PACKAGE_DEPENDS "libc6 (>= 2.17), libssl3 (>= 3.0.0), libcurl4 (>= 7.16.2), zlib1g (>= 1:1.1.4)")
+set(CPACK_DEBIAN_FILE_NAME DEB-DEFAULT)
+
+# Ensure the package installs files correctly
+set(CPACK_COMPONENTS_ALL Runtime)
+set(CPACK_DEB_COMPONENT_INSTALL OFF)
+
+# Architecture detection
+if(CMAKE_SYSTEM_PROCESSOR MATCHES "x86_64|AMD64")
+    set(CPACK_DEBIAN_PACKAGE_ARCHITECTURE "amd64")
+elseif(CMAKE_SYSTEM_PROCESSOR MATCHES "aarch64|ARM64")
+    set(CPACK_DEBIAN_PACKAGE_ARCHITECTURE "arm64")
+else()
+    set(CPACK_DEBIAN_PACKAGE_ARCHITECTURE "all")
+endif()
+
+include(CPack)
+
+message(STATUS "CPack configured for DEB package generation")
+message(STATUS "  Run 'make package' to create the installer")

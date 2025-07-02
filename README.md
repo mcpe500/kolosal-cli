@@ -200,6 +200,76 @@ See [CACHING.md](docs/CACHING.md) for detailed information.
    ./kolosal-cli
    ```
 
+## Packaging
+
+Kolosal CLI supports creating distributable packages for easy installation on Linux systems.
+
+### Creating a DEB Package (Linux)
+
+1. **Build the project for packaging:**
+   ```bash
+   mkdir build-release
+   cd build-release
+   cmake .. -DCMAKE_BUILD_TYPE=Release
+   make -j$(nproc)
+   ```
+
+2. **Create the DEB package:**
+   ```bash
+   make package
+   ```
+
+   This will create a `.deb` file named `kolosal_1.0.0_amd64.deb` (architecture may vary).
+
+3. **Install the package:**
+   ```bash
+   sudo dpkg -i kolosal_1.0.0_amd64.deb
+   ```
+
+4. **Verify installation:**
+   ```bash
+   kolosal --help
+   ```
+
+   After installation, you can run the CLI from anywhere using just `kolosal`.
+
+### Package Features
+
+- **System Integration**: Installs to `/usr/bin/kolosal` for system-wide access
+- **Dependencies**: Automatically handles system dependencies (libcurl, OpenSSL, etc.)
+- **Configuration**: Installs default config to `/etc/kolosal/config.yaml`
+- **Desktop Entry**: Includes desktop file for GUI environments
+- **Clean Uninstall**: Easy removal with `sudo dpkg -r kolosal`
+
+### Uninstalling
+
+To remove the installed package:
+
+```bash
+# Remove package but keep configuration files
+sudo dpkg -r kolosal
+
+# Remove package and all configuration files
+sudo dpkg -P kolosal
+
+# Alternative using apt (if available)
+sudo apt remove kolosal
+# or
+sudo apt purge kolosal
+```
+
+### Manual Verification
+
+Check what files were installed:
+```bash
+dpkg -L kolosal
+```
+
+Verify package status:
+```bash
+dpkg -l | grep kolosal
+```
+
 ### Platform Support
 
 - ✅ **Windows** - Fully supported with Visual Studio and MinGW

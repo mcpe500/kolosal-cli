@@ -47,3 +47,5 @@ kolosal-server
 
 # Cache files
 .cache/
+
+install/
