@@ -842,24 +842,22 @@ bool KolosalServerClient::chatCompletion(const std::string& engineId, const std:
             {"messages", json::array({
                 {{"role", "user"}, {"content", message}}
             })},
-            {"stream", false},
-            {"max_tokens", 2048},
-            {"temperature", 0.7}
+            {"streaming", false},
+            {"maxNewTokens", 2048},
+            {"temperature", 0.7},
+            {"topP", 0.9}
         };
 
         std::string jsonResponse;
-        if (!makePostRequest("/v1/chat/completions", requestBody.dump(), jsonResponse)) {
+        if (!makePostRequest("/v1/inference/chat/completions", requestBody.dump(), jsonResponse)) {
             return false;
         }
 
-        // Parse the response
+        // Parse the response - using inference format
         json responseJson = json::parse(jsonResponse);
-        if (responseJson.contains("choices") && !responseJson["choices"].empty()) {
-            if (responseJson["choices"][0].contains("message") && 
-                responseJson["choices"][0]["message"].contains("content")) {
-                response = responseJson["choices"][0]["message"]["content"];
-                return true;
-            }
+        if (responseJson.contains("text")) {
+            response = responseJson["text"].get<std::string>();
+            return true;
         }
 
         return false;
@@ -869,7 +867,7 @@ bool KolosalServerClient::chatCompletion(const std::string& engineId, const std:
 }
 
 bool KolosalServerClient::streamingChatCompletion(const std::string& engineId, const std::string& message, 
-                                                std::function<void(const std::string&)> responseCallback)
+                                                std::function<void(const std::string&, double, double)> responseCallback)
 {
     try {
         json requestBody = {
@@ -877,14 +875,14 @@ bool KolosalServerClient::streamingChatCompletion(const std::string& engineId, c
             {"messages", json::array({
                 {{"role", "user"}, {"content", message}}
             })},
-            {"stream", true},
-            {"max_tokens", 2048},
+            {"streaming", true},
+            {"maxNewTokens", 2048},
             {"temperature", 0.7},
-            {"top_p", 0.9}
+            {"topP", 0.9}
         };
 
         // For streaming, we need to make a custom HTTP request to handle Server-Sent Events
-        std::string url = m_baseUrl + "/v1/chat/completions";
+        std::string url = m_baseUrl + "/v1/inference/chat/completions";
         std::string headers = "Content-Type: application/json\r\n";
         headers += "Accept: text/event-stream\r\n";
         headers += "Cache-Control: no-cache\r\n";
@@ -901,27 +899,26 @@ bool KolosalServerClient::streamingChatCompletion(const std::string& engineId, c
                 try {
                     json chunkJson = json::parse(jsonData);
                     
-                    if (chunkJson.contains("choices") && !chunkJson["choices"].empty()) {
-                        auto& choice = chunkJson["choices"][0];
-                        if (choice.contains("delta")) {
-                            auto& delta = choice["delta"];
-                            if (delta.contains("content")) {
-                                std::string content = delta["content"];
-                                if (!content.empty()) {
-                                    responseCallback(content);
-                                    receivedContent = true;
-                                }
-                            }
-                            // Also check for role in first chunk
-                            if (delta.contains("role")) {
-                                receivedContent = true; // Mark as having received valid streaming data
-                            }
-                        }
+                    // Handle inference chat completion response format
+                    if (chunkJson.contains("text")) {
+                        std::string content = chunkJson["text"].get<std::string>();
+                        double tps = chunkJson.value("tps", 0.0);
+                        double ttft = chunkJson.value("ttft", 0.0);
                         
-                        // Check for finish_reason to detect end of stream
-                        if (choice.contains("finish_reason") && !choice["finish_reason"].is_null()) {
-                            streamComplete = true;
+                        if (!content.empty()) {
+                            responseCallback(content, tps, ttft);
+                            receivedContent = true;
                         }
+                    }
+                    
+                    // Check for completion - final chunk has partial=false
+                    if (chunkJson.contains("partial") && !chunkJson["partial"].get<bool>()) {
+                        streamComplete = true;
+                    }
+                    
+                    // Check for error
+                    if (chunkJson.contains("error")) {
+                        streamComplete = true;
                     }
                 } catch (const std::exception& e) {
                     // Silently ignore JSON parse errors for malformed chunks

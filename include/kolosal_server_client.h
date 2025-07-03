@@ -120,11 +120,11 @@ public:
      * @brief Send a streaming chat completion request to the server
      * @param engineId Engine ID to use for chat completion
      * @param message User message to send
-     * @param responseCallback Callback function called for each token/chunk received
+     * @param responseCallback Callback function called for each token/chunk received (text, tps, ttft)
      * @return True if chat completion was successful, false otherwise
      */
     bool streamingChatCompletion(const std::string& engineId, const std::string& message, 
-                               std::function<void(const std::string&)> responseCallback);
+                               std::function<void(const std::string&, double, double)> responseCallback);
 
 private:
     std::string m_baseUrl;

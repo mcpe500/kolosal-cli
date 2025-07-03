@@ -982,8 +982,33 @@ bool KolosalCLI::startChatInterface(const std::string& engineId)
             }
             // Spinner will be cleared by main thread after first token
         });
+        
+        // Variables to track metrics and line state
+        double currentTps = 0.0;
+        double ttft = 0.0;
+        bool hasMetrics = false;
+        bool metricsShown = false;
+        bool lastWasNewline = false;
+        int currentColumn = 0;  // Track horizontal cursor position
+        int terminalWidth = 80; // Default width, will be updated
+        
+#ifdef _WIN32
+        // Get actual terminal width on Windows
+        CONSOLE_SCREEN_BUFFER_INFO csbi;
+        HANDLE hConsole = GetStdHandle(STD_OUTPUT_HANDLE);
+        if (GetConsoleScreenBufferInfo(hConsole, &csbi)) {
+            terminalWidth = csbi.srWindow.Right - csbi.srWindow.Left + 1;
+        }
+#else
+        // Get actual terminal width on Linux
+        struct winsize w;
+        if (ioctl(STDOUT_FILENO, TIOCGWINSZ, &w) == 0) {
+            terminalWidth = w.ws_col;
+        }
+#endif
+        
         bool success = m_serverClient->streamingChatCompletion(engineId, userInput,
-            [&](const std::string& chunk) {
+            [&](const std::string& chunk, double tps, double timeToFirstToken) {
                 if (!gotFirstChunk) {
                     gotFirstChunk = true;
                     // Move to start of spinner line, clear it, then print prompt and first token
@@ -991,17 +1016,117 @@ bool KolosalCLI::startChatInterface(const std::string& engineId)
                     std::cout << "\r\033[32m> \033[32m";
                     printedPrompt = true;
                 }
+                
+                // Update metrics
+                if (tps > 0) {
+                    currentTps = tps;
+                    hasMetrics = true;
+                }
+                if (timeToFirstToken > 0) {
+                    ttft = timeToFirstToken;
+                }
+                
+                // Check if we need to clear previous metrics due to newline
+                bool containsNewline = chunk.find('\n') != std::string::npos;
+                if (containsNewline && metricsShown) {
+                    // Clear the metrics line before printing the chunk
+                    std::cout << "\033[s";  // Save cursor position
+                    std::cout << "\033[B\033[1G\033[2K"; // Move down, go to column 1, clear entire line
+                    std::cout << "\033[u";  // Restore cursor position
+                    metricsShown = false;
+                }
+                
+                // Calculate if this chunk will cause line wrapping
+                bool willWrap = false;
+                int chunkVisibleLength = 0;
+                for (char c : chunk) {
+                    if (c == '\n') {
+                        currentColumn = 0;
+                    } else if (c >= 32 && c <= 126) { // Printable characters
+                        chunkVisibleLength++;
+                        if (currentColumn + chunkVisibleLength >= terminalWidth) {
+                            willWrap = true;
+                            break;
+                        }
+                    }
+                }
+                
+                // Clear metrics if line wrapping will occur
+                if (willWrap && metricsShown) {
+                    std::cout << "\033[s";  // Save cursor position
+                    std::cout << "\033[B\033[1G\033[2K"; // Move down, go to column 1, clear entire line
+                    std::cout << "\033[u";  // Restore cursor position
+                    metricsShown = false;
+                }
+                
                 std::cout << chunk;
                 std::cout.flush();
                 fullResponse += chunk;
+                
+                // Update cursor position tracking
+                for (char c : chunk) {
+                    if (c == '\n') {
+                        currentColumn = 0;
+                    } else if (c >= 32 && c <= 126) { // Printable characters
+                        currentColumn++;
+                        if (currentColumn >= terminalWidth) {
+                            currentColumn = 0; // Wrapped to new line
+                        }
+                    }
+                }
+                
+                // Update line state and clear metrics if newline was processed
+                if (containsNewline || willWrap) {
+                    lastWasNewline = true;
+                    // Clear metrics again after printing the chunk to ensure they're gone
+                    if (metricsShown) {
+                        std::cout << "\033[s";  // Save cursor position
+                        std::cout << "\033[B\033[1G\033[2K"; // Move down, go to column 1, clear entire line
+                        std::cout << "\033[u";  // Restore cursor position
+                        metricsShown = false;
+                    }
+                } else {
+                    lastWasNewline = false;
+                }
+                
+                // Show metrics in real-time below the response (but not immediately after newlines)
+                if (hasMetrics && !lastWasNewline) {
+                    // Save current cursor position
+                    std::cout << "\033[s";
+                    
+                    // Move to next line and go to beginning of line, then clear and show metrics
+                    std::cout << "\033[B\033[1G\033[2K"; // Move down, go to column 1, clear line
+                    std::cout << "\033[90m"; // Dim gray color
+                    if (ttft > 0) {
+                        std::cout << "TTFT: " << std::fixed << std::setprecision(2) << ttft << "ms";
+                    }
+                    if (currentTps > 0) {
+                        if (ttft > 0) std::cout << " | ";
+                        std::cout << "TPS: " << std::fixed << std::setprecision(1) << currentTps;
+                    }
+                    std::cout << "\033[0m";
+                    metricsShown = true;
+                    
+                    // Restore cursor position
+                    std::cout << "\033[u";
+                    std::cout.flush();
+                }
             });
         gotFirstChunk = true;
         if (loadingThread.joinable()) loadingThread.join();
+        
         // If the model never sent any chunk, still print the prompt for consistency and clear spinner
         if (!printedPrompt) {
             loadingAnim.stop();
             std::cout << "\n\033[32m> \033[32m";
             std::cout.flush();
+        }
+
+        // Clear metrics line after completion to clean up
+        if (metricsShown) {
+            std::cout << "\033[s";  // Save cursor position
+            std::cout << "\033[B\033[1G\033[2K"; // Move down, go to column 1, clear entire line
+            std::cout << "\033[u";  // Restore cursor position
         }
 
         if (!success && fullResponse.empty())
@@ -1016,7 +1141,22 @@ bool KolosalCLI::startChatInterface(const std::string& engineId)
             chatHistory.push_back({"assistant", fullResponse});
         }
 
-        std::cout << "\033[0m" << std::endl;
+        std::cout << "\033[0m";
+        
+        // Display final metrics below the completed response
+        if (hasMetrics && (ttft > 0 || currentTps > 0)) {
+            std::cout << "\n\033[90m"; // New line and dim gray color
+            if (ttft > 0) {
+                std::cout << "TTFT: " << std::fixed << std::setprecision(2) << ttft << "ms";
+            }
+            if (currentTps > 0) {
+                if (ttft > 0) std::cout << " | ";
+                std::cout << "TPS: " << std::fixed << std::setprecision(1) << currentTps;
+            }
+            std::cout << "\033[0m"; // Reset color
+        }
+        
+        std::cout << std::endl;
     }
 
 #ifdef _WIN32
