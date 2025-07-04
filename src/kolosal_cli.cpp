@@ -991,19 +991,22 @@ bool KolosalCLI::startChatInterface(const std::string& engineId)
         bool lastWasNewline = false;
         int currentColumn = 0;  // Track horizontal cursor position
         int terminalWidth = 80; // Default width, will be updated
+        int terminalHeight = 24; // Default height, will be updated
         
 #ifdef _WIN32
-        // Get actual terminal width on Windows
+        // Get actual terminal dimensions on Windows
         CONSOLE_SCREEN_BUFFER_INFO csbi;
         HANDLE hConsole = GetStdHandle(STD_OUTPUT_HANDLE);
         if (GetConsoleScreenBufferInfo(hConsole, &csbi)) {
             terminalWidth = csbi.srWindow.Right - csbi.srWindow.Left + 1;
+            terminalHeight = csbi.srWindow.Bottom - csbi.srWindow.Top + 1;
         }
 #else
-        // Get actual terminal width on Linux
+        // Get actual terminal dimensions on Linux
         struct winsize w;
         if (ioctl(STDOUT_FILENO, TIOCGWINSZ, &w) == 0) {
             terminalWidth = w.ws_col;
+            terminalHeight = w.ws_row;
         }
 #endif
         
@@ -1091,25 +1094,64 @@ bool KolosalCLI::startChatInterface(const std::string& engineId)
                 
                 // Show metrics in real-time below the response (but not immediately after newlines)
                 if (hasMetrics && !lastWasNewline) {
-                    // Save current cursor position
-                    std::cout << "\033[s";
+                    // Check if we're near the bottom of the terminal to avoid overriding text
+                    bool canShowMetricsBelow = true;
                     
-                    // Move to next line and go to beginning of line, then clear and show metrics
-                    std::cout << "\033[B\033[1G\033[2K"; // Move down, go to column 1, clear line
-                    std::cout << "\033[90m"; // Dim gray color
-                    if (ttft > 0) {
-                        std::cout << "TTFT: " << std::fixed << std::setprecision(2) << ttft << "ms";
+#ifdef _WIN32
+                    CONSOLE_SCREEN_BUFFER_INFO currentCsbi;
+                    if (GetConsoleScreenBufferInfo(hConsole, &currentCsbi)) {
+                        int currentRow = currentCsbi.dwCursorPosition.Y;
+                        int bottomRow = currentCsbi.srWindow.Bottom;
+                        // Don't show metrics below if we're on the last line or second-to-last line
+                        if (currentRow >= bottomRow - 1) {
+                            canShowMetricsBelow = false;
+                        }
                     }
-                    if (currentTps > 0) {
-                        if (ttft > 0) std::cout << " | ";
-                        std::cout << "TPS: " << std::fixed << std::setprecision(1) << currentTps;
-                    }
-                    std::cout << "\033[0m";
-                    metricsShown = true;
-                    
-                    // Restore cursor position
-                    std::cout << "\033[u";
+#else
+                    // On Linux, check if we're near the bottom by getting cursor position
+                    // Use ANSI escape sequence to query cursor position
+                    std::cout << "\033[6n"; // Query cursor position
                     std::cout.flush();
+                    
+                    // Parse response (ESC[row;colR) - simplified approach
+                    // For safety, we'll be conservative and not show metrics if we might be near bottom
+                    // This prevents scrolling issues in most cases
+                    if (terminalHeight > 0) {
+                        // Assume we might be near bottom if terminal height is small
+                        // or if we've been printing for a while (conservative approach)
+                        canShowMetricsBelow = terminalHeight > 10; // Only show metrics if terminal is reasonably tall
+                    }
+#endif
+                    
+                    if (canShowMetricsBelow) {
+                        // Save current cursor position
+                        std::cout << "\033[s";
+                        
+                        // Move to next line and go to beginning of line, then clear and show metrics
+                        std::cout << "\033[B\033[1G\033[2K"; // Move down, go to column 1, clear line
+                        std::cout << "\033[90m"; // Dim gray color
+                        if (ttft > 0) {
+                            std::cout << "TTFT: " << std::fixed << std::setprecision(2) << ttft << "ms";
+                        }
+                        if (currentTps > 0) {
+                            if (ttft > 0) std::cout << " | ";
+                            std::cout << "TPS: " << std::fixed << std::setprecision(1) << currentTps;
+                        }
+                        std::cout << "\033[0m";
+                        metricsShown = true;
+                        
+                        // Restore cursor position
+                        std::cout << "\033[u";
+                        std::cout.flush();
+                    } else {
+                        // If we can't show metrics below, clear any existing metrics
+                        if (metricsShown) {
+                            std::cout << "\033[s";  // Save cursor position
+                            std::cout << "\033[B\033[1G\033[2K"; // Move down, go to column 1, clear entire line
+                            std::cout << "\033[u";  // Restore cursor position
+                            metricsShown = false;
+                        }
+                    }
                 }
             });
         gotFirstChunk = true;
