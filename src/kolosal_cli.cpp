@@ -27,6 +27,7 @@
 #include <termios.h>
 #include <unistd.h>
 #include <sys/ioctl.h>
+#include <fcntl.h>
 #endif
 
 // Static member initialization
@@ -1107,18 +1108,12 @@ bool KolosalCLI::startChatInterface(const std::string& engineId)
                         }
                     }
 #else
-                    // On Linux, check if we're near the bottom by getting cursor position
-                    // Use ANSI escape sequence to query cursor position
-                    std::cout << "\033[6n"; // Query cursor position
-                    std::cout.flush();
-                    
-                    // Parse response (ESC[row;colR) - simplified approach
-                    // For safety, we'll be conservative and not show metrics if we might be near bottom
-                    // This prevents scrolling issues in most cases
-                    if (terminalHeight > 0) {
-                        // Assume we might be near bottom if terminal height is small
-                        // or if we've been printing for a while (conservative approach)
-                        canShowMetricsBelow = terminalHeight > 10; // Only show metrics if terminal is reasonably tall
+                    // On Linux, use a simpler approach - don't try to query cursor position
+                    // as it can interfere with the output stream. Just check if terminal is tall enough.
+                    if (terminalHeight > 10) {
+                        canShowMetricsBelow = true;
+                    } else {
+                        canShowMetricsBelow = false;
                     }
 #endif
                     
@@ -1390,7 +1385,18 @@ std::string KolosalCLI::getInputWithRealTimeAutocomplete(const std::string& prom
     tcgetattr(STDIN_FILENO, &oldt);
     newt = oldt;
     newt.c_lflag &= ~(ICANON | ECHO);
+    newt.c_iflag &= ~(IXON | ICRNL); // Disable flow control and CR-to-NL mapping
     tcsetattr(STDIN_FILENO, TCSANOW, &newt);
+    
+    // Ensure stdout is flushed before starting input
+    std::cout.flush();
+    fflush(stdout);
+    
+    // Clear any pending input that might be in the buffer (like cursor position responses)
+    int flags = fcntl(STDIN_FILENO, F_GETFL, 0);
+    fcntl(STDIN_FILENO, F_SETFL, flags | O_NONBLOCK);
+    while (getchar() != EOF); // Drain any pending input
+    fcntl(STDIN_FILENO, F_SETFL, flags); // Restore blocking mode
     
     // Show initial hint text if input is empty
     if (input.empty()) {

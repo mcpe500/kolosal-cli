@@ -16,6 +16,17 @@ ucm_set_runtime(DYNAMIC)
 set(CMAKE_CXX_STANDARD 17)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
 
+# Options
+option(USE_CUDA "Enable CUDA support" OFF)
+option(USE_VULKAN "Enable Vulkan support" OFF)
+option(USE_MPI "Enable MPI support" OFF)
+option(ENABLE_NATIVE_OPTIMIZATION "Enable native CPU optimization (-march=native)" OFF)
+
+# Propagate options to subprojects
+set(USE_CUDA ${USE_CUDA} CACHE BOOL "Enable CUDA support" FORCE)
+set(USE_VULKAN ${USE_VULKAN} CACHE BOOL "Enable Vulkan support" FORCE)
+set(USE_MPI ${USE_MPI} CACHE BOOL "Enable MPI support" FORCE)
+
 # Print UCM flags for debugging
 ucm_print_flags()
 
@@ -131,25 +142,83 @@ else()
     # Linux-specific libraries
     target_link_libraries(kolosal pthread dl)
     
+    # Link filesystem library for C++17 std::filesystem on older GCC versions
+    if(CMAKE_CXX_COMPILER_ID STREQUAL "GNU" AND CMAKE_CXX_COMPILER_VERSION VERSION_LESS "9.0")
+        target_link_libraries(kolosal stdc++fs)
+        message(STATUS "Linking with stdc++fs for std::filesystem support on GCC < 9.0")
+    endif()
+    
     # On Linux, check for required system libraries
     find_package(OpenSSL)
     if(OpenSSL_FOUND)
         target_link_libraries(kolosal OpenSSL::SSL OpenSSL::Crypto)
+        message(STATUS "Found OpenSSL: ${OPENSSL_VERSION}")
+    else()
+        message(WARNING "OpenSSL not found. HTTPS features might not work properly. Install libssl-dev (Ubuntu/Debian) or openssl-devel (RHEL/CentOS)")
     endif()
     
     find_package(ZLIB)
     if(ZLIB_FOUND)
         target_link_libraries(kolosal ZLIB::ZLIB)
+        message(STATUS "Found zlib: ${ZLIB_VERSION_STRING}")
+    else()
+        message(WARNING "zlib not found. Install zlib1g-dev (Ubuntu/Debian) or zlib-devel (RHEL/CentOS)")
     endif()
     
-    # Copy Kolosal server shared library
-    copy_dll_if_exists(kolosal "$<TARGET_FILE:kolosal_server>" "libkolosal_server.so" "Copying libkolosal_server.so to CLI output directory")
+    # Add Linux-specific compile definitions
+    target_compile_definitions(kolosal PRIVATE 
+        _GNU_SOURCE
+        __LINUX__
+    )
+    
+    # Enable large file support
+    target_compile_definitions(kolosal PRIVATE
+        _FILE_OFFSET_BITS=64
+        _LARGEFILE_SOURCE
+        _LARGEFILE64_SOURCE
+    )
+    
+    # Apply optimization flags for Release builds
+    if(CMAKE_BUILD_TYPE STREQUAL "Release" OR NOT CMAKE_BUILD_TYPE)
+        if(ENABLE_NATIVE_OPTIMIZATION)
+            target_compile_options(kolosal PRIVATE -march=native -mtune=native)
+            message(STATUS "Native CPU optimization enabled for kolosal")
+        else()
+            target_compile_options(kolosal PRIVATE -O3)
+            message(STATUS "Using safe optimization flags for kolosal")
+        endif()
+    endif()
+    
+    # Copy Kolosal server shared library with RPATH setting
+    add_custom_command(TARGET kolosal POST_BUILD
+        COMMAND ${CMAKE_COMMAND} -E copy_if_different
+        "$<TARGET_FILE:kolosal_server>"
+        "$<TARGET_FILE_DIR:kolosal>/libkolosal_server.so"
+        COMMENT "Copying libkolosal_server.so to CLI output directory"
+    )
     
     # Copy Kolosal server executable
-    copy_dll_if_exists(kolosal "$<TARGET_FILE:kolosal_server_exe>" "kolosal-server" "Copying kolosal-server to CLI output directory")
+    add_custom_command(TARGET kolosal POST_BUILD
+        COMMAND ${CMAKE_COMMAND} -E copy_if_different
+        "$<TARGET_FILE:kolosal_server_exe>"
+        "$<TARGET_FILE_DIR:kolosal>/kolosal-server"
+        COMMENT "Copying kolosal-server to CLI output directory"
+    )
     
     # Copy the inference engine shared library
-    copy_dll_if_exists(kolosal "$<TARGET_FILE:${INFERENCE_TARGET_NAME}>" "lib${INFERENCE_TARGET_NAME}.so" "Copying lib${INFERENCE_TARGET_NAME}.so to CLI output directory")
+    add_custom_command(TARGET kolosal POST_BUILD
+        COMMAND ${CMAKE_COMMAND} -E copy_if_different
+        "$<TARGET_FILE:${INFERENCE_TARGET_NAME}>"
+        "$<TARGET_FILE_DIR:kolosal>/lib${INFERENCE_TARGET_NAME}.so"
+        COMMENT "Copying lib${INFERENCE_TARGET_NAME}.so to CLI output directory"
+    )
+    
+    # Set RPATH for runtime library search in the same directory
+    set_target_properties(kolosal PROPERTIES
+        INSTALL_RPATH "$ORIGIN"
+        BUILD_WITH_INSTALL_RPATH TRUE
+        INSTALL_RPATH_USE_LINK_PATH TRUE
+    )
 endif()
 
 # Copy config.yaml to output directory for all platforms
@@ -367,8 +436,59 @@ else()
     set(CPACK_DEBIAN_PACKAGE_MAINTAINER "Kolosal Project <dev@kolosal.com>")
     set(CPACK_DEBIAN_PACKAGE_SECTION "devel")
     set(CPACK_DEBIAN_PACKAGE_PRIORITY "optional")
-    set(CPACK_DEBIAN_PACKAGE_DEPENDS "libc6 (>= 2.17), libssl3 (>= 3.0.0), libcurl4 (>= 7.16.2), zlib1g (>= 1:1.1.4)")
+    
+    # More comprehensive dependencies for better compatibility
+    set(CPACK_DEBIAN_PACKAGE_DEPENDS "libc6 (>= 2.17), libgcc-s1 (>= 3.0), libstdc++6 (>= 9)")
+    
+    # Add SSL/TLS support dependencies
+    if(OpenSSL_FOUND)
+        set(CPACK_DEBIAN_PACKAGE_DEPENDS "${CPACK_DEBIAN_PACKAGE_DEPENDS}, libssl3 (>= 3.0.0) | libssl1.1 (>= 1.1.0)")
+    endif()
+    
+    # Add CURL dependencies
+    if(CURL_FOUND)
+        set(CPACK_DEBIAN_PACKAGE_DEPENDS "${CPACK_DEBIAN_PACKAGE_DEPENDS}, libcurl4 (>= 7.16.2)")
+    endif()
+    
+    # Add compression support
+    if(ZLIB_FOUND)
+        set(CPACK_DEBIAN_PACKAGE_DEPENDS "${CPACK_DEBIAN_PACKAGE_DEPENDS}, zlib1g (>= 1:1.1.4)")
+    endif()
+    
+    # Add threading and dynamic linking support
+    set(CPACK_DEBIAN_PACKAGE_DEPENDS "${CPACK_DEBIAN_PACKAGE_DEPENDS}, libpthread-stubs0-dev | libc6-dev")
+    
     set(CPACK_DEBIAN_FILE_NAME DEB-DEFAULT)
+    
+    # Post-install script to set up library paths and permissions
+    set(POSTINST_SCRIPT "${CMAKE_CURRENT_BINARY_DIR}/postinst")
+    file(WRITE ${POSTINST_SCRIPT}
+"#!/bin/bash
+# Post-installation script for Kolosal CLI
+
+# Ensure the binary has execute permissions
+chmod +x /usr/bin/kolosal
+chmod +x /usr/bin/kolosal-server
+
+# Update library cache
+if command -v ldconfig >/dev/null 2>&1; then
+    ldconfig
+fi
+
+# Create symlinks for shared libraries if they don't exist in standard locations
+if [ -f /usr/lib/libkolosal_server.so ] && [ ! -e /usr/lib/x86_64-linux-gnu/libkolosal_server.so ]; then
+    ln -sf /usr/lib/libkolosal_server.so /usr/lib/x86_64-linux-gnu/libkolosal_server.so 2>/dev/null || true
+fi
+
+# Notify user about configuration
+echo \"Kolosal CLI installed successfully!\"
+echo \"Configuration file located at: /etc/kolosal/config.yaml\"
+echo \"Run 'kolosal --help' to get started.\"
+
+exit 0
+")
+    
+    set(CPACK_DEBIAN_PACKAGE_CONTROL_EXTRA "${POSTINST_SCRIPT}")
     
     # Ensure the package installs files correctly
     set(CPACK_COMPONENTS_ALL Runtime)
@@ -379,8 +499,28 @@ else()
         set(CPACK_DEBIAN_PACKAGE_ARCHITECTURE "amd64")
     elseif(CMAKE_SYSTEM_PROCESSOR MATCHES "aarch64|ARM64")
         set(CPACK_DEBIAN_PACKAGE_ARCHITECTURE "arm64")
+    elseif(CMAKE_SYSTEM_PROCESSOR MATCHES "armv7")
+        set(CPACK_DEBIAN_PACKAGE_ARCHITECTURE "armhf")
     else()
         set(CPACK_DEBIAN_PACKAGE_ARCHITECTURE "all")
+    endif()
+    
+    # Add RPM support for RHEL/CentOS/Fedora
+    set(CPACK_RPM_PACKAGE_NAME "kolosal-cli")
+    set(CPACK_RPM_PACKAGE_VERSION "${PROJECT_VERSION}")
+    set(CPACK_RPM_PACKAGE_RELEASE "1")
+    set(CPACK_RPM_PACKAGE_LICENSE "MIT")
+    set(CPACK_RPM_PACKAGE_GROUP "Development/Tools")
+    set(CPACK_RPM_PACKAGE_VENDOR "Kolosal Project")
+    set(CPACK_RPM_PACKAGE_DESCRIPTION "${CPACK_PACKAGE_DESCRIPTION}")
+    set(CPACK_RPM_PACKAGE_REQUIRES "glibc >= 2.17, gcc-c++, libcurl, openssl-libs, zlib")
+    
+    # Check if we should build RPM instead of DEB
+    if(EXISTS "/etc/redhat-release" OR EXISTS "/etc/fedora-release")
+        set(CPACK_GENERATOR "RPM")
+        message(STATUS "Detected RedHat-based system - will generate RPM packages")
+    else()
+        message(STATUS "Will generate DEB packages (use -DCPACK_GENERATOR=RPM to force RPM)")
     endif()
 endif()
 
@@ -391,6 +531,20 @@ if(WIN32)
     message(STATUS "  Run 'cmake --build . --target package' to create the Windows installer")
     message(STATUS "  The installer will install to user profile and add to user PATH")
 else()
-    message(STATUS "CPack configured for DEB package generation")
-    message(STATUS "  Run 'make package' to create the installer")
+    if(CPACK_GENERATOR STREQUAL "RPM")
+        message(STATUS "CPack configured for RPM package generation")
+        message(STATUS "  Run 'cmake --build . --target package' to create the RPM installer")
+        message(STATUS "  Install with: sudo rpm -i kolosal-cli-*.rpm")
+    else()
+        message(STATUS "CPack configured for DEB package generation")
+        message(STATUS "  Run 'cmake --build . --target package' to create the DEB installer")
+        message(STATUS "  Install with: sudo dpkg -i kolosal-cli-*.deb")
+    endif()
+    message(STATUS "  Or use: make package")
+    message(STATUS "")
+    message(STATUS "Linux Build Requirements:")
+    message(STATUS "  - libcurl4-openssl-dev (Ubuntu/Debian) or libcurl-devel (RHEL/CentOS)")
+    message(STATUS "  - libssl-dev (Ubuntu/Debian) or openssl-devel (RHEL/CentOS)")
+    message(STATUS "  - zlib1g-dev (Ubuntu/Debian) or zlib-devel (RHEL/CentOS)")
+    message(STATUS "  - build-essential cmake (Ubuntu/Debian) or gcc-c++ cmake (RHEL/CentOS)")
 endif()

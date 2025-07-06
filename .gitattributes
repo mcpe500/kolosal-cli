@@ -1,0 +1,6 @@
+# Git attributes for Kolosal CLI
+*.sh text eol=lf
+build-linux.sh text eol=lf
+
+# Ensure shell scripts are executable
+*.sh filter=git-add-chmod
