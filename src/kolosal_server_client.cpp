@@ -510,8 +510,8 @@ bool KolosalServerClient::addEngine(const std::string &engineId, const std::stri
             return false;
         }
         
-        std::string pathToStore = modelPath.empty() ? modelUrl : modelPath;
-        updateConfigWithNewModel(engineId, pathToStore);
+        // Always use the URL for config storage to avoid conflicts when local files are deleted
+        updateConfigWithNewModel(engineId, modelUrl);
         return true;
     }
     catch (const std::exception &)
