@@ -18,6 +18,9 @@
 #include <thread>
 #include <fstream>
 #include <filesystem>
+#include <cstring>
+#include <cstdlib>
+#include <chrono>
 #include <yaml-cpp/yaml.h>
 
 #ifdef _WIN32
@@ -1018,6 +1021,30 @@ bool KolosalCLI::startChatInterface(const std::string& engineId)
                     loadingAnim.stop();
                     std::cout << "\r\033[32m> \033[32m";
                     printedPrompt = true;
+                    
+                    // Print the first chunk that triggered this callback
+                    std::cout << chunk;
+                    std::cout.flush();
+                    fullResponse += chunk;
+                    
+                    // Update cursor position tracking for the first chunk
+                    for (char c : chunk) {
+                        if (c == '\n') {
+                            currentColumn = 0;
+                        } else if (c >= 32 && c <= 126) { // Printable characters
+                            currentColumn++;
+                            if (currentColumn >= terminalWidth) {
+                                currentColumn = 0; // Wrapped to new line
+                            }
+                        }
+                    }
+                    
+                    // Update line state
+                    bool containsNewline = chunk.find('\n') != std::string::npos;
+                    lastWasNewline = containsNewline;
+                    
+                    // Return early since we've already processed this chunk
+                    return;
                 }
                 
                 // Update metrics
@@ -1108,9 +1135,67 @@ bool KolosalCLI::startChatInterface(const std::string& engineId)
                         }
                     }
 #else
-                    // On Linux, use a simpler approach - don't try to query cursor position
-                    // as it can interfere with the output stream. Just check if terminal is tall enough.
-                    if (terminalHeight > 10) {
+                    // On Linux, query cursor position similar to Windows approach
+                    // Save current terminal mode
+                    struct termios oldTermios, newTermios;
+                    tcgetattr(STDIN_FILENO, &oldTermios);
+                    newTermios = oldTermios;
+                    newTermios.c_lflag &= ~(ICANON | ECHO);
+                    tcsetattr(STDIN_FILENO, TCSANOW, &newTermios);
+                    
+                    // Flush output and query cursor position
+                    std::cout.flush();
+                    fflush(stdout);
+                    
+                    // Send cursor position query
+                    std::cout << "\033[6n" << std::flush;
+                    
+                    // Read response: \033[row;colR
+                    char response[32];
+                    int responseIndex = 0;
+                    int currentRow = 0;
+                    
+                    // Set non-blocking mode temporarily
+                    int flags = fcntl(STDIN_FILENO, F_GETFL, 0);
+                    fcntl(STDIN_FILENO, F_SETFL, flags | O_NONBLOCK);
+                    
+                    // Read response with timeout
+                    auto startTime = std::chrono::steady_clock::now();
+                    bool gotResponse = false;
+                    
+                    while (!gotResponse && 
+                           std::chrono::duration_cast<std::chrono::milliseconds>(
+                               std::chrono::steady_clock::now() - startTime).count() < 50) {
+                        char c = getchar();
+                        if (c != EOF && responseIndex < 31) {
+                            response[responseIndex++] = c;
+                            if (c == 'R') {
+                                response[responseIndex] = '\0';
+                                gotResponse = true;
+                            }
+                        }
+                        if (!gotResponse) {
+                            std::this_thread::sleep_for(std::chrono::milliseconds(1));
+                        }
+                    }
+                    
+                    // Restore blocking mode and terminal settings
+                    fcntl(STDIN_FILENO, F_SETFL, flags);
+                    tcsetattr(STDIN_FILENO, TCSANOW, &oldTermios);
+                    
+                    // Parse cursor position if we got a valid response
+                    if (gotResponse && responseIndex > 4 && response[0] == '\033' && response[1] == '[') {
+                        char* semiColon = strchr(response + 2, ';');
+                        if (semiColon) {
+                            *semiColon = '\0';
+                            currentRow = atoi(response + 2);
+                        }
+                    }
+                    
+                    // Check if we're near the bottom of the terminal (same logic as Windows)
+                    if (currentRow > 0 && currentRow >= terminalHeight - 1) {
+                        canShowMetricsBelow = false;
+                    } else if (terminalHeight > 10) {
                         canShowMetricsBelow = true;
                     } else {
                         canShowMetricsBelow = false;
