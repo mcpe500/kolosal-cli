@@ -808,7 +808,6 @@ bool KolosalCLI::updateConfigWithModel(const std::string& engineId, const std::s
             newModel["path"] = modelPath;
             newModel["load_immediately"] = loadImmediately;
             newModel["main_gpu_id"] = 0;
-            newModel["preload_context"] = true;
             
             // Add load_params with specified configuration
             YAML::Node loadParams;

@@ -20,10 +20,7 @@
 server:
   port: "8080"                        # Server port (string format)
   host: "0.0.0.0"                     # Bind host (0.0.0.0 for all interfaces, localhost for local only)
-  max_connections: 100                # Maximum concurrent connections
-  worker_threads: 0                   # Worker threads (0 = auto-detect CPU cores)
-  request_timeout: 30                 # Request timeout in seconds
-  max_request_size: 16777216          # Maximum request size in bytes (16MB)
+
   idle_timeout: 300                   # Connection idle timeout in seconds
   allow_public_access: false          # Set to true to allow access from other devices on your network
   allow_internet_access: false       # Set to true to enable internet access (requires port forwarding)
@@ -95,7 +92,6 @@ models:
   #   path: "https://huggingface.co/kolosal/qwen3-0.6b/resolve/main/Qwen3-0.6B-UD-Q4_K_XL.gguf"
   #   load_immediately: true                         # Load immediately on server start
   #   main_gpu_id: 0                                # Primary GPU ID for inference (-1 for CPU only)
-  #   preload_context: false                        # Preload context for faster initial inference
   #   load_params:
   #     # Context and memory settings
   #     n_ctx: 2048                                 # Context window size (max tokens)
@@ -122,7 +118,6 @@ models:
   #   path: "./models/production-model.gguf"
   #   load_immediately: false                        # Lazy loading for faster startup
   #   main_gpu_id: 0
-  #   preload_context: true                         # Preload for faster inference
   #   load_params:
   #     n_ctx: 4096                                 # Larger context for complex tasks
   #     n_keep: 2048

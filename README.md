@@ -438,7 +438,6 @@ The application includes a built-in inference server that can be configured via 
 server:
   port: "8080"
   host: "0.0.0.0"
-  max_connections: 100
 
 logging:
   level: "INFO"
@@ -593,8 +592,6 @@ Server behavior is controlled via `config.yaml`:
 server:
   port: "8080"
   host: "0.0.0.0"
-  max_connections: 100
-  worker_threads: 0  # Auto-detect CPU cores
 
 logging:
   level: "INFO"
