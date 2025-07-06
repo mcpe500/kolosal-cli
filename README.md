@@ -428,7 +428,22 @@ For users who prefer a portable version without installation:
    sudo chown -R $USER:$USER ./build
    ```
 
-4. **Server fails to start:**
+4. **Package installation fails with DEB control file errors:**
+   ```bash
+   # If you get "parsing file 'control' near line X" errors:
+   # Clean the build directory and rebuild the package
+   rm -rf build-release
+   mkdir build-release && cd build-release
+   cmake .. -DCMAKE_BUILD_TYPE=Release
+   make -j$(nproc)
+   make package
+   
+   # If the error persists, check CMake version and dependencies
+   cmake --version  # Should be >= 3.14
+   dpkg --version   # Check dpkg version
+   ```
+
+5. **Server fails to start:**
    ```bash
    # Check if port is available
    netstat -tlnp | grep :8080

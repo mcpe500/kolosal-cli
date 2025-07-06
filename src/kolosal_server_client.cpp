@@ -13,6 +13,7 @@
 #ifdef _WIN32
 #include <windows.h>
 #include <tlhelp32.h>
+#include <cstdlib>  // for _dupenv_s
 #else
 #include <unistd.h>
 #include <sys/wait.h>
@@ -214,11 +215,27 @@ bool KolosalServerClient::startServer(const std::string &serverPath, int port)
     } 
     
 #ifdef _WIN32
+    // Build command line - let server use its built-in config detection
     std::string commandLine = "kolosal-server.exe";
-    std::string workingDir = actualServerPath.substr(0, actualServerPath.find_last_of(PATH_SEPARATOR));
-    if (workingDir == actualServerPath)
-    {
-        workingDir = ".";
+    
+    // Use a writable working directory instead of the binary directory
+    std::string workingDir;
+    
+    // Get user's profile directory or use temp
+    char* userProfile = nullptr;
+    size_t len = 0;
+    if (_dupenv_s(&userProfile, &len, "USERPROFILE") == 0 && userProfile != nullptr) {
+        workingDir = std::string(userProfile);
+        free(userProfile);
+    } else {
+        // Fallback to temp directory
+        char* tempDir = nullptr;
+        if (_dupenv_s(&tempDir, &len, "TEMP") == 0 && tempDir != nullptr) {
+            workingDir = std::string(tempDir);
+            free(tempDir);
+        } else {
+            workingDir = "C:\\temp";
+        }
     }
     
     STARTUPINFOA si;
@@ -276,12 +293,33 @@ bool KolosalServerClient::startServer(const std::string &serverPath, int port)
     pid_t pid = fork();
     if (pid == 0) {
         // Child process
-        // Change working directory to server directory
-        std::string workingDir = actualServerPath.substr(0, actualServerPath.find_last_of(PATH_SEPARATOR));
-        if (workingDir != actualServerPath && !workingDir.empty()) {
-            if (chdir(workingDir.c_str()) != 0) {
-                std::cerr << "Warning: Could not change to server directory: " << workingDir << std::endl;
+        // Change working directory to a writable location where server can create files
+        std::string workingDir;
+        
+        // Try to use /var/lib/kolosal if it exists and is writable
+        if (access("/var/lib/kolosal", W_OK) == 0) {
+            workingDir = "/var/lib/kolosal";
+        }
+        // Otherwise use user's home directory
+        else {
+            const char* homeDir = getenv("HOME");
+            if (homeDir) {
+                workingDir = std::string(homeDir);
+            } else {
+                workingDir = "/tmp";  // Last resort
             }
+        }
+        
+        if (chdir(workingDir.c_str()) != 0) {
+            std::cerr << "Warning: Could not change to writable directory: " << workingDir << std::endl;
+            // Try /tmp as absolute last resort
+            if (chdir("/tmp") != 0) {
+                std::cerr << "Error: Could not change to any writable directory" << std::endl;
+            } else {
+                std::cerr << "Using /tmp as working directory" << std::endl;
+            }
+        } else {
+            std::cerr << "Server working directory: " << workingDir << std::endl;
         }
         
         // Execute the server in background (detached)
@@ -293,7 +331,6 @@ bool KolosalServerClient::startServer(const std::string &serverPath, int port)
         freopen(logPath.c_str(), "w", stdout);
         freopen(logPath.c_str(), "w", stderr);
         
-        // Execute the server
         execl(actualServerPath.c_str(), "kolosal-server", nullptr);
         
         // If execl fails, log the error and exit child process
@@ -307,6 +344,7 @@ bool KolosalServerClient::startServer(const std::string &serverPath, int port)
     }
     // Parent process continues - server is now running in background
     std::cout << "Server process started with PID: " << pid << std::endl;
+    std::cout << "Server logs available at: /tmp/kolosal-server.log" << std::endl;
     
     // Give the server a moment to start before returning
     std::this_thread::sleep_for(std::chrono::milliseconds(500));
