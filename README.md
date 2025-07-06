@@ -295,6 +295,106 @@ Verify package status:
 dpkg -l | grep kolosal
 ```
 
+### Creating a Windows Installer (Windows)
+
+Kolosal CLI supports creating .exe installer packages for easy distribution and installation on Windows systems.
+
+1. **Build the project for packaging:**
+   ```powershell
+   mkdir build-release
+   cd build-release
+   cmake .. -DCMAKE_BUILD_TYPE=Release
+   cmake --build . --config Release
+   ```
+
+2. **Create the installer package:**
+   ```powershell
+   cmake --build . --target package --config Release
+   ```
+
+   This will create an .exe installer file named `kolosal_1.0.0_win64.exe` (architecture may vary).
+
+3. **Install the package:**
+   ```powershell
+   # Run as Administrator
+   .\kolosal_1.0.0_win64.exe /S
+   
+   # Or double-click the .exe file for GUI installation
+   ```
+
+4. **Verify installation:**
+   ```powershell
+   kolosal --help
+   ```
+
+   After installation, you can run the CLI from anywhere using just `kolosal`.
+
+### Windows Package Features
+
+- **System Integration**: Installs to `C:\Program Files\Kolosal` with PATH integration
+- **Dependencies**: Includes all required DLLs (libcurl, OpenSSL, etc.)
+- **Configuration**: Installs default config to `%PROGRAMDATA%\Kolosal\config.yaml`
+- **Start Menu Entry**: Adds shortcuts to Windows Start Menu
+- **Registry Integration**: Proper Windows registry entries for Add/Remove Programs
+- **Clean Uninstall**: Easy removal through Windows Settings or Control Panel
+
+### Windows Uninstalling
+
+To remove the installed package:
+
+```powershell
+# Uninstall via Control Panel
+# Control Panel > Programs > Programs and Features > Kolosal > Uninstall
+
+# Or use Windows Settings
+# Settings > Apps > Apps & features > Kolosal > Uninstall
+
+# Or run the uninstaller directly (if available)
+# C:\Program Files\Kolosal\uninstall.exe
+```
+
+### Windows Manual Verification
+
+Check installation status:
+```powershell
+# Check if installed via registry
+Get-ItemProperty HKLM:\Software\Microsoft\Windows\CurrentVersion\Uninstall\* | Where-Object {$_.DisplayName -eq "Kolosal"}
+
+# Check PATH integration
+where kolosal
+
+# Check installation directory
+dir "C:\Program Files\Kolosal"
+```
+
+### Creating Portable Windows Package
+
+For users who prefer a portable version without installation:
+
+1. **Build for portable deployment:**
+   ```powershell
+   mkdir build-portable
+   cd build-portable
+   cmake .. -DCMAKE_BUILD_TYPE=Release -DPORTABLE_BUILD=ON
+   cmake --build . --config Release
+   ```
+
+2. **Create ZIP package:**
+   ```powershell
+   cmake --build . --target package --config Release
+   ```
+
+   This creates `kolosal_1.0.0_portable.zip` containing all necessary files.
+
+3. **Deploy portable version:**
+   ```powershell
+   # Extract to desired location
+   Expand-Archive kolosal_1.0.0_portable.zip -DestinationPath "C:\Tools\Kolosal"
+   
+   # Run directly
+   C:\Tools\Kolosal\kolosal.exe
+   ```
+
 ### Platform Support
 
 - ✅ **Windows** - Fully supported with Visual Studio and MinGW
@@ -373,6 +473,117 @@ dpkg -l | grep kolosal
    # Fix file permissions
    chmod +x kolosal-cli
    chmod -R 755 ./models/
+   ```
+
+#### Windows Build Issues
+
+1. **Missing Visual Studio Build Tools:**
+   ```powershell
+   # Install Visual Studio Build Tools
+   # Download from: https://visualstudio.microsoft.com/downloads/#build-tools-for-visual-studio-2022
+   
+   # Or install via Chocolatey
+   choco install visualstudio2022buildtools
+   
+   # Or use Visual Studio Installer
+   # Install "Desktop development with C++" workload
+   ```
+
+2. **CMake not found:**
+   ```powershell
+   # Install CMake via installer
+   # Download from: https://cmake.org/download/
+   
+   # Or install via Chocolatey
+   choco install cmake
+   
+   # Or install via winget
+   winget install Kitware.CMake
+   ```
+
+3. **Build fails with CURL errors:**
+   ```powershell
+   # Ensure libcurl is properly included in external/
+   # Check if external/curl/ directory exists and contains headers
+   
+   # Force rebuild of external dependencies
+   cmake .. -DFORCE_REBUILD_EXTERNALS=ON
+   ```
+
+4. **Installer packaging fails:**
+   ```powershell
+   # Install NSIS (Nullsoft Scriptable Install System) for .exe creation
+   # Download from: https://nsis.sourceforge.io/Download
+   
+   # Or install via Chocolatey
+   choco install nsis
+   
+   # Ensure NSIS is in PATH
+   $env:PATH += ";C:\Program Files (x86)\NSIS"
+   ```
+
+5. **Permission errors during build:**
+   ```powershell
+   # Run PowerShell as Administrator
+   # Or ensure build directory has proper permissions
+   icacls build /grant "$($env:USERNAME):F" /t
+   ```
+
+6. **Server fails to start on Windows:**
+   ```powershell
+   # Check if port is available
+   netstat -an | findstr :8080
+   
+   # Check Windows Firewall
+   netsh advfirewall firewall show rule name="Kolosal CLI"
+   
+   # Add firewall rule if needed
+   netsh advfirewall firewall add rule name="Kolosal CLI" dir=in action=allow protocol=TCP localport=8080
+   ```
+
+#### Windows-Specific Server Issues
+
+1. **Port already in use:**
+   ```powershell
+   # Find process using the port
+   netstat -ano | findstr :8080
+   
+   # Kill the process (replace PID with actual process ID)
+   taskkill /PID <PID> /F
+   
+   # Or change port in config.yaml
+   ```
+
+2. **Windows Defender blocking:**
+   ```powershell
+   # Add exclusion for Kolosal directory
+   Add-MpPreference -ExclusionPath "C:\Program Files\Kolosal"
+   Add-MpPreference -ExclusionPath "$env:USERPROFILE\kolosal-cli"
+   
+   # Or temporarily disable real-time protection
+   Set-MpPreference -DisableRealtimeMonitoring $true
+   ```
+
+3. **DLL not found errors:**
+   ```powershell
+   # Check for missing dependencies
+   dumpbin /dependents kolosal.exe
+   
+   # Install Visual C++ Redistributables
+   # Download from: https://support.microsoft.com/en-us/help/2977003/the-latest-supported-visual-c-downloads
+   
+   # Or copy required DLLs to application directory
+   copy "C:\Windows\System32\vcruntime*.dll" .
+   copy "C:\Windows\System32\msvcp*.dll" .
+   ```
+
+4. **Path not found errors:**
+   ```powershell
+   # Add Kolosal to system PATH
+   $env:PATH += ";C:\Program Files\Kolosal"
+   
+   # Or add permanently via registry
+   [Environment]::SetEnvironmentVariable("Path", $env:Path + ";C:\Program Files\Kolosal", [EnvironmentVariableTarget]::Machine)
    ```
 
 ## Usage
