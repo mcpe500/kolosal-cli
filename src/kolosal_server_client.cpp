@@ -162,8 +162,9 @@ bool KolosalServerClient::startServer(const std::string &serverPath, int port)
         std::string exeDir = exePath.substr(0, exePath.find_last_of(PATH_SEPARATOR));
         std::cout << "Looking for kolosal-server from CLI directory: " << exeDir << std::endl;
 
-        // Try same directory as CLI
+        // Priority 1: Try same directory as CLI (highest priority for Windows)
         std::string sameDirPath = exeDir + PATH_SEPARATOR + "kolosal-server" + EXECUTABLE_EXTENSION;
+        std::cout << "Checking same directory: " << sameDirPath << std::endl;
         if (fileExists(sameDirPath))
         {
             actualServerPath = sameDirPath;
@@ -171,20 +172,20 @@ bool KolosalServerClient::startServer(const std::string &serverPath, int port)
         }
         else
         {
-            // Try build/kolosal-server directory (Linux build structure)
-            std::string buildServerPath = exeDir + PATH_SEPARATOR + "kolosal-server" + PATH_SEPARATOR + "kolosal-server" + EXECUTABLE_EXTENSION;
-            if (fileExists(buildServerPath))
+            // Priority 2: Try kolosal-server subdirectory (common for extracted packages)
+            std::string subDirPath = exeDir + PATH_SEPARATOR + "kolosal-server" + PATH_SEPARATOR + "kolosal-server" + EXECUTABLE_EXTENSION;
+            std::cout << "Checking subdirectory: " << subDirPath << std::endl;
+            if (fileExists(subDirPath))
             {
-                actualServerPath = buildServerPath;
+                actualServerPath = subDirPath;
                 std::cout << "Found server at: " << actualServerPath << std::endl;
             }
             else
             {
-                // Try parent/server-bin directory (Windows structure)
+                // Priority 3: Try parent/server-bin directory (Windows package structure)
                 std::string parentDir = exeDir.substr(0, exeDir.find_last_of(PATH_SEPARATOR));
-                parentDir = parentDir.substr(0, parentDir.find_last_of(PATH_SEPARATOR));
                 std::string serverBinPath = parentDir + PATH_SEPARATOR + "server-bin" + PATH_SEPARATOR + "kolosal-server" + EXECUTABLE_EXTENSION;
-
+                std::cout << "Checking parent/server-bin: " << serverBinPath << std::endl;
                 if (fileExists(serverBinPath))
                 {
                     actualServerPath = serverBinPath;
@@ -192,9 +193,20 @@ bool KolosalServerClient::startServer(const std::string &serverPath, int port)
                 }
                 else
                 {
-                    // Fall back to system PATH
-                    actualServerPath = "kolosal-server" + std::string(EXECUTABLE_EXTENSION);
-                    std::cout << "Using system PATH to find server: " << actualServerPath << std::endl;
+                    // Priority 4: Try build directory (development environment)
+                    std::string buildPath = parentDir + PATH_SEPARATOR + "build" + PATH_SEPARATOR + "kolosal-server" + PATH_SEPARATOR + "kolosal-server" + EXECUTABLE_EXTENSION;
+                    std::cout << "Checking build directory: " << buildPath << std::endl;
+                    if (fileExists(buildPath))
+                    {
+                        actualServerPath = buildPath;
+                        std::cout << "Found server at: " << actualServerPath << std::endl;
+                    }
+                    else
+                    {
+                        // Last resort: Fall back to system PATH
+                        actualServerPath = "kolosal-server" + std::string(EXECUTABLE_EXTENSION);
+                        std::cout << "Using system PATH to find server: " << actualServerPath << std::endl;
+                    }
                 }
             }
         }
@@ -215,26 +227,50 @@ bool KolosalServerClient::startServer(const std::string &serverPath, int port)
     } 
     
 #ifdef _WIN32
-    // Build command line - let server use its built-in config detection
-    std::string commandLine = "kolosal-server.exe";
+    // Build command line using the actual server path
+    std::string commandLine;
+    if (actualServerPath == "kolosal-server.exe") {
+        commandLine = "kolosal-server.exe";
+    } else {
+        commandLine = "\"" + actualServerPath + "\"";
+    }
     
-    // Use a writable working directory instead of the binary directory
+    // Use the same directory as the CLI executable for config.yaml access
     std::string workingDir;
     
-    // Get user's profile directory or use temp
-    char* userProfile = nullptr;
-    size_t len = 0;
-    if (_dupenv_s(&userProfile, &len, "USERPROFILE") == 0 && userProfile != nullptr) {
-        workingDir = std::string(userProfile);
-        free(userProfile);
-    } else {
-        // Fallback to temp directory
-        char* tempDir = nullptr;
-        if (_dupenv_s(&tempDir, &len, "TEMP") == 0 && tempDir != nullptr) {
-            workingDir = std::string(tempDir);
-            free(tempDir);
+    // Priority 1: Use the same directory as the CLI executable (for config.yaml access)
+    std::string exePath = getExecutablePath();
+    if (!exePath.empty()) {
+        std::string exeDir = exePath.substr(0, exePath.find_last_of(PATH_SEPARATOR));
+        // Check if we can write to the exe directory (for logs, temp files, etc.)
+        std::string testFile = exeDir + PATH_SEPARATOR + "test_write.tmp";
+        std::ofstream testWrite(testFile);
+        if (testWrite.is_open()) {
+            testWrite.close();
+            std::filesystem::remove(testFile);
+            workingDir = exeDir;
+            std::cout << "Using CLI directory as working directory: " << workingDir << std::endl;
+        }
+    }
+    
+    // Fallback: Use user profile or temp if exe directory is not writable
+    if (workingDir.empty()) {
+        char* userProfile = nullptr;
+        size_t len = 0;
+        if (_dupenv_s(&userProfile, &len, "USERPROFILE") == 0 && userProfile != nullptr) {
+            workingDir = std::string(userProfile);
+            free(userProfile);
+            std::cout << "Using user profile as working directory: " << workingDir << std::endl;
         } else {
-            workingDir = "C:\\temp";
+            // Final fallback to temp directory
+            char* tempDir = nullptr;
+            if (_dupenv_s(&tempDir, &len, "TEMP") == 0 && tempDir != nullptr) {
+                workingDir = std::string(tempDir);
+                free(tempDir);
+            } else {
+                workingDir = "C:\\temp";
+            }
+            std::cout << "Using temp directory as working directory: " << workingDir << std::endl;
         }
     }
     
@@ -247,7 +283,7 @@ bool KolosalServerClient::startServer(const std::string &serverPath, int port)
     ZeroMemory(&pi, sizeof(pi));
     
     BOOL result = CreateProcessA(
-        actualServerPath.c_str(),
+        (actualServerPath == "kolosal-server.exe") ? NULL : actualServerPath.c_str(),
         const_cast<char *>(commandLine.c_str()),
         NULL,
         NULL,
@@ -293,33 +329,48 @@ bool KolosalServerClient::startServer(const std::string &serverPath, int port)
     pid_t pid = fork();
     if (pid == 0) {
         // Child process
-        // Change working directory to a writable location where server can create files
+        // Change working directory to prioritize config.yaml access
         std::string workingDir;
         
-        // Try to use /var/lib/kolosal if it exists and is writable
-        if (access("/var/lib/kolosal", W_OK) == 0) {
-            workingDir = "/var/lib/kolosal";
+        // Priority 1: Use the same directory as the CLI executable (for config.yaml access)
+        std::string exePath = getExecutablePath();
+        if (!exePath.empty()) {
+            std::string exeDir = exePath.substr(0, exePath.find_last_of(PATH_SEPARATOR));
+            // Check if we can write to the exe directory
+            if (access(exeDir.c_str(), W_OK) == 0) {
+                workingDir = exeDir;
+                std::cerr << "Using CLI directory as working directory: " << workingDir << std::endl;
+            }
         }
-        // Otherwise use user's home directory
-        else {
-            const char* homeDir = getenv("HOME");
-            if (homeDir) {
-                workingDir = std::string(homeDir);
-            } else {
-                workingDir = "/tmp";  // Last resort
+        
+        // Fallback: Use system directories if exe directory is not writable
+        if (workingDir.empty()) {
+            // Try to use /var/lib/kolosal if it exists and is writable
+            if (access("/var/lib/kolosal", W_OK) == 0) {
+                workingDir = "/var/lib/kolosal";
+                std::cerr << "Using /var/lib/kolosal as working directory: " << workingDir << std::endl;
+            }
+            // Otherwise use user's home directory
+            else {
+                const char* homeDir = getenv("HOME");
+                if (homeDir) {
+                    workingDir = std::string(homeDir);
+                    std::cerr << "Using home directory as working directory: " << workingDir << std::endl;
+                } else {
+                    workingDir = "/tmp";  // Last resort
+                    std::cerr << "Using /tmp as working directory: " << workingDir << std::endl;
+                }
             }
         }
         
         if (chdir(workingDir.c_str()) != 0) {
-            std::cerr << "Warning: Could not change to writable directory: " << workingDir << std::endl;
+            std::cerr << "Warning: Could not change to chosen directory: " << workingDir << std::endl;
             // Try /tmp as absolute last resort
             if (chdir("/tmp") != 0) {
                 std::cerr << "Error: Could not change to any writable directory" << std::endl;
             } else {
-                std::cerr << "Using /tmp as working directory" << std::endl;
+                std::cerr << "Using /tmp as fallback working directory" << std::endl;
             }
-        } else {
-            std::cerr << "Server working directory: " << workingDir << std::endl;
         }
         
         // Execute the server in background (detached)
