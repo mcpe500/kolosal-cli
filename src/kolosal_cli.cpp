@@ -39,6 +39,36 @@
 // Static member initialization
 KolosalCLI *KolosalCLI::s_instance = nullptr;
 
+// Helper function to escape file paths for shell/server usage
+static std::string escapeFilePath(const std::string& path) {
+    std::string escapedPath = path;
+    
+    // Replace backslashes with forward slashes for consistency (works on both Windows and Linux)
+    std::replace(escapedPath.begin(), escapedPath.end(), '\\', '/');
+    
+    // If path contains spaces or special characters, wrap in quotes
+    bool needsQuotes = false;
+    const std::string specialChars = " ()<>&|;\"'`${}[]?*~!#";
+    for (char c : specialChars) {
+        if (escapedPath.find(c) != std::string::npos) {
+            needsQuotes = true;
+            break;
+        }
+    }
+    
+    if (needsQuotes) {
+        // Escape existing quotes and wrap in quotes
+        std::string::size_type pos = 0;
+        while ((pos = escapedPath.find('\"', pos)) != std::string::npos) {
+            escapedPath.replace(pos, 1, "\\\"");
+            pos += 2;
+        }
+        escapedPath = "\"" + escapedPath + "\"";
+    }
+    
+    return escapedPath;
+}
+
 // Helper function to format file sizes
 static std::string formatFileSize(long long bytes)
 {
@@ -340,6 +370,30 @@ bool KolosalCLI::isDirectGGUFUrl(const std::string &input) {
     return m_repoSelector->isDirectGGUFUrl(input);
 }
 
+bool KolosalCLI::isLocalGGUFPath(const std::string &input) {
+    // Check if it's a file path (contains file separators or has .gguf extension)
+    if (input.find(".gguf") != std::string::npos) {
+        // Check if it's not a URL (doesn't start with http/https)
+        if (input.find("http://") != 0 && input.find("https://") != 0) {
+            return true;
+        }
+    }
+    
+    // Also check for common path patterns on both Windows and Linux
+    if (input.find('/') != std::string::npos || input.find('\\') != std::string::npos) {
+        // Check if it's not a URL
+        if (input.find("http://") != 0 && input.find("https://") != 0) {
+            // Additional check for potential GGUF files even without extension
+            std::filesystem::path path(input);
+            if (std::filesystem::exists(path) && path.extension() == ".gguf") {
+                return true;
+            }
+        }
+    }
+    
+    return false;
+}
+
 bool KolosalCLI::handleDirectGGUFUrl(const std::string &url) {
     // Use file selector to handle the GGUF URL processing and get model info
     ModelFile modelFile = m_fileSelector->handleDirectGGUFUrl(url);
@@ -399,6 +453,104 @@ bool KolosalCLI::handleDirectGGUFUrl(const std::string &url) {
     }
 }
 
+bool KolosalCLI::handleLocalGGUFPath(const std::string &path) {
+    // Normalize path separators for cross-platform compatibility
+    std::string normalizedPath = path;
+    std::replace(normalizedPath.begin(), normalizedPath.end(), '\\', '/');
+    
+    // Create filesystem path object for proper handling
+    std::filesystem::path filePath(normalizedPath);
+    
+    // Check if the file exists
+    if (!std::filesystem::exists(filePath)) {
+        std::cout << "Error: File not found: " << normalizedPath << std::endl;
+        return false;
+    }
+    
+    // Check if it's actually a file (not a directory)
+    if (!std::filesystem::is_regular_file(filePath)) {
+        std::cout << "Error: Path is not a regular file: " << normalizedPath << std::endl;
+        return false;
+    }
+    
+    // Check if it has .gguf extension
+    if (filePath.extension() != ".gguf") {
+        std::cout << "Error: File does not have .gguf extension: " << normalizedPath << std::endl;
+        return false;
+    }
+    
+    // Get absolute path and escape it properly
+    std::string absolutePath;
+    std::string escapedPath;
+    try {
+        absolutePath = std::filesystem::absolute(filePath).string();
+        // Normalize path separators for the absolute path too
+        std::replace(absolutePath.begin(), absolutePath.end(), '\\', '/');
+        escapedPath = escapeFilePath(absolutePath);
+    } catch (const std::exception &e) {
+        std::cout << "Error: Failed to get absolute path for: " << normalizedPath << " - " << e.what() << std::endl;
+        return false;
+    }
+    
+    // Extract filename for engine ID
+    std::string filename = filePath.filename().string();
+    std::string engineId = filename;
+    size_t dotPos = engineId.find_last_of('.');
+    if (dotPos != std::string::npos) {
+        engineId = engineId.substr(0, dotPos);
+    }
+    
+    std::cout << "\nLocal GGUF file detected: " << filename << std::endl;
+    std::cout << "File path: " << absolutePath << std::endl;
+    std::cout << "Engine ID: " << engineId << std::endl;
+    
+    // Ask for confirmation
+    std::cout << "\nLoad this model? (y/n): ";
+    char choice;
+    std::cin >> choice;
+    
+    if (choice != 'y' && choice != 'Y') {
+        std::cout << "Model loading cancelled." << std::endl;
+        return false;
+    }
+    
+    // Ensure server is running and can be connected to
+    if (!ensureServerConnection()) {
+        std::cerr << "Unable to connect to Kolosal server. Model loading cancelled." << std::endl;
+        return false;
+    }
+    
+    // Check if engine already exists
+    if (m_serverClient->engineExists(engineId)) {
+        std::cout << "\n✓ Engine '" << engineId << "' already exists on the server." << std::endl;
+        std::cout << "✓ Model is ready to use!" << std::endl;
+        
+        // Start chat interface directly
+        std::cout << "\nStarting chat interface..." << std::endl;
+        startChatInterface(engineId);
+        return true;
+    }
+    
+    // Add engine to server with the local file path (use absolute path for server)
+    std::cout << "\nRegistering model with server..." << std::endl;
+    if (!m_serverClient->addEngine(engineId, absolutePath, absolutePath)) {
+        std::cerr << "Failed to register model with server." << std::endl;
+        return false;
+    }
+    
+    std::cout << "✓ Model registered successfully with server." << std::endl;
+    
+    // Update config.yaml to persist the model across server restarts
+    updateConfigWithModel(engineId, absolutePath, false); // load_immediately = false for lazy loading
+    
+    // Start chat interface
+    std::cout << "\n🎉 Model loaded and registered successfully!" << std::endl;
+    std::cout << "Starting chat interface..." << std::endl;
+    startChatInterface(engineId);
+    
+    return true;
+}
+
 int KolosalCLI::run(const std::string &repoId)
 {
     showWelcome();
@@ -412,6 +564,14 @@ int KolosalCLI::run(const std::string &repoId)
     // If a repository ID is provided, go directly to file selection
     if (!repoId.empty())
     {
+        // Check if it's a local GGUF file path first
+        if (isLocalGGUFPath(repoId))
+        {
+            // Handle local GGUF file path
+            bool success = handleLocalGGUFPath(repoId);
+            return success ? 0 : 1;
+        }
+        
         std::string modelId = m_repoSelector->parseRepositoryInput(repoId);
         if (modelId.empty())
         {
@@ -420,6 +580,7 @@ int KolosalCLI::run(const std::string &repoId)
             std::cout << "  • owner/model-name (e.g., microsoft/DialoGPT-medium)\n";
             std::cout << "  • https://huggingface.co/owner/model-name\n";
             std::cout << "  • Direct GGUF file URL (e.g., https://huggingface.co/owner/model/resolve/main/model.gguf)\n";
+            std::cout << "  • Local GGUF file path (e.g., /path/to/model.gguf)\n";
             return 1; // Exit with error code
         }
         else if (modelId == "DIRECT_URL")

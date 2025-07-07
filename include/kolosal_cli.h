@@ -54,11 +54,25 @@ private:
     bool isDirectGGUFUrl(const std::string& input);
     
     /**
+     * @brief Check if input is a local path to a GGUF file
+     * @param input Path from command line
+     * @return True if it's a local GGUF file path, false otherwise
+     */
+    bool isLocalGGUFPath(const std::string& input);
+    
+    /**
      * @brief Handle direct GGUF file URL input
      * @param url Direct URL to a GGUF file
      * @return True if download completed successfully, false otherwise
      */
     bool handleDirectGGUFUrl(const std::string& url);
+    
+    /**
+     * @brief Handle local GGUF file path input
+     * @param path Local path to a GGUF file
+     * @return True if model was loaded successfully, false otherwise
+     */
+    bool handleLocalGGUFPath(const std::string& path);
     
     /**
      * @brief Display welcome message and initialize HTTP client
