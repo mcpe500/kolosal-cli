@@ -133,13 +133,6 @@ private:
     // Built-in command handlers
     CommandResult handleHelp(const std::vector<std::string>& args);
     CommandResult handleExit(const std::vector<std::string>& args);
-    CommandResult handleClear(const std::vector<std::string>& args);
-    CommandResult handleHistory(const std::vector<std::string>& args);
-    CommandResult handleInfo(const std::vector<std::string>& args);
-    CommandResult handleSave(const std::vector<std::string>& args);
-    CommandResult handleLoad(const std::vector<std::string>& args);
-    CommandResult handleModel(const std::vector<std::string>& args);
-    CommandResult handleReset(const std::vector<std::string>& args);
 };
 
 #endif // COMMAND_MANAGER_H
