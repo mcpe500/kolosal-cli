@@ -139,6 +139,12 @@ private:
     bool startChatInterface(const std::string& engineId);
     
     /**
+     * @brief Get list of available model IDs from config.yaml
+     * @return Vector of model IDs found in the config
+     */
+    std::vector<std::string> getAvailableModelIds();
+    
+    /**
      * @brief Ensure console encoding is set to UTF-8
      */
     void ensureConsoleEncoding();

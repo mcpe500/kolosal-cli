@@ -40,6 +40,25 @@ InteractiveList::InteractiveList(const std::vector<std::string> &listItems)
     maxDisplayItems = calculateMaxDisplayItems();
 }
 
+// Helper function to skip over separator items
+void InteractiveList::skipSeparators()
+{
+    if (filteredItems.empty()) return;
+    
+    // Skip separators when moving to index 0
+    while (selectedIndex < filteredItems.size() && 
+           filteredItems[selectedIndex].find("──────") != std::string::npos)
+    {
+        selectedIndex++;
+    }
+    
+    // If all items are separators or we went past the end, reset to 0
+    if (selectedIndex >= filteredItems.size())
+    {
+        selectedIndex = 0;
+    }
+}
+
 void InteractiveList::hideCursor()
 {
 #ifdef _WIN32
@@ -197,6 +216,9 @@ void InteractiveList::applyFilter()
     
     // Recalculate max display items based on the new filtered set
     maxDisplayItems = calculateMaxDisplayItems();
+    
+    // Skip over any separator items at the start
+    skipSeparators();
 }
 
 int InteractiveList::calculateItemLines(const std::string& item) {
@@ -543,6 +565,18 @@ int InteractiveList::runWithUpdates(std::function<bool()> updateCallback)
                     if (selectedIndex > 0)
                     {
                         selectedIndex--;
+                        // Skip over separator items
+                        while (selectedIndex > 0 && 
+                               filteredItems[selectedIndex].find("──────") != std::string::npos)
+                        {
+                            selectedIndex--;
+                        }
+                        // If we hit a separator at index 0, go to search mode
+                        if (selectedIndex == 0 && 
+                            filteredItems[selectedIndex].find("──────") != std::string::npos)
+                        {
+                            isSearchMode = true;
+                        }
                     }
                     else
                     {
@@ -564,6 +598,7 @@ int InteractiveList::runWithUpdates(std::function<bool()> updateCallback)
                     if (!filteredItems.empty())
                     {
                         selectedIndex = 0;
+                        skipSeparators();
                     }
                 }
                 else if (!filteredItems.empty())
@@ -571,6 +606,23 @@ int InteractiveList::runWithUpdates(std::function<bool()> updateCallback)
                     if (selectedIndex < filteredItems.size() - 1)
                     {
                         selectedIndex++;
+                        // Skip over separator items
+                        while (selectedIndex < filteredItems.size() - 1 && 
+                               filteredItems[selectedIndex].find("──────") != std::string::npos)
+                        {
+                            selectedIndex++;
+                        }
+                        // If we ended up on a separator at the last position, go back
+                        if (selectedIndex == filteredItems.size() - 1 && 
+                            filteredItems[selectedIndex].find("──────") != std::string::npos)
+                        {
+                            // Find the last non-separator item
+                            while (selectedIndex > 0 && 
+                                   filteredItems[selectedIndex].find("──────") != std::string::npos)
+                            {
+                                selectedIndex--;
+                            }
+                        }
                     }
                     // No wrapping - stay at the last item when at the end
                 }
@@ -599,6 +651,18 @@ int InteractiveList::runWithUpdates(std::function<bool()> updateCallback)
                             if (selectedIndex > 0)
                             {
                                 selectedIndex--;
+                                // Skip over separator items
+                                while (selectedIndex > 0 && 
+                                       filteredItems[selectedIndex].find("──────") != std::string::npos)
+                                {
+                                    selectedIndex--;
+                                }
+                                // If we hit a separator at index 0, go to search mode
+                                if (selectedIndex == 0 && 
+                                    filteredItems[selectedIndex].find("──────") != std::string::npos)
+                                {
+                                    isSearchMode = true;
+                                }
                             }
                             else
                             {
@@ -620,6 +684,7 @@ int InteractiveList::runWithUpdates(std::function<bool()> updateCallback)
                             if (!filteredItems.empty())
                             {
                                 selectedIndex = 0;
+                                skipSeparators();
                             }
                         }
                         else if (!filteredItems.empty())
@@ -627,6 +692,23 @@ int InteractiveList::runWithUpdates(std::function<bool()> updateCallback)
                             if (selectedIndex < filteredItems.size() - 1)
                             {
                                 selectedIndex++;
+                                // Skip over separator items
+                                while (selectedIndex < filteredItems.size() - 1 && 
+                                       filteredItems[selectedIndex].find("──────") != std::string::npos)
+                                {
+                                    selectedIndex++;
+                                }
+                                // If we ended up on a separator at the last position, go back
+                                if (selectedIndex == filteredItems.size() - 1 && 
+                                    filteredItems[selectedIndex].find("──────") != std::string::npos)
+                                {
+                                    // Find the last non-separator item
+                                    while (selectedIndex > 0 && 
+                                           filteredItems[selectedIndex].find("──────") != std::string::npos)
+                                    {
+                                        selectedIndex--;
+                                    }
+                                }
                             }
                             // No wrapping - stay at the last item when at the end
                         }

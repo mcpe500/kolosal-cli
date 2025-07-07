@@ -26,6 +26,13 @@ public:
     std::string selectModel();
     
     /**
+     * @brief Show model selection menu with available config models at the top
+     * @param availableModels Vector of model IDs available in config
+     * @return Selected model ID, or empty string if cancelled
+     */
+    std::string selectModel(const std::vector<std::string>& availableModels);
+    
+    /**
      * @brief Parse Hugging Face repository URL or ID to extract model ID
      * @param input URL or ID from command line
      * @return Normalized model ID (e.g., "owner/model-name") or empty string if invalid

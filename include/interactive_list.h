@@ -140,6 +140,11 @@ private:
      * @return Maximum number of items that can be displayed
      */
     size_t calculateMaxDisplayItems();
+    
+    /**
+     * @brief Skip over separator items in the list
+     */
+    void skipSeparators();
 };
 
 #endif // INTERACTIVE_LIST_H

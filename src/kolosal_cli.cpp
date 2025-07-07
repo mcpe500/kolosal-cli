@@ -613,12 +613,38 @@ int KolosalCLI::run(const std::string &repoId)
     // Standard flow: browse kolosal models
     while (true)
     {
-        std::string selectedModel = m_repoSelector->selectModel();
+        // Get available model IDs from config
+        std::vector<std::string> availableModels = getAvailableModelIds();
+        
+        std::string selectedModel = m_repoSelector->selectModel(availableModels);
 
         if (selectedModel.empty())
         {
             std::cout << "Model selection cancelled." << std::endl;
             return 0;
+        }
+
+        // Check if it's a local model from config
+        if (selectedModel.find("LOCAL:") == 0) {
+            std::string modelId = selectedModel.substr(6); // Remove "LOCAL:" prefix
+            
+            // Ensure server connection
+            if (!ensureServerConnection()) {
+                std::cerr << "Unable to connect to Kolosal server." << std::endl;
+                return 1;
+            }
+            
+            // Check if engine already exists and start chat
+            if (m_serverClient->engineExists(modelId)) {
+                std::cout << "✓ Model '" << modelId << "' is ready to use!" << std::endl;
+                std::cout << "\nStarting chat interface..." << std::endl;
+                startChatInterface(modelId);
+                return 0;
+            } else {
+                std::cout << "⚠️ Model '" << modelId << "' is in config but not loaded on server." << std::endl;
+                std::cout << "Please restart the server or manually load the model." << std::endl;
+                return 1;
+            }
         }
 
         ModelFile selectedFile = m_fileSelector->selectModelFile(selectedModel);
@@ -798,4 +824,37 @@ bool KolosalCLI::updateConfigWithModel(const std::string& engineId, const std::s
 
 bool KolosalCLI::startChatInterface(const std::string& engineId) {
     return m_chatInterface->startChatInterface(engineId);
+}
+
+std::vector<std::string> KolosalCLI::getAvailableModelIds() {
+    std::vector<std::string> modelIds;
+    
+    try {
+        std::string configPath = "config.yaml";
+        
+        // Check if config file exists
+        if (!std::filesystem::exists(configPath)) {
+            return modelIds; // Return empty vector if no config file
+        }
+        
+        // Load the config file
+        YAML::Node config = YAML::LoadFile(configPath);
+        
+        // Check if models section exists
+        if (!config["models"] || !config["models"].IsSequence()) {
+            return modelIds; // Return empty vector if no models section
+        }
+        
+        // Extract model IDs
+        for (const auto& model : config["models"]) {
+            if (model["id"]) {
+                std::string modelId = model["id"].as<std::string>();
+                modelIds.push_back(modelId);
+            }
+        }
+    } catch (const std::exception& e) {
+        std::cerr << "Error reading config file: " << e.what() << std::endl;
+    }
+    
+    return modelIds;
 }
