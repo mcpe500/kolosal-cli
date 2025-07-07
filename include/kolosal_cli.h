@@ -38,6 +38,12 @@ public:
      */
     bool stopBackgroundServer();
 
+    /**
+     * @brief Display server logs in the CLI
+     * @return True if logs were retrieved and displayed successfully, false otherwise
+     */
+    bool showServerLogs();
+
 private:
     /**
      * @brief Parse Hugging Face repository URL or ID to extract model ID

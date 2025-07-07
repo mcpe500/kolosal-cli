@@ -858,3 +858,69 @@ std::vector<std::string> KolosalCLI::getAvailableModelIds() {
     
     return modelIds;
 }
+
+bool KolosalCLI::showServerLogs() {
+    std::cout << "📄 Retrieving server logs...\n\n";
+    
+    if (!m_serverClient) {
+        std::cerr << "❌ Error: Server client not initialized\n";
+        return false;
+    }
+    
+    // Check if server is running
+    if (!m_serverClient->isServerHealthy()) {
+        std::cerr << "❌ Error: Kolosal server is not running\n";
+        std::cerr << "   Please start the server first by running a command that requires it\n";
+        return false;
+    }
+    
+    std::vector<std::tuple<std::string, std::string, std::string>> logs;
+    if (!m_serverClient->getLogs(logs)) {
+        std::cerr << "❌ Error: Failed to retrieve server logs\n";
+        return false;
+    }
+    
+    if (logs.empty()) {
+        std::cout << "ℹ️  No logs available\n";
+        return true;
+    }
+    
+    std::cout << "📋 Server Logs (" << logs.size() << " entries):\n";
+    std::cout << std::string(80, '=') << "\n\n";
+    
+    // Display logs with color coding based on level
+    for (const auto& logEntry : logs) {
+        const std::string& level = std::get<0>(logEntry);
+        const std::string& timestamp = std::get<1>(logEntry);
+        const std::string& message = std::get<2>(logEntry);
+        
+        // Color code based on log level
+        std::string levelColor;
+        std::string levelIcon;
+        if (level == "ERROR") {
+            levelColor = "\033[31m"; // Red
+            levelIcon = "❌";
+        } else if (level == "WARNING") {
+            levelColor = "\033[33m"; // Yellow
+            levelIcon = "⚠️ ";
+        } else if (level == "INFO") {
+            levelColor = "\033[32m"; // Green
+            levelIcon = "ℹ️ ";
+        } else if (level == "DEBUG") {
+            levelColor = "\033[36m"; // Cyan
+            levelIcon = "🔍";
+        } else {
+            levelColor = "\033[37m"; // White
+            levelIcon = "📝";
+        }
+        
+        // Reset color
+        std::string resetColor = "\033[0m";
+        
+        std::cout << levelColor << levelIcon << " [" << level << "] " << resetColor 
+                  << "\033[90m" << timestamp << resetColor << "\n";
+        std::cout << "   " << message << "\n\n";
+    }
+    
+    return true;
+}

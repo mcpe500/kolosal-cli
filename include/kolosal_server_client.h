@@ -5,6 +5,7 @@
 #include <memory>
 #include <functional>
 #include <vector>
+#include <tuple>
 
 /**
  * @brief Client for communicating with Kolosal Server
@@ -125,6 +126,13 @@ public:
      */
     bool streamingChatCompletion(const std::string& engineId, const std::string& message, 
                                std::function<void(const std::string&, double, double)> responseCallback);
+
+    /**
+     * @brief Get server logs
+     * @param logs Output: vector of log entries with level, timestamp, and message
+     * @return True if logs were retrieved successfully, false otherwise
+     */
+    bool getLogs(std::vector<std::tuple<std::string, std::string, std::string>>& logs);
 
 private:
     std::string m_baseUrl;

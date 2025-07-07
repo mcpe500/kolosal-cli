@@ -1019,3 +1019,33 @@ bool KolosalServerClient::streamingChatCompletion(const std::string& engineId, c
         return false;
     }
 }
+
+bool KolosalServerClient::getLogs(std::vector<std::tuple<std::string, std::string, std::string>>& logs) {
+    try {
+        std::string response;
+        if (!makeGetRequest("/logs", response)) {
+            return false;
+        }
+        
+        json jsonResponse = json::parse(response);
+        
+        if (!jsonResponse.contains("logs") || !jsonResponse["logs"].is_array()) {
+            return false;
+        }
+        
+        logs.clear();
+        for (const auto& logEntry : jsonResponse["logs"]) {
+            if (logEntry.contains("level") && logEntry.contains("timestamp") && logEntry.contains("message")) {
+                logs.emplace_back(
+                    logEntry["level"].get<std::string>(),
+                    logEntry["timestamp"].get<std::string>(),
+                    logEntry["message"].get<std::string>()
+                );
+            }
+        }
+        
+        return true;
+    } catch (const std::exception&) {
+        return false;
+    }
+}
