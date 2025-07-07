@@ -640,11 +640,104 @@ int KolosalCLI::run(const std::string &repoId)
                 std::cout << "\nStarting chat interface..." << std::endl;
                 startChatInterface(modelId);
                 return 0;
-            } else {
-                std::cout << "⚠️ Model '" << modelId << "' is in config but not loaded on server." << std::endl;
-                std::cout << "Please restart the server or manually load the model." << std::endl;
-                return 1;
             }
+            
+            // Check if model is currently downloading
+            long long downloadedBytes, totalBytes;
+            double percentage;
+            std::string status;
+            
+            if (m_serverClient->getDownloadProgress(modelId, downloadedBytes, totalBytes, percentage, status)) {
+                if (status == "downloading" || status == "creating_engine" || status == "pending") {
+                    std::cout << "📥 Model '" << modelId << "' is currently downloading..." << std::endl;
+                    std::cout << "Continuing download progress monitoring..." << std::endl;
+                    
+                    // Track this download
+                    m_activeDownloads.push_back(modelId);
+                    
+                    // Monitor the existing download progress
+                    bool downloadSuccess = m_serverClient->monitorDownloadProgress(
+                        modelId,
+                        [this](double percentage, const std::string &status, long long downloadedBytes, long long totalBytes)
+                        {
+                            // Progress callback - update display
+                            ensureConsoleEncoding(); // Ensure proper encoding before each update
+
+                            // Handle special case where no download was needed
+                            if (status == "not_found")
+                            {
+                                std::cout << "✓ Model file already exists locally. Registering engine..." << std::endl;
+                                return;
+                            }
+
+                            // Only show progress for actual downloads
+                            if (status == "downloading" && totalBytes > 0)
+                            {
+                                std::cout << "\r";
+                                // Create progress bar
+                                int barWidth = 40;
+                                int pos = static_cast<int>(barWidth * percentage / 100.0);
+
+                                std::cout << "[";
+                                for (int i = 0; i < barWidth; ++i)
+                                {
+                                    if (i < pos)
+                                        std::cout << "█";
+                                    else
+                                        std::cout << "-";
+                                }
+                                std::cout << "] " << std::fixed << std::setprecision(1) << percentage << "%";
+                                
+                                // Show file sizes
+                                std::cout << " (" << formatFileSize(downloadedBytes) << "/" << formatFileSize(totalBytes) << ")";
+                                std::cout.flush();
+                            }
+                            else if (status == "creating_engine")
+                            {
+                                std::cout << "\r✓ Download complete. Registering engine...                                      " << std::endl;
+                            }
+                            else if (status == "engine_created")
+                            {
+                                std::cout << "✓ Engine registered successfully." << std::endl;
+                            }
+                            else if (status == "completed")
+                            {
+                                std::cout << "✓ Process completed." << std::endl;
+                            }
+                        },
+                        1000 // Check every 1 second
+                    );
+                    
+                    // Remove from active downloads list
+                    auto it = std::find(m_activeDownloads.begin(), m_activeDownloads.end(), modelId);
+                    if (it != m_activeDownloads.end())
+                    {
+                        m_activeDownloads.erase(it);
+                    }
+                    
+                    std::cout << std::endl; // New line after progress bar
+                    if (downloadSuccess)
+                    {
+                        std::cout << "✓ Model ready for inference." << std::endl;
+                        
+                        // Start chat interface
+                        std::cout << "\n🎉 Model download completed successfully!" << std::endl;
+                        std::cout << "Starting chat interface..." << std::endl;
+                        startChatInterface(modelId);
+                        return 0;
+                    }
+                    else
+                    {
+                        std::cout << "✗ Download failed." << std::endl;
+                        return 1;
+                    }
+                }
+            }
+            
+            // If we get here, the model is not downloading and doesn't exist
+            std::cout << "⚠️ Model '" << modelId << "' is in config but not loaded on server." << std::endl;
+            std::cout << "Please restart the server or manually load the model." << std::endl;
+            return 1;
         }
 
         ModelFile selectedFile = m_fileSelector->selectModelFile(selectedModel);

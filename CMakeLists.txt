@@ -33,6 +33,12 @@ ucm_print_flags()
 # Add the kolosal-server submodule
 add_subdirectory(kolosal-server)
 
+# Add the inference engine as a separate target (built independently)
+option(BUILD_INFERENCE_ENGINE "Build the inference engine separately" ON)
+if(BUILD_INFERENCE_ENGINE)
+    add_subdirectory(kolosal-server/inference)
+endif()
+
 # Add external libraries
 set(CURL_DIR ${CMAKE_CURRENT_SOURCE_DIR}/external/curl)
 set(NLOHMANN_JSON_DIR ${CMAKE_CURRENT_SOURCE_DIR}/external)
@@ -86,17 +92,8 @@ add_executable(kolosal ${SOURCES} ${HEADERS})
 # Make kolosal depend on the server targets to ensure proper build order
 add_dependencies(kolosal kolosal_server_exe kolosal_server)
 
-# Also depend on the inference target - get the name from the inference build
-if(USE_CUDA)
-    set(INFERENCE_TARGET_NAME "llama-cuda")
-elseif(USE_VULKAN)
-    set(INFERENCE_TARGET_NAME "llama-vulkan")
-else()
-    set(INFERENCE_TARGET_NAME "llama-cpu")
-endif()
-
-# Add dependency on the inference target
-add_dependencies(kolosal ${INFERENCE_TARGET_NAME})
+# Note: Inference engine is now built separately and loaded at runtime
+# No direct dependencies on inference targets
 
 # Link libraries
 target_link_libraries(kolosal ${CURL_LIBRARY})
