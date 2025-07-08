@@ -60,6 +60,17 @@ public:
                    const std::string& modelPath);
     
     /**
+     * @brief Add an engine to the server with specific inference engine
+     * @param engineId Unique identifier for the engine
+     * @param modelUrl URL to download the model from
+     * @param modelPath Local path where the model will be saved
+     * @param inferenceEngine Inference engine to use (llama-cpu, llama-cuda, llama-vulkan, etc.)
+     * @return True if engine creation was initiated successfully, false otherwise
+     */
+    bool addEngine(const std::string& engineId, const std::string& modelUrl, 
+                   const std::string& modelPath, const std::string& inferenceEngine);
+    
+    /**
      * @brief Get list of existing engines from the server
      * @param engines Output: vector of engine IDs that exist on the server
      * @return True if engines list was retrieved successfully, false otherwise
@@ -178,7 +189,7 @@ private:
      * @param modelPath Path to the model file
      * @return True if config was updated successfully, false otherwise
      */
-    bool updateConfigWithNewModel(const std::string& engineId, const std::string& modelPath);
+    bool updateConfigWithNewModel(const std::string& engineId, const std::string& modelPath, const std::string& inferenceEngine = "llama-cpu");
 };
 
 #endif // KOLOSAL_SERVER_CLIENT_H

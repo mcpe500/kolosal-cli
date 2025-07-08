@@ -76,184 +76,184 @@ QuantizationInfo ModelFileUtils::detectQuantization(const std::string &filename)
     // Unsloth Dynamic (UD) variants - selective parameter quantization
     if (lower_filename.find("iq1_s") != std::string::npos && lower_filename.find("ud-") != std::string::npos)
     {
-        return {"UD-IQ1_S", "1-bit Unsloth Dynamic quantization (small), selective parameter quantization", 1};
+        return {"UD-IQ1_S", "1-bit UD, ultra compact", 1};
     }
     else if (lower_filename.find("iq1_m") != std::string::npos && lower_filename.find("ud-") != std::string::npos)
     {
-        return {"UD-IQ1_M", "1-bit Unsloth Dynamic quantization (medium), selective parameter quantization", 2};
+        return {"UD-IQ1_M", "1-bit UD, medium variant", 2};
     }
     else if (lower_filename.find("iq2_xxs") != std::string::npos && lower_filename.find("ud-") != std::string::npos)
     {
-        return {"UD-IQ2_XXS", "2-bit Unsloth Dynamic quantization (extra extra small), selective parameter quantization", 3};
+        return {"UD-IQ2_XXS", "2-bit UD, ultra small", 3};
     }
     else if (lower_filename.find("iq2_m") != std::string::npos && lower_filename.find("ud-") != std::string::npos)
     {
-        return {"UD-IQ2_M", "2-bit Unsloth Dynamic quantization (medium), selective parameter quantization", 4};
+        return {"UD-IQ2_M", "2-bit UD, balanced", 4};
     }
     else if (lower_filename.find("iq3_xxs") != std::string::npos && lower_filename.find("ud-") != std::string::npos)
     {
-        return {"UD-IQ3_XXS", "3-bit Unsloth Dynamic quantization (extra extra small), selective parameter quantization", 5};
+        return {"UD-IQ3_XXS", "3-bit UD, very small", 5};
     }
     else if (lower_filename.find("q2_k_xl") != std::string::npos && lower_filename.find("ud-") != std::string::npos)
     {
-        return {"UD-Q2_K_XL", "2-bit Unsloth Dynamic K-quantization (XL), selective parameter quantization", 6};
+        return {"UD-Q2_K_XL", "2-bit UD K-quant, very compact", 6};
     }
     else if (lower_filename.find("q3_k_xl") != std::string::npos && lower_filename.find("ud-") != std::string::npos)
     {
-        return {"UD-Q3_K_XL", "3-bit Unsloth Dynamic K-quantization (XL), selective parameter quantization", 7};
+        return {"UD-Q3_K_XL", "3-bit UD K-quant, compact", 7};
     }
     else if (lower_filename.find("q4_k_xl") != std::string::npos && lower_filename.find("ud-") != std::string::npos)
     {
-        return {"UD-Q4_K_XL", "4-bit Unsloth Dynamic K-quantization (XL), selective parameter quantization", 8};
+        return {"UD-Q4_K_XL", "4-bit UD K-quant, good quality", 8};
     }
     else if (lower_filename.find("q5_k_xl") != std::string::npos && lower_filename.find("ud-") != std::string::npos)
     {
-        return {"UD-Q5_K_XL", "5-bit Unsloth Dynamic K-quantization (XL), selective parameter quantization", 9};
+        return {"UD-Q5_K_XL", "5-bit UD K-quant, high quality", 9};
     }
     else if (lower_filename.find("q6_k_xl") != std::string::npos && lower_filename.find("ud-") != std::string::npos)
     {
-        return {"UD-Q6_K_XL", "6-bit Unsloth Dynamic K-quantization (XL), selective parameter quantization", 10};
+        return {"UD-Q6_K_XL", "6-bit UD K-quant, very high quality", 10};
     }
     else if (lower_filename.find("q8_k_xl") != std::string::npos && lower_filename.find("ud-") != std::string::npos)
     {
-        return {"UD-Q8_K_XL", "8-bit Unsloth Dynamic K-quantization (XL), selective parameter quantization", 11};
+        return {"UD-Q8_K_XL", "8-bit UD K-quant, maximum quality", 11};
 
         // Standard XL variants
     }
     else if (lower_filename.find("q8_k_xl") != std::string::npos)
     {
-        return {"Q8_K_XL", "8-bit K-quantization (XL), maximum quality", 12};
+        return {"Q8_K_XL", "8-bit K-quant, maximum quality", 12};
     }
     else if (lower_filename.find("q6_k_xl") != std::string::npos)
     {
-        return {"Q6_K_XL", "6-bit K-quantization (XL), very high quality", 13};
+        return {"Q6_K_XL", "6-bit K-quant, very high quality", 13};
     }
     else if (lower_filename.find("q5_k_xl") != std::string::npos)
     {
-        return {"Q5_K_XL", "5-bit K-quantization (XL), high quality", 14};
+        return {"Q5_K_XL", "5-bit K-quant, high quality", 14};
     }
     else if (lower_filename.find("q4_k_xl") != std::string::npos)
     {
-        return {"Q4_K_XL", "4-bit K-quantization (XL), good quality", 15};
+        return {"Q4_K_XL", "4-bit K-quant, good quality", 15};
     }
     else if (lower_filename.find("q3_k_xl") != std::string::npos)
     {
-        return {"Q3_K_XL", "3-bit K-quantization (XL), compact with quality", 16};
+        return {"Q3_K_XL", "3-bit K-quant, compact", 16};
     }
     else if (lower_filename.find("q2_k_xl") != std::string::npos)
     {
-        return {"Q2_K_XL", "2-bit K-quantization (XL), very compact", 17};
+        return {"Q2_K_XL", "2-bit K-quant, very compact", 17};
         // Standard 8-bit variants
     }
     else if (lower_filename.find("q8_0") != std::string::npos)
     {
-        return {"Q8_0", "8-bit quantization, excellent quality", 18};
+        return {"Q8_0", "8-bit quant, excellent quality", 18};
 
         // 6-bit variants
     }
     else if (lower_filename.find("q6_k") != std::string::npos)
     {
-        return {"Q6_K", "6-bit quantization, high quality with smaller size", 19};
+        return {"Q6_K", "6-bit quant, high quality", 19};
 
         // 5-bit variants
     }
     else if (lower_filename.find("q5_k_m") != std::string::npos)
     {
-        return {"Q5_K_M", "5-bit quantization (medium), good quality/size balance", 20};
+        return {"Q5_K_M", "5-bit quant medium, balanced", 20};
     }
     else if (lower_filename.find("q5_k_s") != std::string::npos)
     {
-        return {"Q5_K_S", "5-bit quantization (small), smaller size", 21};
+        return {"Q5_K_S", "5-bit quant small, compact", 21};
     }
     else if (lower_filename.find("q5_0") != std::string::npos)
     {
-        return {"Q5_0", "5-bit quantization, legacy format", 22};
+        return {"Q5_0", "5-bit quant, legacy", 22};
 
         // 4-bit variants
     }
     else if (lower_filename.find("iq4_nl") != std::string::npos)
     {
-        return {"IQ4_NL", "4-bit improved quantization (no lookup), very efficient", 23};
+        return {"IQ4_NL", "4-bit improved, very efficient", 23};
     }
     else if (lower_filename.find("iq4_xs") != std::string::npos)
     {
-        return {"IQ4_XS", "4-bit improved quantization (extra small), ultra compact", 24};
+        return {"IQ4_XS", "4-bit improved, ultra compact", 24};
     }
     else if (lower_filename.find("q4_k_m") != std::string::npos)
     {
-        return {"Q4_K_M", "4-bit quantization (medium), good for most use cases", 25};
+        return {"Q4_K_M", "4-bit quant medium, recommended", 25};
     }
     else if (lower_filename.find("q4_k_l") != std::string::npos)
     {
-        return {"Q4_K_L", "4-bit quantization (large), better quality at 4-bit", 26};
+        return {"Q4_K_L", "4-bit quant large, better quality", 26};
     }
     else if (lower_filename.find("q4_k_s") != std::string::npos)
     {
-        return {"Q4_K_S", "4-bit quantization (small), very compact", 27};
+        return {"Q4_K_S", "4-bit quant small, very compact", 27};
     }
     else if (lower_filename.find("q4_1") != std::string::npos)
     {
-        return {"Q4_1", "4-bit quantization v1, improved legacy format", 28};
+        return {"Q4_1", "4-bit quant v1, improved legacy", 28};
     }
     else if (lower_filename.find("q4_0") != std::string::npos)
     {
-        return {"Q4_0", "4-bit quantization, legacy format", 29};
+        return {"Q4_0", "4-bit quant, legacy", 29};
 
         // 3-bit variants
     }
     else if (lower_filename.find("iq3_xxs") != std::string::npos)
     {
-        return {"IQ3_XXS", "3-bit improved quantization (extra extra small), maximum compression", 30};
+        return {"IQ3_XXS", "3-bit improved, maximum compression", 30};
     }
     else if (lower_filename.find("q3_k_l") != std::string::npos)
     {
-        return {"Q3_K_L", "3-bit quantization (large), experimental", 31};
+        return {"Q3_K_L", "3-bit quant large, experimental", 31};
     }
     else if (lower_filename.find("q3_k_m") != std::string::npos)
     {
-        return {"Q3_K_M", "3-bit quantization (medium), very small size", 32};
+        return {"Q3_K_M", "3-bit quant medium, very small", 32};
     }
     else if (lower_filename.find("q3_k_s") != std::string::npos)
     {
-        return {"Q3_K_S", "3-bit quantization (small), ultra compact", 33};
+        return {"Q3_K_S", "3-bit quant small, ultra compact", 33};
 
         // 2-bit variants
     }
     else if (lower_filename.find("iq2_xxs") != std::string::npos)
     {
-        return {"IQ2_XXS", "2-bit improved quantization (extra extra small), extreme compression", 34};
+        return {"IQ2_XXS", "2-bit improved, extreme compression", 34};
     }
     else if (lower_filename.find("iq2_m") != std::string::npos)
     {
-        return {"IQ2_M", "2-bit improved quantization (medium), balanced compression", 35};
+        return {"IQ2_M", "2-bit improved, balanced", 35};
     }
     else if (lower_filename.find("q2_k_l") != std::string::npos)
     {
-        return {"Q2_K_L", "2-bit quantization (large), better quality at 2-bit", 36};
+        return {"Q2_K_L", "2-bit quant large, better quality", 36};
     }
     else if (lower_filename.find("q2_k") != std::string::npos)
     {
-        return {"Q2_K", "2-bit quantization, extremely small but lower quality", 37};
+        return {"Q2_K", "2-bit quant, extremely small", 37};
 
         // 1-bit variants (experimental)
     }
     else if (lower_filename.find("iq1_s") != std::string::npos)
     {
-        return {"IQ1_S", "1-bit improved quantization (small), experimental ultra compression", 38};
+        return {"IQ1_S", "1-bit improved, experimental", 38};
     }
     else if (lower_filename.find("iq1_m") != std::string::npos)
     {
-        return {"IQ1_M", "1-bit improved quantization (medium), experimental compression", 39};
+        return {"IQ1_M", "1-bit improved medium, experimental", 39};
 
         // Floating point variants
     }
     else if (lower_filename.find("f16") != std::string::npos)
     {
-        return {"F16", "16-bit floating point, highest quality but large size", 40};
+        return {"F16", "16-bit float, highest quality", 40};
     }
     else if (lower_filename.find("f32") != std::string::npos)
     {
-        return {"F32", "32-bit floating point, original precision", 41};
+        return {"F32", "32-bit float, original precision", 41};
 
         // Default
     }

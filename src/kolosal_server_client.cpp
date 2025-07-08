@@ -525,6 +525,12 @@ bool KolosalServerClient::engineExists(const std::string& engineId)
 bool KolosalServerClient::addEngine(const std::string &engineId, const std::string &modelUrl,
                                     const std::string &modelPath)
 {
+    return addEngine(engineId, modelUrl, modelPath, "llama-cpu");
+}
+
+bool KolosalServerClient::addEngine(const std::string &engineId, const std::string &modelUrl,
+                                    const std::string &modelPath, const std::string &inferenceEngine)
+{
     try
     {
         // Check if engine already exists
@@ -539,6 +545,7 @@ bool KolosalServerClient::addEngine(const std::string &engineId, const std::stri
         payload["model_path"] = modelUrl; // For download, we pass URL as model_path
         payload["load_immediately"] = false;
         payload["main_gpu_id"] = 0;
+        payload["inference_engine"] = inferenceEngine; // Use specified inference engine
         
         // Set comprehensive loading parameters
         json loadParams;
@@ -562,7 +569,7 @@ bool KolosalServerClient::addEngine(const std::string &engineId, const std::stri
         }
         
         // Always use the URL for config storage to avoid conflicts when local files are deleted
-        updateConfigWithNewModel(engineId, modelUrl);
+        updateConfigWithNewModel(engineId, modelUrl, inferenceEngine);
         return true;
     }
     catch (const std::exception &)
@@ -825,7 +832,7 @@ bool KolosalServerClient::cancelAllDownloads()
     }
 }
 
-bool KolosalServerClient::updateConfigWithNewModel(const std::string& engineId, const std::string& modelPath)
+bool KolosalServerClient::updateConfigWithNewModel(const std::string& engineId, const std::string& modelPath, const std::string& inferenceEngine)
 {
     const std::string configPath = "config.yaml";
     
@@ -860,6 +867,7 @@ bool KolosalServerClient::updateConfigWithNewModel(const std::string& engineId, 
                                    "    path: \"" + modelPath + "\"\n"
                                    "    load_immediately: false\n"
                                    "    main_gpu_id: 0\n"
+                                   "    inference_engine: \"" + inferenceEngine + "\"\n"
                                    "    load_params:\n"
                                    "      n_ctx: 4096\n"
                                    "      n_keep: 2048\n"
