@@ -223,3 +223,44 @@ std::vector<ModelFile> HuggingFaceClient::fetchModelFilesFromAnyRepo(const std::
     
     return modelFiles;
 }
+
+std::vector<std::string> HuggingFaceClient::fetchEngineFiles() {
+    std::vector<std::string> engineFiles;
+    
+    HttpResponse response;
+    std::string url = API_BASE_URL + "/models/kolosal/engines/tree/main";
+    
+    if (!HttpClient::get(url, response)) {
+        std::cerr << "Failed to fetch engine files from kolosal/engines repository" << std::endl;
+        return engineFiles;
+    }
+    
+    try {
+        json jsonResponse = json::parse(response.data);
+        
+        if (jsonResponse.contains("error")) {
+            std::cerr << "API Error: " << jsonResponse["error"].get<std::string>() << std::endl;
+            return engineFiles;
+        }
+        
+        // Parse the file tree
+        for (const auto& item : jsonResponse) {
+            if (item.contains("type") && item["type"] == "file") {
+                std::string filename = item["path"].get<std::string>();
+                
+                // Filter for engine library files (typically .dll, .so, .dylib)
+                if (filename.find(".dll") != std::string::npos ||
+                    filename.find(".so") != std::string::npos ||
+                    filename.find(".dylib") != std::string::npos) {
+                    engineFiles.push_back(filename);
+                }
+            }
+        }
+        
+    } catch (const json::exception& e) {
+        std::cerr << "JSON parsing error: " << e.what() << std::endl;
+        return engineFiles;
+    }
+    
+    return engineFiles;
+}

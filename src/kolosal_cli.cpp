@@ -18,6 +18,7 @@
 #include <sstream>
 #include <signal.h>
 #include <csignal>
+#include <map>
 #include <thread>
 #include <fstream>
 #include <filesystem>
@@ -164,21 +165,24 @@ void KolosalCLI::cleanup()
 
 bool KolosalCLI::stopBackgroundServer()
 {
+    showWelcome();
+    
     if (!m_serverClient)
     {
-        std::cerr << "Server client not initialized." << std::endl;
+        std::cerr << "❌ Error: Server client not initialized\n";
         return false;
     }
 
-    std::cout << "Stopping background Kolosal server..." << std::endl;
+    std::cout << "🛑 Stopping Kolosal server...\n";
 
     // Try to stop the server
     if (m_serverClient->shutdownServer())
     {
+        std::cout << "✅ Server stopped successfully\n";
         return true;
     }
 
-    std::cerr << "Failed to stop server." << std::endl;
+    std::cerr << "❌ Failed to stop server\n";
     return false;
 }
 
@@ -953,6 +957,8 @@ std::vector<std::string> KolosalCLI::getAvailableModelIds() {
 }
 
 bool KolosalCLI::showServerLogs() {
+    showWelcome();
+    
     std::cout << "📄 Retrieving server logs...\n\n";
     
     if (!m_serverClient) {
@@ -966,18 +972,18 @@ bool KolosalCLI::showServerLogs() {
         std::cerr << "   Please start the server first by running a command that requires it\n";
         return false;
     }
-    
+
     std::vector<std::tuple<std::string, std::string, std::string>> logs;
     if (!m_serverClient->getLogs(logs)) {
         std::cerr << "❌ Error: Failed to retrieve server logs\n";
         return false;
     }
-    
+
     if (logs.empty()) {
         std::cout << "ℹ️  No logs available\n";
         return true;
     }
-    
+
     std::cout << "📋 Server Logs (" << logs.size() << " entries):\n";
     std::cout << std::string(80, '=') << "\n\n";
     
@@ -1013,6 +1019,169 @@ bool KolosalCLI::showServerLogs() {
         std::cout << levelColor << levelIcon << " [" << level << "] " << resetColor 
                   << "\033[90m" << timestamp << resetColor << "\n";
         std::cout << "   " << message << "\n\n";
+    }
+    
+    return true;
+}
+
+bool KolosalCLI::showInferenceEngines() {
+    showWelcome();
+    
+    // Initialize Kolosal server first
+    if (!initializeServer()) {
+        std::cerr << "❌ Failed to initialize Kolosal server\n";
+        return false;
+    }
+    
+    std::cout << "🔧 Retrieving available inference engines...\n";
+    
+    if (!m_serverClient) {
+        std::cerr << "❌ Error: Server client not initialized\n";
+        return false;
+    }
+    
+    // Fetch available engines from server
+    std::vector<std::tuple<std::string, std::string, std::string, std::string, bool>> serverEngines;
+    if (!m_serverClient->getInferenceEngines(serverEngines)) {
+        std::cerr << "❌ Error: Failed to retrieve inference engines from server\n";
+        return false;
+    }
+    
+    // Fetch available engine files from Hugging Face
+    std::cout << "📥 Fetching engine files from kolosal/engines repository...\n";
+    std::vector<std::string> availableEngineFiles = HuggingFaceClient::fetchEngineFiles();
+    
+    // Create a map of server engines by name for easier lookup
+    std::map<std::string, std::tuple<std::string, std::string, std::string, std::string, bool>> serverEngineMap;
+    for (const auto& engine : serverEngines) {
+        const std::string& name = std::get<0>(engine);
+        serverEngineMap[name] = engine;
+    }
+    
+    // Create combined engine list with download status
+    std::vector<std::tuple<std::string, std::string, bool, bool>> combinedEngines; // name, filename, isDownloaded, isLoaded
+    
+    // Add engines from Hugging Face with download status
+    for (const std::string& filename : availableEngineFiles) {
+        // Extract engine name from filename (remove extension and path)
+        std::string engineName = filename;
+        size_t lastSlash = engineName.find_last_of('/');
+        if (lastSlash != std::string::npos) {
+            engineName = engineName.substr(lastSlash + 1);
+        }
+        size_t lastDot = engineName.find_last_of('.');
+        if (lastDot != std::string::npos) {
+            engineName = engineName.substr(0, lastDot);
+        }
+        
+        // Check if this engine exists on the server
+        bool isDownloaded = serverEngineMap.find(engineName) != serverEngineMap.end();
+        bool isLoaded = false;
+        if (isDownloaded) {
+            isLoaded = std::get<4>(serverEngineMap[engineName]);
+        }
+        
+        combinedEngines.emplace_back(engineName, filename, isDownloaded, isLoaded);
+    }
+    
+    // Add any server engines that weren't found in Hugging Face (custom engines)
+    for (const auto& serverEngine : serverEngines) {
+        const std::string& name = std::get<0>(serverEngine);
+        bool found = false;
+        for (const auto& combined : combinedEngines) {
+            if (std::get<0>(combined) == name) {
+                found = true;
+                break;
+            }
+        }
+        if (!found) {
+            bool isLoaded = std::get<4>(serverEngine);
+            combinedEngines.emplace_back(name, "", true, isLoaded); // Custom engine, assume downloaded
+        }
+    }
+    
+    if (combinedEngines.empty()) {
+        std::cout << "ℹ️  No inference engines available\n";
+        return true;
+    }
+    
+    std::cout << "\n";
+    
+    // Create display items for interactive list
+    std::vector<std::string> displayItems;
+    
+    for (const auto& engineEntry : combinedEngines) {
+        const std::string& name = std::get<0>(engineEntry);
+        bool isDownloaded = std::get<2>(engineEntry);
+        bool isLoaded = std::get<3>(engineEntry);
+        
+        // Create display string with simplified status
+        std::string displayString = name;
+        if (isLoaded || isDownloaded) {
+            displayString += " (DOWNLOADED: ready)";
+        } else {
+            displayString += " (NOT DOWNLOADED: available for download)";
+        }
+        
+        displayItems.push_back(displayString);
+    }
+    
+    // Add navigation option
+    displayItems.push_back("Back to Main Menu");
+    
+    // Create and run interactive list
+    InteractiveList engineList(displayItems);
+    int result = engineList.run();
+    
+    if (result >= 0 && result < static_cast<int>(combinedEngines.size())) {
+        // User selected an engine - show detailed information
+        const auto& selectedEngine = combinedEngines[result];
+        const std::string& name = std::get<0>(selectedEngine);
+        const std::string& filename = std::get<1>(selectedEngine);
+        bool isDownloaded = std::get<2>(selectedEngine);
+        bool isLoaded = std::get<3>(selectedEngine);
+        
+        std::cout << "\n🔧 Inference Engine Details:\n";
+        std::cout << std::string(50, '=') << "\n";
+        std::cout << "Name: " << name << "\n";
+        if (!filename.empty()) {
+            std::cout << "Filename: " << filename << "\n";
+        }
+        
+        if (isLoaded) {
+            std::cout << "Status: ✅ LOADED (ready to use)\n";
+        } else if (isDownloaded) {
+            std::cout << "Status: 📦 DOWNLOADED (available to load)\n";
+        } else {
+            std::cout << "Status: ⬇️  NOT DOWNLOADED (available for download)\n";
+            if (!filename.empty()) {
+                std::cout << "Download URL: https://huggingface.co/kolosal/engines/resolve/main/" << filename << "\n";
+            }
+        }
+        
+        // Show additional details if available from server
+        if (isDownloaded && serverEngineMap.find(name) != serverEngineMap.end()) {
+            const auto& serverEngine = serverEngineMap[name];
+            const std::string& version = std::get<1>(serverEngine);
+            const std::string& description = std::get<2>(serverEngine);
+            const std::string& library_path = std::get<3>(serverEngine);
+            
+            if (!version.empty()) {
+                std::cout << "Version: " << version << "\n";
+            }
+            if (!description.empty()) {
+                std::cout << "Description: " << description << "\n";
+            }
+            if (!library_path.empty()) {
+                std::cout << "Library Path: " << library_path << "\n";
+            }
+        }
+        
+        std::cout << std::string(50, '=') << "\n";
+        
+        // Future enhancement: Add actions like download, load/unload engine
+        std::cout << "\nPress any key to continue...";
+        std::cin.get();
     }
     
     return true;

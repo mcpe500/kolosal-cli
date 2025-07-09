@@ -78,6 +78,13 @@ public:
     bool getEngines(std::vector<std::string>& engines);
     
     /**
+     * @brief Get list of available inference engines from the server
+     * @param engines Output: vector of inference engine info structures
+     * @return True if inference engines list was retrieved successfully, false otherwise
+     */
+    bool getInferenceEngines(std::vector<std::tuple<std::string, std::string, std::string, std::string, bool>>& engines);
+    
+    /**
      * @brief Check if an engine with the given ID already exists on the server
      * @param engineId Engine ID to check
      * @return True if engine exists, false otherwise

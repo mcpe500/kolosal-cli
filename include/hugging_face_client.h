@@ -28,6 +28,12 @@ public:
      * @return Vector of ModelFile objects with quantization information
      */
     static std::vector<ModelFile> fetchModelFilesFromAnyRepo(const std::string& modelId);
+    
+    /**
+     * @brief Fetch available engine files from kolosal/engines repository
+     * @return Vector of engine file names available for download
+     */
+    static std::vector<std::string> fetchEngineFiles();
 
 private:
     static const std::string API_BASE_URL;

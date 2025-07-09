@@ -1057,3 +1057,44 @@ bool KolosalServerClient::getLogs(std::vector<std::tuple<std::string, std::strin
         return false;
     }
 }
+
+bool KolosalServerClient::getInferenceEngines(std::vector<std::tuple<std::string, std::string, std::string, std::string, bool>>& engines)
+{
+    std::string response;
+    
+    // Try both /v1/inference-engines and /inference-engines endpoints
+    if (!makeGetRequest("/v1/inference-engines", response))
+    {
+        if (!makeGetRequest("/inference-engines", response))
+        {
+            return false;
+        }
+    }
+
+    try
+    {
+        json enginesJson = json::parse(response);
+        engines.clear();
+        
+        // Handle inference engines response format
+        if (enginesJson.contains("inference_engines") && enginesJson["inference_engines"].is_array())
+        {
+            for (const auto& engine : enginesJson["inference_engines"])
+            {
+                std::string name = engine.value("name", "");
+                std::string version = engine.value("version", "");
+                std::string description = engine.value("description", "");
+                std::string library_path = engine.value("library_path", "");
+                bool is_loaded = engine.value("is_loaded", false);
+                
+                engines.emplace_back(name, version, description, library_path, is_loaded);
+            }
+        }
+        
+        return true;
+    }
+    catch (const std::exception&)
+    {
+        return false;
+    }
+}

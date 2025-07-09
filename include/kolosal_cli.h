@@ -44,6 +44,12 @@ public:
      */
     bool showServerLogs();
 
+    /**
+     * @brief Display available inference engines in the CLI
+     * @return True if engines were retrieved and displayed successfully, false otherwise
+     */
+    bool showInferenceEngines();
+
 private:
     /**
      * @brief Parse Hugging Face repository URL or ID to extract model ID
