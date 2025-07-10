@@ -417,7 +417,7 @@ bool ChatInterface::startChatInterface(const std::string& engineId) {
         }
 
         if (!success && fullResponse.empty()) {
-            std::cout << "❌ Error: Failed to get response from the model. Please try again.";
+            std::cout << "❌ Error: Failed to get response from the model. Please try again." << std::endl;
             continue;
         }
 
