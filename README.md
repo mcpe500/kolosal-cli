@@ -781,7 +781,7 @@ For server development, see [kolosal-server/docs/DEVELOPER_GUIDE.md](kolosal-ser
 
 ## License
 
-This project is licensed under the MIT License - see the [LICENSE](LICENSE) file for details.
+This project is licensed under the APACHE 2.0 License - see the [LICENSE](LICENSE) file for details.
 
 ## Kolosal Server Integration
 
