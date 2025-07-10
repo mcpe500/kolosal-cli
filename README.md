@@ -806,8 +806,14 @@ GET  /health                     # Server health check
 GET  /v1/engines                 # List available models
 POST /v1/engines                 # Add new model/engine
 POST /v1/chat/completions        # Chat completion (OpenAI compatible)
-GET  /v1/download-progress/{id}  # Download progress monitoring
-POST /v1/cancel-download/{id}    # Cancel model download
+GET  /v1/downloads               # List all active downloads
+GET  /v1/downloads/{id}          # Get progress for specific download
+POST /v1/downloads/{id}/cancel   # Cancel specific download
+POST /v1/downloads/{id}/pause    # Pause specific download
+POST /v1/downloads/{id}/resume   # Resume specific download
+POST /v1/downloads/cancel        # Cancel all downloads
+DELETE /v1/downloads/{id}        # Cancel specific download (alternative)
+DELETE /v1/downloads             # Cancel all downloads (alternative)
 ```
 
 ### Configuration

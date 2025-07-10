@@ -121,10 +121,31 @@ public:
     bool cancelDownload(const std::string& modelId);
 
     /**
+     * @brief Pause a specific download
+     * @param modelId Model ID of the download to pause
+     * @return True if pause request was successful, false otherwise
+     */
+    bool pauseDownload(const std::string& modelId);
+
+    /**
+     * @brief Resume a specific download
+     * @param modelId Model ID of the download to resume
+     * @return True if resume request was successful, false otherwise
+     */
+    bool resumeDownload(const std::string& modelId);
+
+    /**
      * @brief Cancel all active downloads
      * @return True if cancellation request was successful, false otherwise
      */
     bool cancelAllDownloads();
+
+    /**
+     * @brief Get status of all downloads
+     * @param downloads Output: vector of download info (modelId, status, progress, downloadedBytes, totalBytes)
+     * @return True if downloads status was retrieved successfully, false otherwise
+     */
+    bool getAllDownloads(std::vector<std::tuple<std::string, std::string, double, long long, long long>>& downloads);
 
     /**
      * @brief Send a chat completion request to the server

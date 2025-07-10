@@ -582,15 +582,19 @@ bool KolosalServerClient::getDownloadProgress(const std::string &modelId, long l
                                               long long &totalBytes, double &percentage, std::string &status)
 {
     std::string response;
-    std::string endpoint = "/download-progress/" + modelId;
+    std::string endpoint = "/v1/downloads/" + modelId;
 
+    // Try v1 endpoint first, then fallback to non-v1
     if (!makeGetRequest(endpoint, response))
     {
-        // Check if response contains error indicating download not found
-        if (!response.empty())
+        endpoint = "/downloads/" + modelId;
+        if (!makeGetRequest(endpoint, response))
         {
-            try
+            // Check if response contains error indicating download not found
+            if (!response.empty())
             {
+                try
+                {
                 json errorJson = json::parse(response);
                 if (errorJson.contains("error") && errorJson["error"].contains("code"))
                 {
@@ -609,8 +613,9 @@ bool KolosalServerClient::getDownloadProgress(const std::string &modelId, long l
             {
                 // If we can't parse the error response, fall through to return false
             }
+            }
+            return false;
         }
-        return false;
     }
 
     try
@@ -778,12 +783,17 @@ bool KolosalServerClient::cancelDownload(const std::string &modelId)
     loading.start();
 
     std::string response;
-    std::string endpoint = "/downloads/" + modelId + "/cancel";
+    std::string endpoint = "/v1/downloads/" + modelId + "/cancel";
 
+    // Try v1 endpoint first, then fallback to non-v1
     if (!makePostRequest(endpoint, "{}", response))
     {
-        loading.stop();
-        return false;
+        endpoint = "/downloads/" + modelId + "/cancel";
+        if (!makePostRequest(endpoint, "{}", response))
+        {
+            loading.stop();
+            return false;
+        }
     }
 
     try
@@ -810,12 +820,17 @@ bool KolosalServerClient::cancelAllDownloads()
     loading.start();
 
     std::string response;
-    std::string endpoint = "/downloads";
+    std::string endpoint = "/v1/downloads/cancel";
 
+    // Try v1 endpoint first, then fallback to non-v1
     if (!makePostRequest(endpoint, "{}", response))
     {
-        loading.stop();
-        return false;
+        endpoint = "/downloads/cancel";
+        if (!makePostRequest(endpoint, "{}", response))
+        {
+            loading.stop();
+            return false;
+        }
     }
 
     try
@@ -828,6 +843,123 @@ bool KolosalServerClient::cancelAllDownloads()
     catch (const std::exception &)
     {
         loading.stop();
+        return false;
+    }
+}
+
+bool KolosalServerClient::pauseDownload(const std::string &modelId)
+{
+    LoadingAnimation loading("Pausing download");
+    loading.start();
+
+    std::string response;
+    std::string endpoint = "/v1/downloads/" + modelId + "/pause";
+
+    // Try v1 endpoint first, then fallback to non-v1
+    if (!makePostRequest(endpoint, "{}", response))
+    {
+        endpoint = "/downloads/" + modelId + "/pause";
+        if (!makePostRequest(endpoint, "{}", response))
+        {
+            loading.stop();
+            return false;
+        }
+    }
+
+    try
+    {
+        json pauseJson = json::parse(response);
+        bool success = pauseJson.value("success", false);
+        if (success) {
+            loading.complete("Download paused");
+        } else {
+            loading.stop();
+        }
+        return success;
+    }
+    catch (const std::exception &)
+    {
+        loading.stop();
+        return false;
+    }
+}
+
+bool KolosalServerClient::resumeDownload(const std::string &modelId)
+{
+    LoadingAnimation loading("Resuming download");
+    loading.start();
+
+    std::string response;
+    std::string endpoint = "/v1/downloads/" + modelId + "/resume";
+
+    // Try v1 endpoint first, then fallback to non-v1
+    if (!makePostRequest(endpoint, "{}", response))
+    {
+        endpoint = "/downloads/" + modelId + "/resume";
+        if (!makePostRequest(endpoint, "{}", response))
+        {
+            loading.stop();
+            return false;
+        }
+    }
+
+    try
+    {
+        json resumeJson = json::parse(response);
+        bool success = resumeJson.value("success", false);
+        if (success) {
+            loading.complete("Download resumed");
+        } else {
+            loading.stop();
+        }
+        return success;
+    }
+    catch (const std::exception &)
+    {
+        loading.stop();
+        return false;
+    }
+}
+
+bool KolosalServerClient::getAllDownloads(std::vector<std::tuple<std::string, std::string, double, long long, long long>>& downloads)
+{
+    std::string response;
+    std::string endpoint = "/v1/downloads";
+
+    // Try v1 endpoint first, then fallback to non-v1
+    if (!makeGetRequest(endpoint, response))
+    {
+        endpoint = "/downloads";
+        if (!makeGetRequest(endpoint, response))
+        {
+            return false;
+        }
+    }
+
+    try
+    {
+        json downloadsJson = json::parse(response);
+        
+        if (downloadsJson.contains("downloads") && downloadsJson["downloads"].is_array())
+        {
+            downloads.clear();
+            for (const auto& download : downloadsJson["downloads"])
+            {
+                std::string modelId = download.value("model_id", "");
+                std::string status = download.value("status", "");
+                double percentage = download.value("percentage", 0.0);
+                long long downloadedBytes = download.value("downloaded_bytes", 0LL);
+                long long totalBytes = download.value("total_bytes", 0LL);
+                
+                downloads.emplace_back(modelId, status, percentage, downloadedBytes, totalBytes);
+            }
+            return true;
+        }
+        
+        return false;
+    }
+    catch (const std::exception &)
+    {
         return false;
     }
 }
@@ -1016,7 +1148,7 @@ bool KolosalServerClient::streamingChatCompletion(const std::string& engineId, c
                     if (chunkJson.contains("error")) {
                         streamComplete = true;
                     }
-                } catch (const std::exception& e) {
+                } catch (const std::exception&) {
                     // Silently ignore JSON parse errors for malformed chunks
                 }
             });
