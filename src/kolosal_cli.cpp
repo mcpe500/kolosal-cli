@@ -764,86 +764,116 @@ int KolosalCLI::run(const std::string &repoId)
             // This could be due to a cancelled download or failed load - try to re-add it
             std::cout << "Model '" << modelId << "' is in config but not loaded on server." << std::endl;
             std::cout << "Attempting to restart model loading..." << std::endl;
-            
+
             // Get model information from config to attempt re-adding
-            try {
+            try
+            {
                 std::string configPath = "config.yaml";
-                if (std::filesystem::exists(configPath)) {
+                if (std::filesystem::exists(configPath))
+                {
                     YAML::Node config = YAML::LoadFile(configPath);
-                    if (config["models"] && config["models"].IsSequence()) {
-                        for (const auto &model : config["models"]) {
-                            if (model["id"] && model["id"].as<std::string>() == modelId) {
+                    if (config["models"] && config["models"].IsSequence())
+                    {
+                        for (const auto &model : config["models"])
+                        {
+                            if (model["id"] && model["id"].as<std::string>() == modelId)
+                            {
                                 std::string modelPath = model["path"].as<std::string>();
-                                std::string inferenceEngine = model["inference_engine"] ? 
-                                    model["inference_engine"].as<std::string>() : "llama-cpu";
-                                
+                                std::string inferenceEngine = model["inference_engine"] ? model["inference_engine"].as<std::string>() : "llama-cpu";
+
                                 std::cout << "Re-adding model from: " << modelPath << std::endl;
-                                
+
                                 // Attempt to re-add the model
-                                if (m_serverClient->addEngine(modelId, modelPath, modelPath, inferenceEngine)) {
+                                if (m_serverClient->addEngine(modelId, modelPath, modelPath, inferenceEngine))
+                                {
                                     std::cout << "Model re-added successfully!" << std::endl;
-                                    
+
                                     // If it's a URL, monitor the download progress
-                                    if (modelPath.find("http://") == 0 || modelPath.find("https://") == 0) {
+                                    if (modelPath.find("http://") == 0 || modelPath.find("https://") == 0)
+                                    {
                                         std::cout << "Starting download monitoring..." << std::endl;
-                                        
+
                                         // Track this download
                                         m_activeDownloads.push_back(modelId);
-                                        
+
                                         // Monitor download progress
                                         bool downloadSuccess = m_serverClient->monitorDownloadProgress(
                                             modelId,
-                                            [this](double percentage, const std::string &status, long long downloadedBytes, long long totalBytes) {
+                                            [this](double percentage, const std::string &status, long long downloadedBytes, long long totalBytes)
+                                            {
                                                 ensureConsoleEncoding();
-                                                
-                                                if (status == "downloading" && totalBytes > 0) {
+
+                                                if (status == "downloading" && totalBytes > 0)
+                                                {
                                                     std::cout << "\r";
                                                     int barWidth = 40;
                                                     int pos = static_cast<int>(barWidth * percentage / 100.0);
-                                                    
+
                                                     std::cout << "[";
-                                                    for (int i = 0; i < barWidth; ++i) {
-                                                        if (i < pos) std::cout << "█";
-                                                        else std::cout << "-";
+                                                    for (int i = 0; i < barWidth; ++i)
+                                                    {
+                                                        if (i < pos)
+                                                            std::cout << "█";
+                                                        else
+                                                            std::cout << "-";
                                                     }
-                                                    std::cout << "] " << std::fixed << std::setprecision(1) << percentage << "%";                                    std::cout << " (" << formatFileSize(downloadedBytes) << "/" << formatFileSize(totalBytes) << ")";
-                                    std::cout.flush();
-                                } else if (status == "completing") {
-                                    std::cout << "\rDownload 100% complete. Processing...                                      " << std::endl;
-                                } else if (status == "processing") {
-                                    std::cout << "\rProcessing download. This may take a few moments...                        " << std::endl;                                                } else if (status == "completing") {
+                                                    std::cout << "] " << std::fixed << std::setprecision(1) << percentage << "%";
+                                                    std::cout << " (" << formatFileSize(downloadedBytes) << "/" << formatFileSize(totalBytes) << ")";
+                                                    std::cout.flush();
+                                                }
+                                                else if (status == "completing")
+                                                {
                                                     std::cout << "\rDownload 100% complete. Processing...                                      " << std::endl;
-                                                } else if (status == "processing") {
+                                                }
+                                                else if (status == "processing")
+                                                {
                                                     std::cout << "\rProcessing download. This may take a few moments...                        " << std::endl;
-                                                } else if (status == "creating_engine") {
+                                                }
+                                                else if (status == "completing")
+                                                {
+                                                    std::cout << "\rDownload 100% complete. Processing...                                      " << std::endl;
+                                                }
+                                                else if (status == "processing")
+                                                {
+                                                    std::cout << "\rProcessing download. This may take a few moments...                        " << std::endl;
+                                                }
+                                                else if (status == "creating_engine")
+                                                {
                                                     std::cout << "\rDownload complete. Registering engine...                                      " << std::endl;
                                                 }
                                             },
-                                            1000
-                                        );
-                                        
+                                            1000);
+
                                         // Remove from active downloads list
                                         auto it = std::find(m_activeDownloads.begin(), m_activeDownloads.end(), modelId);
-                                        if (it != m_activeDownloads.end()) {
+                                        if (it != m_activeDownloads.end())
+                                        {
                                             m_activeDownloads.erase(it);
                                         }
-                                        
+
                                         std::cout << std::endl;
-                                        if (downloadSuccess) {
+                                        if (downloadSuccess)
+                                        {
                                             std::cout << "Model ready for inference!" << std::endl;
                                             startChatInterface(modelId);
                                             return 0;
-                                        } else {
+                                        }
+                                        else
+                                        {
                                             std::cout << "Download failed." << std::endl;
                                             return 1;
                                         }
-                                    } else {
+                                    }
+                                    else
+                                    {
                                         // Local file, should be ready immediately
                                         std::cout << "Model loaded successfully!" << std::endl;
                                         startChatInterface(modelId);
                                         return 0;
                                     }
-                                } else {
+                                }
+                                else
+                                {
                                     std::cout << "Failed to re-add model. Please check server logs for details." << std::endl;
                                     return 1;
                                 }
@@ -852,10 +882,12 @@ int KolosalCLI::run(const std::string &repoId)
                         }
                     }
                 }
-            } catch (const std::exception& e) {
+            }
+            catch (const std::exception &e)
+            {
                 std::cout << "Error reading config: " << e.what() << std::endl;
             }
-            
+
             std::cout << "Could not find model configuration or re-add failed." << std::endl;
             std::cout << "Please restart the server or manually load the model." << std::endl;
             return 1;
