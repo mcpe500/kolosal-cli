@@ -37,6 +37,17 @@ add_subdirectory(kolosal-server)
 option(BUILD_INFERENCE_ENGINE "Build the inference engine separately" ON)
 if(BUILD_INFERENCE_ENGINE)
     add_subdirectory(kolosal-server/inference)
+    
+    # Determine the inference target name based on acceleration options
+    if(USE_CUDA)
+        set(INFERENCE_TARGET_NAME "llama-cuda")
+    elseif(USE_VULKAN)
+        set(INFERENCE_TARGET_NAME "llama-vulkan")
+    else()
+        set(INFERENCE_TARGET_NAME "llama-cpu")
+    endif()
+    
+    message(STATUS "Inference target name: ${INFERENCE_TARGET_NAME}")
 endif()
 
 # Add external libraries
@@ -106,11 +117,11 @@ if(WIN32)
     # Windows-specific libraries
     target_link_libraries(kolosal ws2_32 wldap32 crypt32 normaliz)
     
-    # Copy curl DLL to output directory - try multiple possible locations
-    set(CURL_DLL_PATHS
-        "${CURL_DIR}/bin/libcurl.dll"
-        "${CMAKE_BINARY_DIR}/bin/$<CONFIG>/libcurl.dll"
-        "${CMAKE_CURRENT_BINARY_DIR}/kolosal-server/bin/$<CONFIG>/libcurl.dll"
+    # Set output directory for Windows
+    set_target_properties(kolosal PROPERTIES
+        RUNTIME_OUTPUT_DIRECTORY "${CMAKE_BINARY_DIR}/bin/$<CONFIG>"
+        LIBRARY_OUTPUT_DIRECTORY "${CMAKE_BINARY_DIR}/lib/$<CONFIG>"
+        ARCHIVE_OUTPUT_DIRECTORY "${CMAKE_BINARY_DIR}/lib/$<CONFIG>"
     )
     
     # Function to copy DLL if it exists
@@ -118,59 +129,73 @@ if(WIN32)
         add_custom_command(TARGET ${target_name} POST_BUILD
             COMMAND ${CMAKE_COMMAND} -E copy_if_different
             "${source_path}"
-            "$<TARGET_FILE_DIR:${target_name}>/${dest_name}"
+            "${CMAKE_BINARY_DIR}/bin/$<CONFIG>/${dest_name}"
             COMMENT "${comment_text}"
             VERBATIM
         )
     endfunction()
     
-    # Copy curl DLL from primary source - with multiple fallback attempts
+    # Copy curl DLL from primary source
     add_custom_command(TARGET kolosal POST_BUILD
+        COMMAND ${CMAKE_COMMAND} -E make_directory "${CMAKE_BINARY_DIR}/bin/$<CONFIG>"
         COMMAND ${CMAKE_COMMAND} -E copy_if_different
         "${CURL_DIR}/bin/libcurl.dll"
-        "$<TARGET_FILE_DIR:kolosal>/libcurl.dll"
-        COMMENT "Copying libcurl.dll to CLI output directory"
+        "${CMAKE_BINARY_DIR}/bin/$<CONFIG>/libcurl.dll"
+        COMMENT "Copying libcurl.dll to output directory"
         VERBATIM
     )
     
-    # Copy Kolosal server DLL - this should always work since it's a target
+    # Copy Kolosal server DLL
     add_custom_command(TARGET kolosal POST_BUILD
+        COMMAND ${CMAKE_COMMAND} -E make_directory "${CMAKE_BINARY_DIR}/bin/$<CONFIG>"
         COMMAND ${CMAKE_COMMAND} -E copy_if_different
         "$<TARGET_FILE:kolosal_server>"
-        "$<TARGET_FILE_DIR:kolosal>/"
-        COMMENT "Copying kolosal_server.dll to CLI output directory"
+        "${CMAKE_BINARY_DIR}/bin/$<CONFIG>/"
+        COMMENT "Copying kolosal_server.dll to output directory"
         DEPENDS kolosal_server
     )
     
     # Copy Kolosal server executable
     add_custom_command(TARGET kolosal POST_BUILD
+        COMMAND ${CMAKE_COMMAND} -E make_directory "${CMAKE_BINARY_DIR}/bin/$<CONFIG>"
         COMMAND ${CMAKE_COMMAND} -E copy_if_different
         "$<TARGET_FILE:kolosal_server_exe>"
-        "$<TARGET_FILE_DIR:kolosal>/"
-        COMMENT "Copying kolosal-server.exe to CLI output directory"
+        "${CMAKE_BINARY_DIR}/bin/$<CONFIG>/"
+        COMMENT "Copying kolosal-server.exe to output directory"
         DEPENDS kolosal_server_exe
     )
     
-    # Copy the inference engine DLL - this should always work since it's a target
-    add_custom_command(TARGET kolosal POST_BUILD
-        COMMAND ${CMAKE_COMMAND} -E copy_if_different
-        "$<TARGET_FILE:${INFERENCE_TARGET_NAME}>"
-        "$<TARGET_FILE_DIR:kolosal>/"
-        COMMENT "Copying ${INFERENCE_TARGET_NAME}.dll to CLI output directory"
-        DEPENDS ${INFERENCE_TARGET_NAME}
-    )
+    # Copy the inference engine DLL
+    if(BUILD_INFERENCE_ENGINE)
+        add_custom_command(TARGET kolosal POST_BUILD
+            COMMAND ${CMAKE_COMMAND} -E make_directory "${CMAKE_BINARY_DIR}/bin/$<CONFIG>"
+            COMMAND ${CMAKE_COMMAND} -E copy_if_different
+            "$<TARGET_FILE:${INFERENCE_TARGET_NAME}>"
+            "${CMAKE_BINARY_DIR}/bin/$<CONFIG>/"
+            COMMENT "Copying ${INFERENCE_TARGET_NAME}.dll to output directory"
+            DEPENDS ${INFERENCE_TARGET_NAME}
+        )
+    endif()
     
     # Copy any additional DLLs that may be in the server output directory
     add_custom_command(TARGET kolosal POST_BUILD
+        COMMAND ${CMAKE_COMMAND} -E make_directory "${CMAKE_BINARY_DIR}/bin/$<CONFIG>"
         COMMAND ${CMAKE_COMMAND} -E copy_if_different
         "${CMAKE_BINARY_DIR}/kolosal-server/$<CONFIG>/libcurl.dll"
-        "$<TARGET_FILE_DIR:kolosal>/libcurl.dll"
+        "${CMAKE_BINARY_DIR}/bin/$<CONFIG>/libcurl.dll"
         COMMENT "Copying libcurl.dll from server directory"
         VERBATIM
     )
 else()
     # Linux-specific libraries
     target_link_libraries(kolosal pthread dl)
+    
+    # Set output directory for Linux
+    set_target_properties(kolosal PROPERTIES
+        RUNTIME_OUTPUT_DIRECTORY "${CMAKE_BINARY_DIR}/bin"
+        LIBRARY_OUTPUT_DIRECTORY "${CMAKE_BINARY_DIR}/lib"
+        ARCHIVE_OUTPUT_DIRECTORY "${CMAKE_BINARY_DIR}/lib"
+    )
     
     # Link filesystem library for C++17 std::filesystem on older GCC versions
     if(CMAKE_CXX_COMPILER_ID STREQUAL "GNU" AND CMAKE_CXX_COMPILER_VERSION VERSION_LESS "9.0")
@@ -219,29 +244,37 @@ else()
         endif()
     endif()
     
-    # Copy Kolosal server shared library with RPATH setting
+    # Copy Kolosal server shared library
     add_custom_command(TARGET kolosal POST_BUILD
+        COMMAND ${CMAKE_COMMAND} -E make_directory "${CMAKE_BINARY_DIR}/bin"
         COMMAND ${CMAKE_COMMAND} -E copy_if_different
         "$<TARGET_FILE:kolosal_server>"
-        "$<TARGET_FILE_DIR:kolosal>/libkolosal_server.so"
-        COMMENT "Copying libkolosal_server.so to CLI output directory"
+        "${CMAKE_BINARY_DIR}/bin/libkolosal_server.so"
+        COMMENT "Copying libkolosal_server.so to output directory"
+        DEPENDS kolosal_server
     )
     
     # Copy Kolosal server executable
     add_custom_command(TARGET kolosal POST_BUILD
+        COMMAND ${CMAKE_COMMAND} -E make_directory "${CMAKE_BINARY_DIR}/bin"
         COMMAND ${CMAKE_COMMAND} -E copy_if_different
         "$<TARGET_FILE:kolosal_server_exe>"
-        "$<TARGET_FILE_DIR:kolosal>/kolosal-server"
-        COMMENT "Copying kolosal-server to CLI output directory"
+        "${CMAKE_BINARY_DIR}/bin/kolosal-server"
+        COMMENT "Copying kolosal-server to output directory"
+        DEPENDS kolosal_server_exe
     )
     
     # Copy the inference engine shared library
-    add_custom_command(TARGET kolosal POST_BUILD
-        COMMAND ${CMAKE_COMMAND} -E copy_if_different
-        "$<TARGET_FILE:${INFERENCE_TARGET_NAME}>"
-        "$<TARGET_FILE_DIR:kolosal>/lib${INFERENCE_TARGET_NAME}.so"
-        COMMENT "Copying lib${INFERENCE_TARGET_NAME}.so to CLI output directory"
-    )
+    if(BUILD_INFERENCE_ENGINE)
+        add_custom_command(TARGET kolosal POST_BUILD
+            COMMAND ${CMAKE_COMMAND} -E make_directory "${CMAKE_BINARY_DIR}/bin"
+            COMMAND ${CMAKE_COMMAND} -E copy_if_different
+            "$<TARGET_FILE:${INFERENCE_TARGET_NAME}>"
+            "${CMAKE_BINARY_DIR}/bin/lib${INFERENCE_TARGET_NAME}.so"
+            COMMENT "Copying lib${INFERENCE_TARGET_NAME}.so to output directory"
+            DEPENDS ${INFERENCE_TARGET_NAME}
+        )
+    endif()
     
     # Set RPATH for runtime library search in the same directory and standard lib paths
     set_target_properties(kolosal PROPERTIES
@@ -252,10 +285,23 @@ else()
 endif()
 
 # Copy config.yaml to output directory for all platforms
-add_custom_command(TARGET kolosal POST_BUILD
-    COMMAND ${CMAKE_COMMAND} -E copy_if_different
-    "${CMAKE_CURRENT_SOURCE_DIR}/config.yaml"
-    $<TARGET_FILE_DIR:kolosal>/config.yaml)
+if(WIN32)
+    add_custom_command(TARGET kolosal POST_BUILD
+        COMMAND ${CMAKE_COMMAND} -E make_directory "${CMAKE_BINARY_DIR}/bin/$<CONFIG>"
+        COMMAND ${CMAKE_COMMAND} -E copy_if_different
+        "${CMAKE_CURRENT_SOURCE_DIR}/config.yaml"
+        "${CMAKE_BINARY_DIR}/bin/$<CONFIG>/config.yaml"
+        COMMENT "Copying config.yaml to output directory"
+    )
+else()
+    add_custom_command(TARGET kolosal POST_BUILD
+        COMMAND ${CMAKE_COMMAND} -E make_directory "${CMAKE_BINARY_DIR}/bin"
+        COMMAND ${CMAKE_COMMAND} -E copy_if_different
+        "${CMAKE_CURRENT_SOURCE_DIR}/config.yaml"
+        "${CMAKE_BINARY_DIR}/bin/config.yaml"
+        COMMENT "Copying config.yaml to output directory"
+    )
+endif()
 
 # Installation rules
 if(WIN32)
@@ -274,12 +320,14 @@ if(WIN32)
     )
     
     # Install the inference engine DLL
-    install(TARGETS ${INFERENCE_TARGET_NAME}
-        RUNTIME DESTINATION bin
-        LIBRARY DESTINATION bin
-        ARCHIVE DESTINATION lib
-        COMPONENT Runtime
-    )
+    if(BUILD_INFERENCE_ENGINE)
+        install(TARGETS ${INFERENCE_TARGET_NAME}
+            RUNTIME DESTINATION bin
+            LIBRARY DESTINATION bin
+            ARCHIVE DESTINATION lib
+            COMPONENT Runtime
+        )
+    endif()
     
     # Install CURL DLL if it exists
     if(EXISTS "${CURL_DIR}/bin/libcurl.dll")
@@ -299,11 +347,13 @@ if(WIN32)
         COMPONENT Runtime
     )
     
-    install(FILES 
-        "$<TARGET_FILE:${INFERENCE_TARGET_NAME}>"
-        DESTINATION bin
-        COMPONENT Runtime
-    )
+    if(BUILD_INFERENCE_ENGINE)
+        install(FILES 
+            "$<TARGET_FILE:${INFERENCE_TARGET_NAME}>"
+            DESTINATION bin
+            COMPONENT Runtime
+        )
+    endif()
     
     # Install CURL DLL with multiple fallback paths
     set(CURL_DLL_CANDIDATES
@@ -394,18 +444,26 @@ if(WIN32)
     )
     
     # Create a custom target to collect all DLLs in one place for easier packaging
-    add_custom_target(collect_dlls ALL
-        DEPENDS kolosal kolosal_server kolosal_server_exe ${INFERENCE_TARGET_NAME}
-        COMMENT "Collecting all DLLs for packaging"
-    )
+    if(BUILD_INFERENCE_ENGINE)
+        add_custom_target(collect_dlls ALL
+            DEPENDS kolosal kolosal_server kolosal_server_exe ${INFERENCE_TARGET_NAME}
+            COMMENT "Collecting all DLLs for packaging"
+        )
+    else()
+        add_custom_target(collect_dlls ALL
+            DEPENDS kolosal kolosal_server kolosal_server_exe
+            COMMENT "Collecting DLLs for packaging"
+        )
+    endif()
     
-    # Install all files from the main executable directory (includes DLLs copied during build)
-    install(DIRECTORY "$<TARGET_FILE_DIR:kolosal>/"
+    # Install all files from the output directory (includes all copied DLLs and executables)
+    install(DIRECTORY "${CMAKE_BINARY_DIR}/bin/$<CONFIG>/"
         DESTINATION bin
         COMPONENT Runtime
         FILES_MATCHING 
         PATTERN "*.dll"
         PATTERN "*.exe"
+        PATTERN "config.yaml"
         PERMISSIONS OWNER_READ OWNER_WRITE OWNER_EXECUTE GROUP_READ GROUP_EXECUTE WORLD_READ WORLD_EXECUTE
     )
     
@@ -426,10 +484,12 @@ elseif(UNIX)
     )
     
     # Install the inference engine shared library
-    install(TARGETS ${INFERENCE_TARGET_NAME}
-        LIBRARY DESTINATION lib
-        ARCHIVE DESTINATION lib
-    )
+    if(BUILD_INFERENCE_ENGINE)
+        install(TARGETS ${INFERENCE_TARGET_NAME}
+            LIBRARY DESTINATION lib
+            ARCHIVE DESTINATION lib
+        )
+    endif()
     
     # Install configuration file to etc/kolosal directory
     install(FILES config.yaml
