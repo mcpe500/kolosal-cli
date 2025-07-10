@@ -451,13 +451,10 @@ bool KolosalServerClient::getEngines(std::vector<std::string>& engines)
 {
     std::string response;
     
-    // Try both /v1/models and /models endpoints (using new model-based API)
-    if (!makeGetRequest("/v1/models", response))
+    // Use the unified models endpoint
+    if (!makeGetRequest("/models", response))
     {
-        if (!makeGetRequest("/models", response))
-        {
-            return false;
-        }
+        return false;
     }
 
     try
@@ -465,30 +462,12 @@ bool KolosalServerClient::getEngines(std::vector<std::string>& engines)
         json modelsJson = json::parse(response);
         engines.clear();
         
-        // Handle different possible response formats
-        if (modelsJson.is_array())
-        {
-            for (const auto& model : modelsJson)
-            {
-                if (model.contains("id"))
-                {
-                    engines.push_back(model["id"].get<std::string>());
-                }
-                else if (model.contains("model_id"))
-                {
-                    engines.push_back(model["model_id"].get<std::string>());
-                }
-            }
-        }
-        else if (modelsJson.contains("models") && modelsJson["models"].is_array())
+        // Handle the unified models response format
+        if (modelsJson.contains("models") && modelsJson["models"].is_array())
         {
             for (const auto& model : modelsJson["models"])
             {
-                if (model.contains("id"))
-                {
-                    engines.push_back(model["id"].get<std::string>());
-                }
-                else if (model.contains("model_id"))
+                if (model.contains("model_id"))
                 {
                     engines.push_back(model["model_id"].get<std::string>());
                 }
@@ -533,12 +512,9 @@ bool KolosalServerClient::addEngine(const std::string &engineId, const std::stri
 {
     try
     {
-        // Check if engine already exists
-        if (engineExists(engineId))
-        {
-            return true;
-        }
-
+        // Note: Removed the early return for existing engines to handle cases where
+        // downloads were cancelled or models failed to load properly
+        
         // No loading animation for cleaner output - just show final result
         json payload;
         payload["model_id"] = engineId;
@@ -568,9 +544,44 @@ bool KolosalServerClient::addEngine(const std::string &engineId, const std::stri
             return false;
         }
         
-        // Always use the URL for config storage to avoid conflicts when local files are deleted
-        updateConfigWithNewModel(engineId, modelUrl, inferenceEngine);
-        return true;
+        // Parse response to check if it was successful
+        try {
+            json responseJson = json::parse(response);
+            
+            // Check for error responses first
+            if (responseJson.contains("error")) {
+                auto error = responseJson["error"];
+                std::string errorMessage = error.value("message", "Unknown error");
+                std::string errorCode = error.value("code", "unknown");
+                
+                // Only treat "model_already_loaded" as a success case
+                if (errorCode == "model_already_loaded") {
+                    return true;
+                }
+                
+                // For other errors, don't update config and return false
+                std::cerr << "Server error: " << errorMessage << std::endl;
+                return false;
+            }
+            
+            // Check for success status codes
+            if (responseJson.contains("status")) {
+                std::string status = responseJson["status"];
+                if (status == "loaded" || status == "created" || status == "downloading") {
+                    // Only update config if the add operation was successful
+                    updateConfigWithNewModel(engineId, modelUrl, inferenceEngine);
+                    return true;
+                }
+            }
+            
+            // If no clear status, assume success for backward compatibility
+            updateConfigWithNewModel(engineId, modelUrl, inferenceEngine);
+            return true;
+        } catch (const std::exception&) {
+            // If we can't parse the response, still consider it successful if we got here
+            updateConfigWithNewModel(engineId, modelUrl, inferenceEngine);
+            return true;
+        }
     }
     catch (const std::exception &)
     {
@@ -651,6 +662,11 @@ bool KolosalServerClient::monitorDownloadProgress(const std::string &modelId,
 {
     auto startTime = std::chrono::steady_clock::now();
     auto maxDuration = std::chrono::minutes(30); // 30 minute timeout
+    
+    // Variables to track 100% completion status
+    auto lastHundredPercentTime = std::chrono::steady_clock::time_point{};
+    auto hundredPercentTimeout = std::chrono::seconds(30); // 30 seconds timeout at 100%
+    bool hasReachedHundred = false;
 
     while (true)
     {
@@ -686,6 +702,56 @@ bool KolosalServerClient::monitorDownloadProgress(const std::string &modelId,
         {
             return true; // This is actually a success case - no download was needed
         }
+        // Handle stuck at 100% case - download is complete but status hasn't transitioned yet
+        else if (status == "downloading" && percentage >= 100.0)
+        {
+            if (!hasReachedHundred)
+            {
+                hasReachedHundred = true;
+                lastHundredPercentTime = std::chrono::steady_clock::now();
+                // Trigger status callback to show progress transition
+                progressCallback(percentage, "completing", downloadedBytes, totalBytes);
+            }
+            else
+            {
+                auto timeSinceHundred = std::chrono::steady_clock::now() - lastHundredPercentTime;
+                
+                // Check if we've been stuck at 100% for a reasonable amount of time
+                if (timeSinceHundred > hundredPercentTimeout)
+                {
+                    // First, check if the engine already exists (quick check)
+                    if (engineExists(modelId))
+                    {
+                        // Engine exists, so download and engine creation was successful
+                        progressCallback(100.0, "engine_created", downloadedBytes, totalBytes);
+                        return true;
+                    }
+                    
+                    // If more than 2 minutes at 100%, assume something is wrong
+                    if (timeSinceHundred > std::chrono::minutes(2))
+                    {
+                        // Do one final check for engine existence before giving up
+                        if (engineExists(modelId))
+                        {
+                            progressCallback(100.0, "engine_created", downloadedBytes, totalBytes);
+                            return true;
+                        }
+                        return false; // Stuck too long, consider it failed
+                    }
+                    
+                    // Between 30 seconds and 2 minutes, show "processing" status
+                    if (timeSinceHundred > std::chrono::seconds(30))
+                    {
+                        progressCallback(percentage, "processing", downloadedBytes, totalBytes);
+                    }
+                }
+            }
+        }
+        else
+        {
+            // Reset the 100% timer if we're not at 100%
+            hasReachedHundred = false;
+        }
 
         std::this_thread::sleep_for(std::chrono::milliseconds(checkIntervalMs));
     }
@@ -718,6 +784,21 @@ bool KolosalServerClient::makePostRequest(const std::string &endpoint, const std
 
     HttpClient client;
     return client.post(url, payload, response, headers);
+}
+
+bool KolosalServerClient::makeDeleteRequest(const std::string &endpoint, const std::string &payload, std::string &response)
+{
+    std::string url = m_baseUrl + endpoint;
+
+    std::vector<std::string> headers;
+    headers.push_back("Content-Type: application/json");
+    if (!m_apiKey.empty())
+    {
+        headers.push_back("X-API-Key: " + m_apiKey);
+    }
+
+    HttpClient client;
+    return client.deleteRequest(url, payload, response, headers);
 }
 
 bool KolosalServerClient::parseJsonValue(const std::string &jsonString, const std::string &key, std::string &value)
@@ -802,6 +883,9 @@ bool KolosalServerClient::cancelDownload(const std::string &modelId)
         bool success = cancelJson.value("success", false);
         if (success) {
             loading.complete("Download cancelled");
+            
+            // Remove the model from config since the download was cancelled
+            removeModelFromConfig(modelId);
         } else {
             loading.stop();
         }
@@ -994,6 +1078,13 @@ bool KolosalServerClient::updateConfigWithNewModel(const std::string& engineId, 
             }
         }
         configFile.close();
+        
+        // Check if model with this ID already exists
+        std::string searchPattern = "id: \"" + engineId + "\"";
+        if (configContent.find(searchPattern) != std::string::npos) {
+            // Model already exists in config, don't add duplicate
+            return true;
+        }
         
         std::string newModelEntry = "  - id: \"" + engineId + "\"\n"
                                    "    path: \"" + modelPath + "\"\n"
@@ -1234,17 +1325,16 @@ bool KolosalServerClient::getInferenceEngines(std::vector<std::tuple<std::string
 bool KolosalServerClient::removeModel(const std::string& modelId)
 {
     try {
-        json payload;
-        payload["model_id"] = modelId;
-
         std::string response;
-        if (!makePostRequest("/models/remove", payload.dump(), response)) {
+        // Use DELETE request to the RESTful endpoint /models/{id}
+        std::string endpoint = "/models/" + modelId;
+        if (!makeDeleteRequest(endpoint, "", response)) {
             return false;
         }
 
         // Parse the response to check if removal was successful
         json responseJson = json::parse(response);
-        return responseJson.value("success", false);
+        return responseJson.contains("status") && responseJson["status"] == "removed";
     }
     catch (const std::exception&) {
         return false;
@@ -1254,11 +1344,10 @@ bool KolosalServerClient::removeModel(const std::string& modelId)
 bool KolosalServerClient::getModelStatus(const std::string& modelId, std::string& status, std::string& message)
 {
     try {
-        json payload;
-        payload["model_id"] = modelId;
-
         std::string response;
-        if (!makePostRequest("/models/status", payload.dump(), response)) {
+        // Use GET request to the RESTful status endpoint /models/{id}/status
+        std::string endpoint = "/models/" + modelId + "/status";
+        if (!makeGetRequest(endpoint, response)) {
             return false;
         }
 
@@ -1269,6 +1358,100 @@ bool KolosalServerClient::getModelStatus(const std::string& modelId, std::string
         return true;
     }
     catch (const std::exception&) {
+        return false;
+    }
+}
+
+bool KolosalServerClient::removeModelFromConfig(const std::string& modelId)
+{
+    const std::string configPath = "config.yaml";
+    
+    try {
+        if (!std::filesystem::exists(configPath)) {
+            return false;
+        }
+        
+        std::ifstream configFile(configPath);
+        if (!configFile.is_open()) {
+            return false;
+        }
+        
+        std::string configContent;
+        std::string line;
+        std::vector<std::string> lines;
+        
+        // Read all lines
+        while (std::getline(configFile, line)) {
+            lines.push_back(line);
+        }
+        configFile.close();
+        
+        // Find and remove the model entry
+        std::vector<std::string> filteredLines;
+        bool inTargetModel = false;
+        int modelIndent = -1;
+        
+        for (size_t i = 0; i < lines.size(); i++) {
+            const std::string& currentLine = lines[i];
+            
+            // Check if this line starts a model entry
+            if (currentLine.find("- id:") != std::string::npos) {
+                // Extract the model ID from this line
+                size_t idPos = currentLine.find("\"");
+                if (idPos != std::string::npos) {
+                    size_t idEnd = currentLine.find("\"", idPos + 1);
+                    if (idEnd != std::string::npos) {
+                        std::string foundId = currentLine.substr(idPos + 1, idEnd - idPos - 1);
+                        if (foundId == modelId) {
+                            inTargetModel = true;
+                            // Calculate the indentation level
+                            modelIndent = 0;
+                            for (char c : currentLine) {
+                                if (c == ' ') modelIndent++;
+                                else break;
+                            }
+                            continue; // Skip this line
+                        }
+                    }
+                }
+                inTargetModel = false;
+                modelIndent = -1;
+            }
+            
+            if (inTargetModel) {
+                // Check if we've moved to the next model or section
+                int currentIndent = 0;
+                for (char c : currentLine) {
+                    if (c == ' ') currentIndent++;
+                    else break;
+                }
+                
+                // If the line is at the same or lower indentation level and not empty, we've left the model
+                if (!currentLine.empty() && currentIndent <= modelIndent && currentLine.find_first_not_of(' ') != std::string::npos) {
+                    inTargetModel = false;
+                    modelIndent = -1;
+                    filteredLines.push_back(currentLine);
+                }
+                // Otherwise, skip this line (it's part of the model we're removing)
+            } else {
+                filteredLines.push_back(currentLine);
+            }
+        }
+        
+        // Write the filtered content back to the file
+        std::ofstream outFile(configPath);
+        if (!outFile.is_open()) {
+            return false;
+        }
+        
+        for (const std::string& filteredLine : filteredLines) {
+            outFile << filteredLine << "\n";
+        }
+        outFile.close();
+        
+        return true;
+        
+    } catch (const std::exception&) {
         return false;
     }
 }

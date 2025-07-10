@@ -55,6 +55,16 @@ public:
     bool post(const std::string& url, const std::string& payload, std::string& response, const std::vector<std::string>& headers = {});
 
     /**
+     * @brief Make a DELETE request with optional JSON payload
+     * @param url The URL to request
+     * @param payload JSON payload to send (optional)
+     * @param response String to store the response body
+     * @param headers Vector of custom headers (format: "Header: Value")
+     * @return true if the request was successful, false otherwise
+     */
+    bool deleteRequest(const std::string& url, const std::string& payload, std::string& response, const std::vector<std::string>& headers = {});
+
+    /**
      * @brief Get singleton instance of HttpClient
      * @return Reference to the singleton instance
      */

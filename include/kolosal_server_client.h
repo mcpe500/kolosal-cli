@@ -189,6 +189,13 @@ public:
      */
     bool getModelStatus(const std::string& modelId, std::string& status, std::string& message);
 
+    /**
+     * @brief Remove a model from the local config file
+     * @param modelId Model ID to remove from config
+     * @return True if model was removed successfully, false otherwise
+     */
+    bool removeModelFromConfig(const std::string& modelId);
+
 private:
     std::string m_baseUrl;
     std::string m_apiKey;
@@ -209,6 +216,15 @@ private:
      * @return True if request was successful, false otherwise
      */
     bool makePostRequest(const std::string& endpoint, const std::string& payload, std::string& response);
+    
+    /**
+     * @brief Make HTTP DELETE request to the server
+     * @param endpoint API endpoint
+     * @param payload JSON payload to send (optional)
+     * @param response Output: response body
+     * @return True if request was successful, false otherwise
+     */
+    bool makeDeleteRequest(const std::string& endpoint, const std::string& payload, std::string& response);
     
     /**
      * @brief Parse JSON response
