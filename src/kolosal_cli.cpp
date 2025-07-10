@@ -41,32 +41,37 @@
 KolosalCLI *KolosalCLI::s_instance = nullptr;
 
 // Helper function to escape file paths for shell/server usage
-static std::string escapeFilePath(const std::string& path) {
+static std::string escapeFilePath(const std::string &path)
+{
     std::string escapedPath = path;
-    
+
     // Replace backslashes with forward slashes for consistency (works on both Windows and Linux)
     std::replace(escapedPath.begin(), escapedPath.end(), '\\', '/');
-    
+
     // If path contains spaces or special characters, wrap in quotes
     bool needsQuotes = false;
     const std::string specialChars = " ()<>&|;\"'`${}[]?*~!#";
-    for (char c : specialChars) {
-        if (escapedPath.find(c) != std::string::npos) {
+    for (char c : specialChars)
+    {
+        if (escapedPath.find(c) != std::string::npos)
+        {
             needsQuotes = true;
             break;
         }
     }
-    
-    if (needsQuotes) {
+
+    if (needsQuotes)
+    {
         // Escape existing quotes and wrap in quotes
         std::string::size_type pos = 0;
-        while ((pos = escapedPath.find('\"', pos)) != std::string::npos) {
+        while ((pos = escapedPath.find('\"', pos)) != std::string::npos)
+        {
             escapedPath.replace(pos, 1, "\\\"");
             pos += 2;
         }
         escapedPath = "\"" + escapedPath + "\"";
     }
-    
+
     return escapedPath;
 }
 
@@ -113,7 +118,7 @@ void KolosalCLI::initialize()
 
     // Initialize server client
     m_serverClient = std::make_unique<KolosalServerClient>();
-    
+
     // Initialize command manager
     m_commandManager = std::make_unique<CommandManager>();
 
@@ -121,9 +126,8 @@ void KolosalCLI::initialize()
     m_repoSelector = std::make_unique<ModelRepoSelector>();
     m_fileSelector = std::make_unique<ModelFileSelector>();
     m_chatInterface = std::make_unique<ChatInterface>(
-        std::shared_ptr<KolosalServerClient>(m_serverClient.get(), [](KolosalServerClient*){}),
-        std::shared_ptr<CommandManager>(m_commandManager.get(), [](CommandManager*){})
-    );
+        std::shared_ptr<KolosalServerClient>(m_serverClient.get(), [](KolosalServerClient *) {}),
+        std::shared_ptr<CommandManager>(m_commandManager.get(), [](CommandManager *) {}));
 
     // Set up signal handling for graceful shutdown
     s_instance = this;
@@ -166,23 +170,23 @@ void KolosalCLI::cleanup()
 bool KolosalCLI::stopBackgroundServer()
 {
     showWelcome();
-    
+
     if (!m_serverClient)
     {
-        std::cerr << "❌ Error: Server client not initialized\n";
+        std::cerr << "Error: Server client not initialized\n";
         return false;
     }
 
-    std::cout << "🛑 Stopping Kolosal server...\n";
+    std::cout << "Stopping Kolosal server...\n";
 
     // Try to stop the server
     if (m_serverClient->shutdownServer())
     {
-        std::cout << "✅ Server stopped successfully\n";
+        std::cout << "Server stopped successfully\n";
         return true;
     }
 
-    std::cerr << "❌ Failed to stop server\n";
+    std::cerr << "Failed to stop server\n";
     return false;
 }
 
@@ -190,17 +194,17 @@ void KolosalCLI::showWelcome()
 {
     // ANSI color codes for gradient effect (cyan to blue to purple)
     const std::string colors[] = {
-        "\033[38;5;51m",   // Bright cyan
-        "\033[38;5;45m",   // Cyan
-        "\033[38;5;39m",   // Light blue
-        "\033[38;5;33m",   // Blue
-        "\033[38;5;27m",   // Dark blue
-        "\033[38;5;21m",   // Blue-purple
-        "\033[38;5;57m",   // Purple
-        "\033[38;5;93m"    // Dark purple
+        "\033[38;5;51m", // Bright cyan
+        "\033[38;5;45m", // Cyan
+        "\033[38;5;39m", // Light blue
+        "\033[38;5;33m", // Blue
+        "\033[38;5;27m", // Dark blue
+        "\033[38;5;21m", // Blue-purple
+        "\033[38;5;57m", // Purple
+        "\033[38;5;93m"  // Dark purple
     };
     const std::string reset = "\033[0m";
-    
+
     std::cout << "\n";
     std::cout << colors[0] << "       ██     ██   ██   ███████   ██         ███████    ████████     ██     ██" << reset << "\n";
     std::cout << colors[1] << "     ██░     ░██  ██   ██░░░░░██ ░██        ██░░░░░██  ██░░░░░░     ████   ░██" << reset << "\n";
@@ -260,16 +264,14 @@ bool KolosalCLI::processModelDownload(const std::string &modelId, const ModelFil
     std::string quantType = modelFile.quant.type;                                                          // Use full quantization type
 
     std::string engineId = modelName + ":" + quantType;
-    std::cout << "\nProcessing: " << modelFile.filename << std::endl;
 
     // Check if engine already exists before attempting download
     if (m_serverClient->engineExists(engineId))
     {
-        std::cout << "✓ Engine '" << engineId << "' already exists on the server." << std::endl;
-        std::cout << "✓ Model is ready to use!" << std::endl;
-        
+        std::cout << "Engine '" << engineId << "' already exists on the server." << std::endl;
+        std::cout << "Model is ready to use!" << std::endl;
+
         // Start chat interface directly
-        std::cout << "\nStarting chat interface..." << std::endl;
         startChatInterface(engineId);
         return true;
     }
@@ -295,7 +297,7 @@ bool KolosalCLI::processModelDownload(const std::string &modelId, const ModelFil
             // Handle special case where no download was needed
             if (status == "not_found")
             {
-                std::cout << "✓ Model file already exists locally. Registering engine..." << std::endl;
+                std::cout << "Model file already exists locally. Registering engine..." << std::endl;
                 return;
             }
 
@@ -316,22 +318,22 @@ bool KolosalCLI::processModelDownload(const std::string &modelId, const ModelFil
                         std::cout << "-";
                 }
                 std::cout << "] " << std::fixed << std::setprecision(1) << percentage << "%";
-                
+
                 // Show file sizes
                 std::cout << " (" << formatFileSize(downloadedBytes) << "/" << formatFileSize(totalBytes) << ")";
                 std::cout.flush();
             }
             else if (status == "creating_engine")
             {
-                std::cout << "\r✓ Download complete. Registering engine...                                      " << std::endl;
+                std::cout << "\rDownload complete. Registering engine...                                      " << std::endl;
             }
             else if (status == "engine_created")
             {
-                std::cout << "✓ Engine registered successfully." << std::endl;
+                std::cout << "Engine registered successfully." << std::endl;
             }
             else if (status == "completed")
             {
-                std::cout << "✓ Process completed." << std::endl;
+                std::cout << "Process completed." << std::endl;
             }
         },
         1000 // Check every 1 second
@@ -347,62 +349,71 @@ bool KolosalCLI::processModelDownload(const std::string &modelId, const ModelFil
     std::cout << std::endl; // New line after progress bar
     if (downloadSuccess)
     {
-        std::cout << "✓ Model ready for inference." << std::endl;
-        
+        std::cout << "Model ready for inference." << std::endl;
+
         // Update config.yaml to persist the model across server restarts
         std::string localPath = "./models/" + modelFile.filename;
         updateConfigWithModel(engineId, localPath, false); // load_immediately = false for lazy loading
-        
+
         // Start chat interface
-        std::cout << "\n🎉 Model downloaded and registered successfully!" << std::endl;
-        std::cout << "Starting chat interface..." << std::endl;
+        std::cout << "\nModel downloaded and registered successfully!" << std::endl;
         startChatInterface(engineId);
     }
     else
     {
-        std::cout << "✗ Download failed." << std::endl;
+        std::cout << "Download failed." << std::endl;
     }
 
     return downloadSuccess;
 }
 
-std::string KolosalCLI::parseRepositoryInput(const std::string &input) {
+std::string KolosalCLI::parseRepositoryInput(const std::string &input)
+{
     return m_repoSelector->parseRepositoryInput(input);
 }
 
-bool KolosalCLI::isDirectGGUFUrl(const std::string &input) {
+bool KolosalCLI::isDirectGGUFUrl(const std::string &input)
+{
     return m_repoSelector->isDirectGGUFUrl(input);
 }
 
-bool KolosalCLI::isLocalGGUFPath(const std::string &input) {
+bool KolosalCLI::isLocalGGUFPath(const std::string &input)
+{
     // Check if it's a file path (contains file separators or has .gguf extension)
-    if (input.find(".gguf") != std::string::npos) {
+    if (input.find(".gguf") != std::string::npos)
+    {
         // Check if it's not a URL (doesn't start with http/https)
-        if (input.find("http://") != 0 && input.find("https://") != 0) {
+        if (input.find("http://") != 0 && input.find("https://") != 0)
+        {
             return true;
         }
     }
-    
+
     // Also check for common path patterns on both Windows and Linux
-    if (input.find('/') != std::string::npos || input.find('\\') != std::string::npos) {
+    if (input.find('/') != std::string::npos || input.find('\\') != std::string::npos)
+    {
         // Check if it's not a URL
-        if (input.find("http://") != 0 && input.find("https://") != 0) {
+        if (input.find("http://") != 0 && input.find("https://") != 0)
+        {
             // Additional check for potential GGUF files even without extension
             std::filesystem::path path(input);
-            if (std::filesystem::exists(path) && path.extension() == ".gguf") {
+            if (std::filesystem::exists(path) && path.extension() == ".gguf")
+            {
                 return true;
             }
         }
     }
-    
+
     return false;
 }
 
-bool KolosalCLI::handleDirectGGUFUrl(const std::string &url) {
+bool KolosalCLI::handleDirectGGUFUrl(const std::string &url)
+{
     // Use file selector to handle the GGUF URL processing and get model info
     ModelFile modelFile = m_fileSelector->handleDirectGGUFUrl(url);
-    
-    if (modelFile.filename.empty()) {
+
+    if (modelFile.filename.empty())
+    {
         std::cout << "Failed to process GGUF file." << std::endl;
         return false;
     }
@@ -412,9 +423,11 @@ bool KolosalCLI::handleDirectGGUFUrl(const std::string &url) {
     char choice;
     std::cin >> choice;
 
-    if (choice == 'y' || choice == 'Y') {
+    if (choice == 'y' || choice == 'Y')
+    {
         // Ensure server is running and can be connected to
-        if (!ensureServerConnection()) {
+        if (!ensureServerConnection())
+        {
             std::cerr << "Unable to connect to Kolosal server. Download cancelled." << std::endl;
             return false;
         }
@@ -422,136 +435,145 @@ bool KolosalCLI::handleDirectGGUFUrl(const std::string &url) {
         // Generate simplified engine ID from filename
         std::string engineId = modelFile.filename;
         size_t dotPos = engineId.find_last_of('.');
-        if (dotPos != std::string::npos) {
+        if (dotPos != std::string::npos)
+        {
             engineId = engineId.substr(0, dotPos);
         }
 
         // Check if engine already exists before attempting download
-        if (m_serverClient->engineExists(engineId)) {
-            std::cout << "\n✓ Engine '" << engineId << "' already exists on the server." << std::endl;
-            std::cout << "✓ Model is ready to use!" << std::endl;
+        if (m_serverClient->engineExists(engineId))
+        {
+            std::cout << "\nEngine '" << engineId << "' already exists on the server." << std::endl;
+            std::cout << "Model is ready to use!" << std::endl;
             return true;
         }
 
         // Process download through server
-        if (!m_serverClient->addEngine(engineId, url, "./models/" + modelFile.filename)) {
+        if (!m_serverClient->addEngine(engineId, url, "./models/" + modelFile.filename))
+        {
             std::cerr << "Failed to start download." << std::endl;
             return false;
         }
 
         m_activeDownloads.push_back(engineId);
 
-        std::cout << "\n✓ Download started successfully!" << std::endl;
-        std::cout << "Engine ID: " << engineId << std::endl;
-        std::cout << "Downloading to: ./models/" << modelFile.filename << std::endl;
-        std::cout << "\nDownload initiated. Check server logs for progress." << std::endl;
-        
+        std::cout << "\nDownload started successfully!" << std::endl;
+
         // Update config.yaml to persist the model across server restarts
         std::string localPath = "./models/" + modelFile.filename;
         updateConfigWithModel(engineId, localPath, false); // load_immediately = false for lazy loading
 
         return true;
-    } else {
+    }
+    else
+    {
         std::cout << "Download cancelled." << std::endl;
         return false;
     }
 }
 
-bool KolosalCLI::handleLocalGGUFPath(const std::string &path) {
+bool KolosalCLI::handleLocalGGUFPath(const std::string &path)
+{
     // Normalize path separators for cross-platform compatibility
     std::string normalizedPath = path;
     std::replace(normalizedPath.begin(), normalizedPath.end(), '\\', '/');
-    
+
     // Create filesystem path object for proper handling
     std::filesystem::path filePath(normalizedPath);
-    
+
     // Check if the file exists
-    if (!std::filesystem::exists(filePath)) {
+    if (!std::filesystem::exists(filePath))
+    {
         std::cout << "Error: File not found: " << normalizedPath << std::endl;
         return false;
     }
-    
+
     // Check if it's actually a file (not a directory)
-    if (!std::filesystem::is_regular_file(filePath)) {
+    if (!std::filesystem::is_regular_file(filePath))
+    {
         std::cout << "Error: Path is not a regular file: " << normalizedPath << std::endl;
         return false;
     }
-    
+
     // Check if it has .gguf extension
-    if (filePath.extension() != ".gguf") {
+    if (filePath.extension() != ".gguf")
+    {
         std::cout << "Error: File does not have .gguf extension: " << normalizedPath << std::endl;
         return false;
     }
-    
+
     // Get absolute path and escape it properly
     std::string absolutePath;
     std::string escapedPath;
-    try {
+    try
+    {
         absolutePath = std::filesystem::absolute(filePath).string();
         // Normalize path separators for the absolute path too
         std::replace(absolutePath.begin(), absolutePath.end(), '\\', '/');
         escapedPath = escapeFilePath(absolutePath);
-    } catch (const std::exception &e) {
+    }
+    catch (const std::exception &e)
+    {
         std::cout << "Error: Failed to get absolute path for: " << normalizedPath << " - " << e.what() << std::endl;
         return false;
     }
-    
+
     // Extract filename for engine ID
     std::string filename = filePath.filename().string();
     std::string engineId = filename;
     size_t dotPos = engineId.find_last_of('.');
-    if (dotPos != std::string::npos) {
+    if (dotPos != std::string::npos)
+    {
         engineId = engineId.substr(0, dotPos);
     }
-    
+
     std::cout << "\nLocal GGUF file detected: " << filename << std::endl;
-    std::cout << "File path: " << absolutePath << std::endl;
-    std::cout << "Engine ID: " << engineId << std::endl;
-    
+
     // Ask for confirmation
     std::cout << "\nLoad this model? (y/n): ";
     char choice;
     std::cin >> choice;
-    
-    if (choice != 'y' && choice != 'Y') {
+
+    if (choice != 'y' && choice != 'Y')
+    {
         std::cout << "Model loading cancelled." << std::endl;
         return false;
     }
-    
+
     // Ensure server is running and can be connected to
-    if (!ensureServerConnection()) {
+    if (!ensureServerConnection())
+    {
         std::cerr << "Unable to connect to Kolosal server. Model loading cancelled." << std::endl;
         return false;
     }
-    
+
     // Check if engine already exists
-    if (m_serverClient->engineExists(engineId)) {
-        std::cout << "\n✓ Engine '" << engineId << "' already exists on the server." << std::endl;
-        std::cout << "✓ Model is ready to use!" << std::endl;
-        
+    if (m_serverClient->engineExists(engineId))
+    {
+        std::cout << "\nEngine '" << engineId << "' already exists on the server." << std::endl;
+        std::cout << "Model is ready to use!" << std::endl;
+
         // Start chat interface directly
-        std::cout << "\nStarting chat interface..." << std::endl;
         startChatInterface(engineId);
         return true;
     }
-    
+
     // Add engine to server with the local file path (use absolute path for server)
-    std::cout << "\nRegistering model with server..." << std::endl;
-    if (!m_serverClient->addEngine(engineId, absolutePath, absolutePath)) {
+    if (!m_serverClient->addEngine(engineId, absolutePath, absolutePath))
+    {
         std::cerr << "Failed to register model with server." << std::endl;
         return false;
     }
-    
-    std::cout << "✓ Model registered successfully with server." << std::endl;
-    
+
+    std::cout << "Model registered successfully with server." << std::endl;
+
     // Update config.yaml to persist the model across server restarts
     updateConfigWithModel(engineId, absolutePath, false); // load_immediately = false for lazy loading
-    
+
     // Start chat interface
-    std::cout << "\n🎉 Model loaded and registered successfully!" << std::endl;
-    std::cout << "Starting chat interface..." << std::endl;
+    std::cout << "\nModel loaded and registered successfully!" << std::endl;
     startChatInterface(engineId);
-    
+
     return true;
 }
 
@@ -575,7 +597,7 @@ int KolosalCLI::run(const std::string &repoId)
             bool success = handleLocalGGUFPath(repoId);
             return success ? 0 : 1;
         }
-        
+
         std::string modelId = m_repoSelector->parseRepositoryInput(repoId);
         if (modelId.empty())
         {
@@ -595,8 +617,6 @@ int KolosalCLI::run(const std::string &repoId)
         }
         else
         {
-            std::cout << "Direct access to repository: " << modelId << "\n\n";
-
             // Use file selector to get the model file
             ModelFile selectedFile = m_fileSelector->selectModelFile(modelId);
 
@@ -619,7 +639,7 @@ int KolosalCLI::run(const std::string &repoId)
     {
         // Get available model IDs from config
         std::vector<std::string> availableModels = getAvailableModelIds();
-        
+
         std::string selectedModel = m_repoSelector->selectModel(availableModels);
 
         if (selectedModel.empty())
@@ -629,36 +649,39 @@ int KolosalCLI::run(const std::string &repoId)
         }
 
         // Check if it's a local model from config
-        if (selectedModel.find("LOCAL:") == 0) {
+        if (selectedModel.find("LOCAL:") == 0)
+        {
             std::string modelId = selectedModel.substr(6); // Remove "LOCAL:" prefix
-            
+
             // Ensure server connection
-            if (!ensureServerConnection()) {
+            if (!ensureServerConnection())
+            {
                 std::cerr << "Unable to connect to Kolosal server." << std::endl;
                 return 1;
             }
-            
+
             // Check if engine already exists and start chat
-            if (m_serverClient->engineExists(modelId)) {
-                std::cout << "✓ Model '" << modelId << "' is ready to use!" << std::endl;
-                std::cout << "\nStarting chat interface..." << std::endl;
+            if (m_serverClient->engineExists(modelId))
+            {
+                std::cout << "Model '" << modelId << "' is ready to use!" << std::endl;
                 startChatInterface(modelId);
                 return 0;
             }
-            
+
             // Check if model is currently downloading
             long long downloadedBytes, totalBytes;
             double percentage;
             std::string status;
-            
-            if (m_serverClient->getDownloadProgress(modelId, downloadedBytes, totalBytes, percentage, status)) {
-                if (status == "downloading" || status == "creating_engine" || status == "pending") {
-                    std::cout << "📥 Model '" << modelId << "' is currently downloading..." << std::endl;
-                    std::cout << "Continuing download progress monitoring..." << std::endl;
-                    
+
+            if (m_serverClient->getDownloadProgress(modelId, downloadedBytes, totalBytes, percentage, status))
+            {
+                if (status == "downloading" || status == "creating_engine" || status == "pending")
+                {
+                    std::cout << "Model '" << modelId << "' is currently downloading..." << std::endl;
+
                     // Track this download
                     m_activeDownloads.push_back(modelId);
-                    
+
                     // Monitor the existing download progress
                     bool downloadSuccess = m_serverClient->monitorDownloadProgress(
                         modelId,
@@ -670,7 +693,7 @@ int KolosalCLI::run(const std::string &repoId)
                             // Handle special case where no download was needed
                             if (status == "not_found")
                             {
-                                std::cout << "✓ Model file already exists locally. Registering engine..." << std::endl;
+                                std::cout << "Model file already exists locally. Registering engine..." << std::endl;
                                 return;
                             }
 
@@ -691,55 +714,54 @@ int KolosalCLI::run(const std::string &repoId)
                                         std::cout << "-";
                                 }
                                 std::cout << "] " << std::fixed << std::setprecision(1) << percentage << "%";
-                                
+
                                 // Show file sizes
                                 std::cout << " (" << formatFileSize(downloadedBytes) << "/" << formatFileSize(totalBytes) << ")";
                                 std::cout.flush();
                             }
                             else if (status == "creating_engine")
                             {
-                                std::cout << "\r✓ Download complete. Registering engine...                                      " << std::endl;
+                                std::cout << "\rDownload complete. Registering engine...                                      " << std::endl;
                             }
                             else if (status == "engine_created")
                             {
-                                std::cout << "✓ Engine registered successfully." << std::endl;
+                                std::cout << "Engine registered successfully." << std::endl;
                             }
                             else if (status == "completed")
                             {
-                                std::cout << "✓ Process completed." << std::endl;
+                                std::cout << "Process completed." << std::endl;
                             }
                         },
                         1000 // Check every 1 second
                     );
-                    
+
                     // Remove from active downloads list
                     auto it = std::find(m_activeDownloads.begin(), m_activeDownloads.end(), modelId);
                     if (it != m_activeDownloads.end())
                     {
                         m_activeDownloads.erase(it);
                     }
-                    
+
                     std::cout << std::endl; // New line after progress bar
                     if (downloadSuccess)
                     {
-                        std::cout << "✓ Model ready for inference." << std::endl;
-                        
+                        std::cout << "Model ready for inference." << std::endl;
+
                         // Start chat interface
-                        std::cout << "\n🎉 Model download completed successfully!" << std::endl;
-                        std::cout << "Starting chat interface..." << std::endl;
+                        std::cout << "\nModel download completed successfully!" << std::endl;
                         startChatInterface(modelId);
                         return 0;
                     }
                     else
                     {
-                        std::cout << "✗ Download failed." << std::endl;
+                        std::cout << "Download failed." << std::endl;
                         return 1;
                     }
                 }
             }
-            
+
             // If we get here, the model is not downloading and doesn't exist
-            std::cout << "⚠️ Model '" << modelId << "' is in config but not loaded on server." << std::endl;
+            std::cout << "Model '" << modelId << "' is in config but not loaded on server." << std::endl;
             std::cout << "Please restart the server or manually load the model." << std::endl;
             return 1;
         }
@@ -813,8 +835,6 @@ bool KolosalCLI::ensureServerConnection()
         return true;
     }
 
-    std::cout << "Connecting to Kolosal server..." << std::endl;
-
     // Try to start the server if it's not running
     if (!m_serverClient->startServer())
     {
@@ -832,13 +852,13 @@ bool KolosalCLI::ensureServerConnection()
     return true;
 }
 
-bool KolosalCLI::updateConfigWithModel(const std::string& engineId, const std::string& modelPath, bool loadImmediately)
+bool KolosalCLI::updateConfigWithModel(const std::string &engineId, const std::string &modelPath, bool loadImmediately)
 {
     try
     {
         std::string configPath = "config.yaml";
         YAML::Node config;
-        
+
         // Try to load existing config
         if (std::filesystem::exists(configPath))
         {
@@ -849,25 +869,23 @@ bool KolosalCLI::updateConfigWithModel(const std::string& engineId, const std::s
             // Create a minimal config structure if file doesn't exist
             config["models"] = YAML::Node(YAML::NodeType::Sequence);
         }
-        
+
         // Ensure models section exists
         if (!config["models"])
         {
             config["models"] = YAML::Node(YAML::NodeType::Sequence);
         }
-        
+
         // Check if model with this ID already exists
         bool modelExists = false;
-        for (const auto& model : config["models"])
+        for (const auto &model : config["models"])
         {
             if (model["id"] && model["id"].as<std::string>() == engineId)
             {
                 modelExists = true;
                 break;
             }
-        }
-        
-        // Only add if model doesn't already exist in config
+        } // Only add if model doesn't already exist in config
         if (!modelExists)
         {
             YAML::Node newModel;
@@ -875,7 +893,7 @@ bool KolosalCLI::updateConfigWithModel(const std::string& engineId, const std::s
             newModel["path"] = modelPath;
             newModel["load_immediately"] = loadImmediately;
             newModel["main_gpu_id"] = 0;
-            
+
             // Add load_params with specified configuration
             YAML::Node loadParams;
             loadParams["n_ctx"] = 4096;
@@ -889,9 +907,9 @@ bool KolosalCLI::updateConfigWithModel(const std::string& engineId, const std::s
             loadParams["n_batch"] = 2048;
             loadParams["n_ubatch"] = 512;
             newModel["load_params"] = loadParams;
-            
+
             config["models"].push_back(newModel);
-            
+
             // Write updated config back to file
             std::ofstream configFile(configPath);
             if (!configFile.is_open())
@@ -899,11 +917,10 @@ bool KolosalCLI::updateConfigWithModel(const std::string& engineId, const std::s
                 std::cerr << "Failed to open config file for writing: " << configPath << std::endl;
                 return false;
             }
-            
+
             configFile << config;
             configFile.close();
-            
-            std::cout << "✓ Added model '" << engineId << "' to config.yaml" << std::endl;
+
             return true;
         }
         else
@@ -919,270 +936,318 @@ bool KolosalCLI::updateConfigWithModel(const std::string& engineId, const std::s
     }
 }
 
-bool KolosalCLI::startChatInterface(const std::string& engineId) {
+bool KolosalCLI::startChatInterface(const std::string &engineId)
+{
     return m_chatInterface->startChatInterface(engineId);
 }
 
-std::vector<std::string> KolosalCLI::getAvailableModelIds() {
+std::vector<std::string> KolosalCLI::getAvailableModelIds()
+{
     std::vector<std::string> modelIds;
-    
-    try {
+
+    try
+    {
         std::string configPath = "config.yaml";
-        
+
         // Check if config file exists
-        if (!std::filesystem::exists(configPath)) {
+        if (!std::filesystem::exists(configPath))
+        {
             return modelIds; // Return empty vector if no config file
         }
-        
+
         // Load the config file
         YAML::Node config = YAML::LoadFile(configPath);
-        
+
         // Check if models section exists
-        if (!config["models"] || !config["models"].IsSequence()) {
+        if (!config["models"] || !config["models"].IsSequence())
+        {
             return modelIds; // Return empty vector if no models section
         }
-        
+
         // Extract model IDs
-        for (const auto& model : config["models"]) {
-            if (model["id"]) {
+        for (const auto &model : config["models"])
+        {
+            if (model["id"])
+            {
                 std::string modelId = model["id"].as<std::string>();
                 modelIds.push_back(modelId);
             }
         }
-    } catch (const std::exception& e) {
+    }
+    catch (const std::exception &e)
+    {
         std::cerr << "Error reading config file: " << e.what() << std::endl;
     }
-    
+
     return modelIds;
 }
 
-bool KolosalCLI::showServerLogs() {
+bool KolosalCLI::showServerLogs()
+{
     showWelcome();
-    
-    std::cout << "📄 Retrieving server logs...\n\n";
-    
-    if (!m_serverClient) {
-        std::cerr << "❌ Error: Server client not initialized\n";
+
+    std::cout << "Retrieving server logs...\n\n";
+
+    if (!m_serverClient)
+    {
+        std::cerr << "Error: Server client not initialized\n";
         return false;
     }
-    
+
     // Check if server is running
-    if (!m_serverClient->isServerHealthy()) {
-        std::cerr << "❌ Error: Kolosal server is not running\n";
+    if (!m_serverClient->isServerHealthy())
+    {
+        std::cerr << "Error: Kolosal server is not running\n";
         std::cerr << "   Please start the server first by running a command that requires it\n";
         return false;
     }
 
     std::vector<std::tuple<std::string, std::string, std::string>> logs;
-    if (!m_serverClient->getLogs(logs)) {
-        std::cerr << "❌ Error: Failed to retrieve server logs\n";
+    if (!m_serverClient->getLogs(logs))
+    {
+        std::cerr << "Error: Failed to retrieve server logs\n";
         return false;
     }
 
-    if (logs.empty()) {
-        std::cout << "ℹ️  No logs available\n";
+    if (logs.empty())
+    {
+        std::cout << "No logs available\n";
         return true;
     }
 
-    std::cout << "📋 Server Logs (" << logs.size() << " entries):\n";
+    std::cout << "Server Logs (" << logs.size() << " entries):\n";
     std::cout << std::string(80, '=') << "\n\n";
-    
+
     // Display logs with color coding based on level
-    for (const auto& logEntry : logs) {
-        const std::string& level = std::get<0>(logEntry);
-        const std::string& timestamp = std::get<1>(logEntry);
-        const std::string& message = std::get<2>(logEntry);
-        
+    for (const auto &logEntry : logs)
+    {
+        const std::string &level = std::get<0>(logEntry);
+        const std::string &timestamp = std::get<1>(logEntry);
+        const std::string &message = std::get<2>(logEntry);
+
         // Color code based on log level
         std::string levelColor;
-        std::string levelIcon;
-        if (level == "ERROR") {
+        if (level == "ERROR")
+        {
             levelColor = "\033[31m"; // Red
-            levelIcon = "❌";
-        } else if (level == "WARNING") {
-            levelColor = "\033[33m"; // Yellow
-            levelIcon = "⚠️ ";
-        } else if (level == "INFO") {
-            levelColor = "\033[32m"; // Green
-            levelIcon = "ℹ️ ";
-        } else if (level == "DEBUG") {
-            levelColor = "\033[36m"; // Cyan
-            levelIcon = "🔍";
-        } else {
-            levelColor = "\033[37m"; // White
-            levelIcon = "📝";
         }
-        
+        else if (level == "WARNING")
+        {
+            levelColor = "\033[33m"; // Yellow
+        }
+        else if (level == "INFO")
+        {
+            levelColor = "\033[32m"; // Green
+        }
+        else if (level == "DEBUG")
+        {
+            levelColor = "\033[36m"; // Cyan
+        }
+        else
+        {
+            levelColor = "\033[37m"; // White
+        }
+
         // Reset color
         std::string resetColor = "\033[0m";
-        
-        std::cout << levelColor << levelIcon << " [" << level << "] " << resetColor 
+
+        std::cout << levelColor << "[" << level << "] " << resetColor
                   << "\033[90m" << timestamp << resetColor << "\n";
         std::cout << "   " << message << "\n\n";
     }
-    
+
     return true;
 }
 
-bool KolosalCLI::showInferenceEngines() {
+bool KolosalCLI::showInferenceEngines()
+{
     showWelcome();
-    
+
     // Initialize Kolosal server first
-    if (!initializeServer()) {
-        std::cerr << "❌ Failed to initialize Kolosal server\n";
+    if (!initializeServer())
+    {
+        std::cerr << "Failed to initialize Kolosal server\n";
         return false;
     }
-    
-    std::cout << "🔧 Retrieving available inference engines...\n";
-    
-    if (!m_serverClient) {
-        std::cerr << "❌ Error: Server client not initialized\n";
+
+    std::cout << "Retrieving available inference engines...\n";
+
+    if (!m_serverClient)
+    {
+        std::cerr << "Error: Server client not initialized\n";
         return false;
     }
-    
+
     // Fetch available engines from server
     std::vector<std::tuple<std::string, std::string, std::string, std::string, bool>> serverEngines;
-    if (!m_serverClient->getInferenceEngines(serverEngines)) {
-        std::cerr << "❌ Error: Failed to retrieve inference engines from server\n";
+    if (!m_serverClient->getInferenceEngines(serverEngines))
+    {
+        std::cerr << "Error: Failed to retrieve inference engines from server\n";
         return false;
     }
-    
+
     // Fetch available engine files from Hugging Face
-    std::cout << "📥 Fetching engine files from kolosal/engines repository...\n";
+    std::cout << "Fetching engine files from kolosal/engines repository...\n";
     std::vector<std::string> availableEngineFiles = HuggingFaceClient::fetchEngineFiles();
-    
+
     // Create a map of server engines by name for easier lookup
     std::map<std::string, std::tuple<std::string, std::string, std::string, std::string, bool>> serverEngineMap;
-    for (const auto& engine : serverEngines) {
-        const std::string& name = std::get<0>(engine);
+    for (const auto &engine : serverEngines)
+    {
+        const std::string &name = std::get<0>(engine);
         serverEngineMap[name] = engine;
     }
-    
+
     // Create combined engine list with download status
     std::vector<std::tuple<std::string, std::string, bool, bool>> combinedEngines; // name, filename, isDownloaded, isLoaded
-    
+
     // Add engines from Hugging Face with download status
-    for (const std::string& filename : availableEngineFiles) {
+    for (const std::string &filename : availableEngineFiles)
+    {
         // Extract engine name from filename (remove extension and path)
         std::string engineName = filename;
         size_t lastSlash = engineName.find_last_of('/');
-        if (lastSlash != std::string::npos) {
+        if (lastSlash != std::string::npos)
+        {
             engineName = engineName.substr(lastSlash + 1);
         }
         size_t lastDot = engineName.find_last_of('.');
-        if (lastDot != std::string::npos) {
+        if (lastDot != std::string::npos)
+        {
             engineName = engineName.substr(0, lastDot);
         }
-        
+
         // Check if this engine exists on the server
         bool isDownloaded = serverEngineMap.find(engineName) != serverEngineMap.end();
         bool isLoaded = false;
-        if (isDownloaded) {
+        if (isDownloaded)
+        {
             isLoaded = std::get<4>(serverEngineMap[engineName]);
         }
-        
+
         combinedEngines.emplace_back(engineName, filename, isDownloaded, isLoaded);
     }
-    
+
     // Add any server engines that weren't found in Hugging Face (custom engines)
-    for (const auto& serverEngine : serverEngines) {
-        const std::string& name = std::get<0>(serverEngine);
+    for (const auto &serverEngine : serverEngines)
+    {
+        const std::string &name = std::get<0>(serverEngine);
         bool found = false;
-        for (const auto& combined : combinedEngines) {
-            if (std::get<0>(combined) == name) {
+        for (const auto &combined : combinedEngines)
+        {
+            if (std::get<0>(combined) == name)
+            {
                 found = true;
                 break;
             }
         }
-        if (!found) {
+        if (!found)
+        {
             bool isLoaded = std::get<4>(serverEngine);
             combinedEngines.emplace_back(name, "", true, isLoaded); // Custom engine, assume downloaded
         }
     }
-    
-    if (combinedEngines.empty()) {
-        std::cout << "ℹ️  No inference engines available\n";
+
+    if (combinedEngines.empty())
+    {
+        std::cout << "No inference engines available\n";
         return true;
     }
-    
+
     std::cout << "\n";
-    
+
     // Create display items for interactive list
     std::vector<std::string> displayItems;
-    
-    for (const auto& engineEntry : combinedEngines) {
-        const std::string& name = std::get<0>(engineEntry);
+
+    for (const auto &engineEntry : combinedEngines)
+    {
+        const std::string &name = std::get<0>(engineEntry);
         bool isDownloaded = std::get<2>(engineEntry);
         bool isLoaded = std::get<3>(engineEntry);
-        
+
         // Create display string with simplified status
         std::string displayString = name;
-        if (isLoaded || isDownloaded) {
+        if (isLoaded || isDownloaded)
+        {
             displayString += " (DOWNLOADED: ready)";
-        } else {
+        }
+        else
+        {
             displayString += " (NOT DOWNLOADED: available for download)";
         }
-        
+
         displayItems.push_back(displayString);
     }
-    
+
     // Add navigation option
     displayItems.push_back("Back to Main Menu");
-    
+
     // Create and run interactive list
     InteractiveList engineList(displayItems);
     int result = engineList.run();
-    
-    if (result >= 0 && result < static_cast<int>(combinedEngines.size())) {
+
+    if (result >= 0 && result < static_cast<int>(combinedEngines.size()))
+    {
         // User selected an engine - show detailed information
-        const auto& selectedEngine = combinedEngines[result];
-        const std::string& name = std::get<0>(selectedEngine);
-        const std::string& filename = std::get<1>(selectedEngine);
+        const auto &selectedEngine = combinedEngines[result];
+        const std::string &name = std::get<0>(selectedEngine);
+        const std::string &filename = std::get<1>(selectedEngine);
         bool isDownloaded = std::get<2>(selectedEngine);
         bool isLoaded = std::get<3>(selectedEngine);
-        
-        std::cout << "\n🔧 Inference Engine Details:\n";
+
+        std::cout << "\nInference Engine Details:\n";
         std::cout << std::string(50, '=') << "\n";
         std::cout << "Name: " << name << "\n";
-        if (!filename.empty()) {
+        if (!filename.empty())
+        {
             std::cout << "Filename: " << filename << "\n";
         }
-        
-        if (isLoaded) {
-            std::cout << "Status: ✅ LOADED (ready to use)\n";
-        } else if (isDownloaded) {
-            std::cout << "Status: 📦 DOWNLOADED (available to load)\n";
-        } else {
-            std::cout << "Status: ⬇️  NOT DOWNLOADED (available for download)\n";
-            if (!filename.empty()) {
+
+        if (isLoaded)
+        {
+            std::cout << "Status: LOADED (ready to use)\n";
+        }
+        else if (isDownloaded)
+        {
+            std::cout << "Status: DOWNLOADED (available to load)\n";
+        }
+        else
+        {
+            std::cout << "Status: NOT DOWNLOADED (available for download)\n";
+            if (!filename.empty())
+            {
                 std::cout << "Download URL: https://huggingface.co/kolosal/engines/resolve/main/" << filename << "\n";
             }
         }
-        
+
         // Show additional details if available from server
-        if (isDownloaded && serverEngineMap.find(name) != serverEngineMap.end()) {
-            const auto& serverEngine = serverEngineMap[name];
-            const std::string& version = std::get<1>(serverEngine);
-            const std::string& description = std::get<2>(serverEngine);
-            const std::string& library_path = std::get<3>(serverEngine);
-            
-            if (!version.empty()) {
+        if (isDownloaded && serverEngineMap.find(name) != serverEngineMap.end())
+        {
+            const auto &serverEngine = serverEngineMap[name];
+            const std::string &version = std::get<1>(serverEngine);
+            const std::string &description = std::get<2>(serverEngine);
+            const std::string &library_path = std::get<3>(serverEngine);
+
+            if (!version.empty())
+            {
                 std::cout << "Version: " << version << "\n";
             }
-            if (!description.empty()) {
+            if (!description.empty())
+            {
                 std::cout << "Description: " << description << "\n";
             }
-            if (!library_path.empty()) {
+            if (!library_path.empty())
+            {
                 std::cout << "Library Path: " << library_path << "\n";
             }
         }
-        
+
         std::cout << std::string(50, '=') << "\n";
-        
+
         // Future enhancement: Add actions like download, load/unload engine
         std::cout << "\nPress any key to continue...";
         std::cin.get();
     }
-    
+
     return true;
 }

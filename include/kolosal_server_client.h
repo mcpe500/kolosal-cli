@@ -152,6 +152,22 @@ public:
      */
     bool getLogs(std::vector<std::tuple<std::string, std::string, std::string>>& logs);
 
+    /**
+     * @brief Remove a model from the server
+     * @param modelId Model ID to remove
+     * @return True if model was removed successfully, false otherwise
+     */
+    bool removeModel(const std::string& modelId);
+
+    /**
+     * @brief Get the status of a specific model
+     * @param modelId Model ID to check
+     * @param status Output: model status (loaded, unloaded, etc.)
+     * @param message Output: status message
+     * @return True if status was retrieved successfully, false otherwise
+     */
+    bool getModelStatus(const std::string& modelId, std::string& status, std::string& message);
+
 private:
     std::string m_baseUrl;
     std::string m_apiKey;

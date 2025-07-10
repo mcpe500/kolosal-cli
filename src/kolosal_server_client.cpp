@@ -451,10 +451,10 @@ bool KolosalServerClient::getEngines(std::vector<std::string>& engines)
 {
     std::string response;
     
-    // Try both /v1/engines and /engines endpoints
-    if (!makeGetRequest("/v1/engines", response))
+    // Try both /v1/models and /models endpoints (using new model-based API)
+    if (!makeGetRequest("/v1/models", response))
     {
-        if (!makeGetRequest("/engines", response))
+        if (!makeGetRequest("/models", response))
         {
             return false;
         }
@@ -462,35 +462,35 @@ bool KolosalServerClient::getEngines(std::vector<std::string>& engines)
 
     try
     {
-        json enginesJson = json::parse(response);
+        json modelsJson = json::parse(response);
         engines.clear();
         
         // Handle different possible response formats
-        if (enginesJson.is_array())
+        if (modelsJson.is_array())
         {
-            for (const auto& engine : enginesJson)
+            for (const auto& model : modelsJson)
             {
-                if (engine.contains("id"))
+                if (model.contains("id"))
                 {
-                    engines.push_back(engine["id"].get<std::string>());
+                    engines.push_back(model["id"].get<std::string>());
                 }
-                else if (engine.contains("engine_id"))
+                else if (model.contains("model_id"))
                 {
-                    engines.push_back(engine["engine_id"].get<std::string>());
+                    engines.push_back(model["model_id"].get<std::string>());
                 }
             }
         }
-        else if (enginesJson.contains("engines") && enginesJson["engines"].is_array())
+        else if (modelsJson.contains("models") && modelsJson["models"].is_array())
         {
-            for (const auto& engine : enginesJson["engines"])
+            for (const auto& model : modelsJson["models"])
             {
-                if (engine.contains("id"))
+                if (model.contains("id"))
                 {
-                    engines.push_back(engine["id"].get<std::string>());
+                    engines.push_back(model["id"].get<std::string>());
                 }
-                else if (engine.contains("engine_id"))
+                else if (model.contains("model_id"))
                 {
-                    engines.push_back(engine["engine_id"].get<std::string>());
+                    engines.push_back(model["model_id"].get<std::string>());
                 }
             }
         }
@@ -541,7 +541,7 @@ bool KolosalServerClient::addEngine(const std::string &engineId, const std::stri
 
         // No loading animation for cleaner output - just show final result
         json payload;
-        payload["engine_id"] = engineId;
+        payload["model_id"] = engineId;
         payload["model_path"] = modelUrl; // For download, we pass URL as model_path
         payload["load_immediately"] = false;
         payload["main_gpu_id"] = 0;
@@ -563,7 +563,7 @@ bool KolosalServerClient::addEngine(const std::string &engineId, const std::stri
         payload["loading_parameters"] = loadParams;
 
         std::string response;
-        if (!makePostRequest("/engines", payload.dump(), response))
+        if (!makePostRequest("/models", payload.dump(), response))  // Using new model-based API endpoint
         {
             return false;
         }
@@ -582,7 +582,7 @@ bool KolosalServerClient::getDownloadProgress(const std::string &modelId, long l
                                               long long &totalBytes, double &percentage, std::string &status)
 {
     std::string response;
-    std::string endpoint = "/v1/download-progress/" + modelId;
+    std::string endpoint = "/download-progress/" + modelId;
 
     if (!makeGetRequest(endpoint, response))
     {
@@ -1095,6 +1095,48 @@ bool KolosalServerClient::getInferenceEngines(std::vector<std::tuple<std::string
     }
     catch (const std::exception&)
     {
+        return false;
+    }
+}
+
+bool KolosalServerClient::removeModel(const std::string& modelId)
+{
+    try {
+        json payload;
+        payload["model_id"] = modelId;
+
+        std::string response;
+        if (!makePostRequest("/models/remove", payload.dump(), response)) {
+            return false;
+        }
+
+        // Parse the response to check if removal was successful
+        json responseJson = json::parse(response);
+        return responseJson.value("success", false);
+    }
+    catch (const std::exception&) {
+        return false;
+    }
+}
+
+bool KolosalServerClient::getModelStatus(const std::string& modelId, std::string& status, std::string& message)
+{
+    try {
+        json payload;
+        payload["model_id"] = modelId;
+
+        std::string response;
+        if (!makePostRequest("/models/status", payload.dump(), response)) {
+            return false;
+        }
+
+        // Parse the response
+        json responseJson = json::parse(response);
+        status = responseJson.value("status", "unknown");
+        message = responseJson.value("message", "");
+        return true;
+    }
+    catch (const std::exception&) {
         return false;
     }
 }
