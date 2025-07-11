@@ -1180,9 +1180,9 @@ bool KolosalServerClient::getInferenceEngines(std::vector<std::tuple<std::string
     std::string response;
     
     // Try both /v1/inference-engines and /inference-engines endpoints
-    if (!makeGetRequest("/v1/inference-engines", response))
+    if (!makeGetRequest("/v1/engines", response))
     {
-        if (!makeGetRequest("/inference-engines", response))
+        if (!makeGetRequest("/engines", response))
         {
             return false;
         }
