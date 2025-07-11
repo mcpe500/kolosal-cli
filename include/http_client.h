@@ -91,6 +91,13 @@ public:
     static bool downloadFile(const std::string& url, const std::string& filePath, 
                             std::function<void(size_t, size_t, double)> progressCallback = nullptr);
 
+    /**
+     * @brief Get the file size from a URL without downloading
+     * @param url The URL to check
+     * @return File size in bytes, or -1 if failed
+     */
+    static long long getFileSize(const std::string& url);
+
 private:
     /**
      * @brief Callback function for libcurl to write response data

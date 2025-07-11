@@ -487,3 +487,42 @@ bool HttpClient::downloadFile(const std::string& url, const std::string& filePat
     
     return success;
 }
+
+long long HttpClient::getFileSize(const std::string& url)
+{
+    CURL* curl = curl_easy_init();
+    if (!curl) {
+        return -1;
+    }
+    
+    // Set curl options for HEAD request
+    curl_easy_setopt(curl, CURLOPT_URL, url.c_str());
+    curl_easy_setopt(curl, CURLOPT_NOBODY, 1L); // HEAD request only
+    curl_easy_setopt(curl, CURLOPT_FOLLOWLOCATION, 1L);
+    curl_easy_setopt(curl, CURLOPT_SSL_VERIFYPEER, 0L);
+    curl_easy_setopt(curl, CURLOPT_SSL_VERIFYHOST, 0L);
+    curl_easy_setopt(curl, CURLOPT_TIMEOUT, 30L);
+    curl_easy_setopt(curl, CURLOPT_USERAGENT, "Kolosal-CLI/1.0");
+    
+    // Perform the request
+    CURLcode res = curl_easy_perform(curl);
+    
+    long long fileSize = -1;
+    if (res == CURLE_OK) {
+        // Check HTTP status code
+        long response_code;
+        curl_easy_getinfo(curl, CURLINFO_RESPONSE_CODE, &response_code);
+        
+        if (response_code >= 200 && response_code < 300) {
+            // Get content length
+            curl_off_t contentLength;
+            res = curl_easy_getinfo(curl, CURLINFO_CONTENT_LENGTH_DOWNLOAD_T, &contentLength);
+            if (res == CURLE_OK && contentLength >= 0) {
+                fileSize = static_cast<long long>(contentLength);
+            }
+        }
+    }
+    
+    curl_easy_cleanup(curl);
+    return fileSize;
+}
