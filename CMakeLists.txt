@@ -27,9 +27,6 @@ set(USE_CUDA ${USE_CUDA} CACHE BOOL "Enable CUDA support" FORCE)
 set(USE_VULKAN ${USE_VULKAN} CACHE BOOL "Enable Vulkan support" FORCE)
 set(USE_MPI ${USE_MPI} CACHE BOOL "Enable MPI support" FORCE)
 
-# Print UCM flags for debugging
-ucm_print_flags()
-
 # Add the kolosal-server submodule
 add_subdirectory(kolosal-server)
 
@@ -46,8 +43,6 @@ if(BUILD_INFERENCE_ENGINE)
     else()
         set(INFERENCE_TARGET_NAME "llama-cpu")
     endif()
-    
-    message(STATUS "Inference target name: ${INFERENCE_TARGET_NAME}")
 endif()
 
 # Add external libraries
@@ -200,24 +195,17 @@ else()
     # Link filesystem library for C++17 std::filesystem on older GCC versions
     if(CMAKE_CXX_COMPILER_ID STREQUAL "GNU" AND CMAKE_CXX_COMPILER_VERSION VERSION_LESS "9.0")
         target_link_libraries(kolosal stdc++fs)
-        message(STATUS "Linking with stdc++fs for std::filesystem support on GCC < 9.0")
     endif()
     
     # On Linux, check for required system libraries
     find_package(OpenSSL)
     if(OpenSSL_FOUND)
         target_link_libraries(kolosal OpenSSL::SSL OpenSSL::Crypto)
-        message(STATUS "Found OpenSSL: ${OPENSSL_VERSION}")
-    else()
-        message(WARNING "OpenSSL not found. HTTPS features might not work properly. Install libssl-dev (Ubuntu/Debian) or openssl-devel (RHEL/CentOS)")
     endif()
     
     find_package(ZLIB)
     if(ZLIB_FOUND)
         target_link_libraries(kolosal ZLIB::ZLIB)
-        message(STATUS "Found zlib: ${ZLIB_VERSION_STRING}")
-    else()
-        message(WARNING "zlib not found. Install zlib1g-dev (Ubuntu/Debian) or zlib-devel (RHEL/CentOS)")
     endif()
     
     # Add Linux-specific compile definitions
@@ -237,10 +225,8 @@ else()
     if(CMAKE_BUILD_TYPE STREQUAL "Release" OR NOT CMAKE_BUILD_TYPE)
         if(ENABLE_NATIVE_OPTIMIZATION)
             target_compile_options(kolosal PRIVATE -march=native -mtune=native)
-            message(STATUS "Native CPU optimization enabled for kolosal")
         else()
             target_compile_options(kolosal PRIVATE -O3)
-            message(STATUS "Using safe optimization flags for kolosal")
         endif()
     endif()
     
@@ -381,9 +367,6 @@ if(WIN32)
     
     # Install additional DLLs from build output directories
     install(CODE "
-        # Installation-time code to copy additional DLLs
-        message(STATUS \"Copying additional DLLs to installation directory...\")
-        
         # Define build output directories where DLLs might be found
         set(BUILD_OUTPUT_DIRS
             \"${CMAKE_BINARY_DIR}/kolosal-server/Debug\"
@@ -404,7 +387,6 @@ if(WIN32)
             foreach(search_dir \${BUILD_OUTPUT_DIRS})
                 set(dll_path \"\${search_dir}/\${dll_name}\")
                 if(EXISTS \"\${dll_path}\")
-                    message(STATUS \"Installing additional DLL: \${dll_name} from \${dll_path}\")
                     file(INSTALL \"\${dll_path}\" DESTINATION \"\${CMAKE_INSTALL_PREFIX}/bin\")
                     break()
                 endif()
@@ -418,7 +400,6 @@ if(WIN32)
                 get_filename_component(dll_name \"\${dll_path}\" NAME)
                 string(TOLOWER \"\${dll_name}\" dll_lower)
                 if(NOT dll_lower MATCHES \"^(kernel32|user32|advapi32|msvcrt|vcruntime|msvcp|api-ms-)\")
-                    message(STATUS \"Installing debug DLL: \${dll_name}\")
                     file(INSTALL \"\${dll_path}\" DESTINATION \"\${CMAKE_INSTALL_PREFIX}/bin\")
                 endif()
             endforeach()
@@ -430,7 +411,6 @@ if(WIN32)
                 get_filename_component(dll_name \"\${dll_path}\" NAME)
                 string(TOLOWER \"\${dll_name}\" dll_lower)
                 if(NOT dll_lower MATCHES \"^(kernel32|user32|advapi32|msvcrt|vcruntime|msvcp|api-ms-)\")
-                    message(STATUS \"Installing release DLL: \${dll_name}\")
                     file(INSTALL \"\${dll_path}\" DESTINATION \"\${CMAKE_INSTALL_PREFIX}/bin\")
                 endif()
             endforeach()
@@ -536,25 +516,6 @@ Categories=Development;Science;
         )
     endif()
 endif()
-
-# Print build summary
-message(STATUS "")
-message(STATUS "=====================================================")
-message(STATUS "  Kolosal CLI Build Configuration Summary")
-message(STATUS "=====================================================")
-message(STATUS "  Version: ${PROJECT_VERSION}")
-message(STATUS "  Build type: ${CMAKE_BUILD_TYPE}")
-message(STATUS "  Platform: ${CMAKE_SYSTEM_NAME}")
-message(STATUS "  Compiler: ${CMAKE_CXX_COMPILER_ID}")
-message(STATUS "  C++ Standard: ${CMAKE_CXX_STANDARD}")
-if(WIN32)
-    message(STATUS "  CURL library: ${CURL_LIBRARY}")
-else()
-    message(STATUS "  CURL libraries: ${CURL_LIBRARIES}")
-endif()
-message(STATUS "  Install prefix: ${CMAKE_INSTALL_PREFIX}")
-message(STATUS "=====================================================")
-message(STATUS "")
 
 # CPack configuration for packaging
 # Platform-specific generator selection
@@ -766,12 +727,8 @@ fi
 # Ensure config file has proper permissions (if it was installed)
 if [ -f /etc/kolosal/config.yaml ]; then
     chmod 644 /etc/kolosal/config.yaml
-    echo \"✓ Configuration file installed successfully\"
 else
     # If config file is missing, create a default one
-    echo \"Warning: Configuration file not found at /etc/kolosal/config.yaml\"
-    echo \"Creating default configuration file...\"
-    
     cat > /etc/kolosal/config.yaml << 'EOF'
 server:
   port: \"8080\"
@@ -813,12 +770,10 @@ features:
   metrics: false
 EOF
     chmod 644 /etc/kolosal/config.yaml
-    echo \"✓ Created default configuration file\"
 fi
 
 # Update library cache to include the new shared libraries
 if command -v ldconfig >/dev/null 2>&1; then
-    echo \"Updating library cache...\"
     ldconfig
 fi
 
@@ -836,7 +791,6 @@ fi
 # Create kolosal user and group if they don't exist (for systemd service)
 if ! id \"kolosal\" >/dev/null 2>&1; then
     useradd --system --home-dir /var/lib/kolosal --shell /bin/false kolosal || true
-    echo \"  ✓ Created kolosal system user\"
 fi
 
 # Add current user to kolosal group if possible (for CLI access)
@@ -844,172 +798,39 @@ if [ \"\$SUDO_USER\" ]; then
     usermod -a -G kolosal \"\$SUDO_USER\" 2>/dev/null || true
 fi
 
-# Create kolosal user directory for models and configuration if it doesn't exist
+# Create kolosal directories
 if [ ! -d /var/lib/kolosal ]; then
     mkdir -p /var/lib/kolosal
     chmod 755 /var/lib/kolosal
 fi
 
-# Set ownership of the kolosal data directory to be accessible by all users
-chmod 755 /var/lib/kolosal
-# Make it writable by the kolosal group, readable by others
-if id \"kolosal\" >/dev/null 2>&1; then
-    chown kolosal:kolosal /var/lib/kolosal
-    chmod 775 /var/lib/kolosal  # Group writable
-fi
-
-# Create models directory for user convenience
 if [ ! -d /var/lib/kolosal/models ]; then
     mkdir -p /var/lib/kolosal/models
     chmod 755 /var/lib/kolosal/models
-    if id \"kolosal\" >/dev/null 2>&1; then
-        chown kolosal:kolosal /var/lib/kolosal/models
-        chmod 775 /var/lib/kolosal/models  # Group writable
-    fi
 fi
 
-# Also ensure any user can create files in these directories for CLI usage
-chmod g+w /var/lib/kolosal 2>/dev/null || true
-chmod g+w /var/lib/kolosal/models 2>/dev/null || true
+# Set ownership and permissions
+if id \"kolosal\" >/dev/null 2>&1; then
+    chown kolosal:kolosal /var/lib/kolosal
+    chown kolosal:kolosal /var/lib/kolosal/models
+    chmod 775 /var/lib/kolosal
+    chmod 775 /var/lib/kolosal/models
+fi
 
-# Set up systemd service if systemctl is available
+# Set up systemd service if available
 if command -v systemctl >/dev/null 2>&1 && [ -f /etc/systemd/system/kolosal-server.service ]; then
-    echo \"Setting up kolosal-server systemd service...\"
     systemctl daemon-reload
-    
-    # Enable the service to start on boot
-    if systemctl enable kolosal-server 2>/dev/null; then
-        echo \"✓ Service enabled to start on boot\"
-    else
-        echo \"! Could not enable service (run: sudo systemctl enable kolosal-server)\"
-    fi
-    
-    # Try to start the service
-    if systemctl start kolosal-server 2>/dev/null; then
-        echo \"✓ Service started successfully\"
-        echo \"  Check status: systemctl status kolosal-server\"
-    else
-        echo \"! Could not start service automatically\"
-        echo \"  Start manually: sudo systemctl start kolosal-server\"
-        echo \"  Check logs: journalctl -u kolosal-server -f\"
-    fi
-else
-    echo \"Note: systemd not available or service file not found\"
+    systemctl enable kolosal-server 2>/dev/null || true
+    systemctl start kolosal-server 2>/dev/null || true
 fi
 
-# Notify user about configuration and usage
-echo \"\"
-echo \"===============================================\"
-echo \"  Kolosal CLI installed successfully!\"
-echo \"===============================================\"
-echo \"Configuration file: /etc/kolosal/config.yaml\"
+echo \"Kolosal CLI installed successfully!\"
+echo \"Configuration: /etc/kolosal/config.yaml\"
 echo \"Data directory: /var/lib/kolosal\"
-echo \"Models directory: /var/lib/kolosal/models\"
-echo \"\"
-echo \"Verifying installation:\"
-if [ -f /usr/bin/kolosal ]; then
-    echo \"  ✓ kolosal CLI installed\"
-else
-    echo \"  ✗ kolosal CLI missing\"
-fi
-if [ -f /usr/bin/kolosal-server ]; then
-    echo \"  ✓ kolosal-server installed\"
-else
-    echo \"  ✗ kolosal-server missing\"
-fi
-if [ -f /etc/kolosal/config.yaml ]; then
-    echo \"  ✓ Configuration file installed\"
-else
-    echo \"  ✗ Configuration file missing (will create default)\"
-fi
-if [ -f /usr/lib/libkolosal_server.so ]; then
-    echo \"  ✓ Server library installed\"
-else
-    echo \"  ✗ Server library missing\"
-fi
 echo \"\"
 echo \"Getting started:\"
-echo \"  kolosal --help          - Show help\"
-echo \"  kolosal-server --help   - Show server help\"
-echo \"\"
-echo \"Directory permissions:\"
-echo \"  /var/lib/kolosal: \$(ls -ld /var/lib/kolosal 2>/dev/null | awk '{print \$1, \$3, \$4}' || echo 'not found')\"
-echo \"  /var/lib/kolosal/models: \$(ls -ld /var/lib/kolosal/models 2>/dev/null | awk '{print \$1, \$3, \$4}' || echo 'not found')\"
-echo \"  Current user groups: \$(groups)\"
-echo \"\"
-echo \"To start the server:\"
-echo \"  kolosal-server --config /etc/kolosal/config.yaml\"
-echo \"\"
-echo \"Debugging information:\"
-echo \"  Library path: /usr/lib\"
-echo \"  Config path: /etc/kolosal\"
-echo \"  Data path: /var/lib/kolosal\"
-echo \"  Binary path: /usr/bin\"
-echo \"\"
-echo \"Testing server config detection...\"
-if [ -f /usr/bin/kolosal-server ]; then
-    timeout 3 /usr/bin/kolosal-server --port 8081 > /tmp/kolosal-config-test.log 2>&1 &
-    CONFIG_TEST_PID=\$!
-    sleep 1
-    if kill -0 \$CONFIG_TEST_PID 2>/dev/null; then
-        kill \$CONFIG_TEST_PID 2>/dev/null
-        wait \$CONFIG_TEST_PID 2>/dev/null
-        if grep -q \"/etc/kolosal/config.yaml\" /tmp/kolosal-config-test.log; then
-            echo \"  ✓ Server correctly loads /etc/kolosal/config.yaml\"
-        elif grep -q \"Loaded configuration from\" /tmp/kolosal-config-test.log; then
-            echo \"  ⚠ Server loaded config from: \$(grep 'Loaded configuration from' /tmp/kolosal-config-test.log | head -1)\"
-        else
-            echo \"  ℹ Server started with default configuration\"
-        fi
-        rm -f /tmp/kolosal-config-test.log
-    else
-        echo \"  ⚠ Could not test server config detection\"
-    fi
-else
-    echo \"  ✗ kolosal-server not found for testing\"
-fi
-echo \"\"
-echo \"Checking primary config location:\"
-if [ -f /etc/kolosal/config.yaml ]; then
-    echo \"  ✓ Config found at /etc/kolosal/config.yaml\"
-    echo \"  Config file size: \$(stat -c%s /etc/kolosal/config.yaml 2>/dev/null || echo 'unknown') bytes\"
-else
-    echo \"  ✗ Config missing at /etc/kolosal/config.yaml\"
-fi
-echo \"\"
-echo \"Important notes:\"
-echo \"  - The CLI will start kolosal-server in /var/lib/kolosal directory\"
-echo \"  - This allows the server to create models/ subdirectory\"
-echo \"  - If permission issues occur, check directory ownership and groups\"
-echo \"  - Run 'groups' to see if you're in the kolosal group (logout/login may be required)\"
-echo \"\"
-echo \"If you encounter issues, check:\"
-echo \"  1. Library dependencies: ldd /usr/bin/kolosal-server\"
-echo \"  2. Library dependencies: ldd /usr/bin/kolosal\"
-echo \"  3. Config file permissions: ls -la /etc/kolosal/config.yaml\"
-echo \"  4. Test server config loading: kolosal-server --config /etc/kolosal/config.yaml --help\"
-echo \"  5. Test CLI directly: kolosal --help\"
-echo \"\"
-echo \"To verify which config the server automatically detects:\"
-echo \"  kolosal-server --port 8081 &\"
-echo \"  # Check server startup messages - it will show which config file it loaded\"
-echo \"  sleep 2 && pkill kolosal-server\"
-echo \"  cat /tmp/kolosal-server.log\"
-echo \"\"
-echo \"Common solutions:\"
-echo \"  - If libraries are missing: sudo apt update && sudo apt install --fix-broken\"
-echo \"  - If config not found: sudo mkdir -p /etc/kolosal && sudo cp config.yaml /etc/kolosal/\"
-echo \"  - Run: sudo ldconfig   # to refresh library cache\"
-echo \"\"
-if command -v systemctl >/dev/null 2>&1 && [ -f /etc/systemd/system/kolosal-server.service ]; then
-echo \"Or use systemd service:\"
-echo \"  sudo systemctl enable kolosal-server\"
-echo \"  sudo systemctl start kolosal-server\"
-echo \"\"
-fi
-echo \"For more information, visit:\"
-echo \"  https://github.com/kolosalai/kolosal-cli\"
-echo \"===============================================\"
+echo \"  kolosal --help\"
+echo \"  kolosal-server --help\"
 
 exit 0
 ")
@@ -1062,15 +883,9 @@ fi
 rm -f /usr/lib/x86_64-linux-gnu/libkolosal_server.so 2>/dev/null || true
 rm -f \"/usr/lib/x86_64-linux-gnu/lib@INFERENCE_TARGET_NAME@.so\" 2>/dev/null || true
 
-# Note: We preserve the kolosal user and /var/lib/kolosal for user data safety
 echo \"Kolosal CLI has been removed.\"
-echo \"User data in /var/lib/kolosal (if any) has been preserved.\"
-echo \"The kolosal system user has been preserved for safety.\"
-echo \"\"
-echo \"To completely remove all data and user:\"
-echo \"  sudo rm -rf /var/lib/kolosal\"
-echo \"  sudo rm -rf /etc/kolosal\"
-echo \"  sudo userdel kolosal\"
+echo \"User data in /var/lib/kolosal has been preserved.\"
+echo \"To completely remove all data: sudo rm -rf /var/lib/kolosal /etc/kolosal && sudo userdel kolosal\"
 
 exit 0
 ")
@@ -1145,59 +960,7 @@ exit 0
     # Check if we should build RPM instead of DEB
     if(EXISTS "/etc/redhat-release" OR EXISTS "/etc/fedora-release")
         set(CPACK_GENERATOR "RPM")
-        message(STATUS "Detected RedHat-based system - will generate RPM packages")
-    else()
-        message(STATUS "Will generate DEB packages (use -DCPACK_GENERATOR=RPM to force RPM)")
     endif()
 endif()
 
 include(CPack)
-
-if(WIN32)
-    message(STATUS "CPack configured for NSIS package generation")
-    message(STATUS "  Package includes:")
-    message(STATUS "    - kolosal.exe (main CLI)")
-    message(STATUS "    - kolosal-server.exe (server executable)")
-    message(STATUS "    - kolosal_server.dll (server library)")
-    message(STATUS "    - ${INFERENCE_TARGET_NAME}.dll (inference engine)")
-    message(STATUS "    - libcurl.dll and other dependencies")
-    message(STATUS "    - config.yaml (configuration file)")
-    message(STATUS "")
-    message(STATUS "  Run 'cmake --build . --target package' to create the Windows installer")
-    message(STATUS "  The installer will install to user profile and add to user PATH")
-    message(STATUS "  After installation, both 'kolosal' and 'kolosal-server' will be available in PATH")
-else()
-    if(CPACK_GENERATOR STREQUAL "RPM")
-        message(STATUS "CPack configured for RPM package generation")
-        message(STATUS "  Run 'cmake --build . --target package' to create the RPM installer")
-        message(STATUS "  Install with: sudo rpm -i kolosal-cli-*.rpm")
-    else()
-        message(STATUS "CPack configured for DEB package generation")
-        message(STATUS "  Run 'cmake --build . --target package' to create the DEB installer")
-        message(STATUS "  Install with: sudo dpkg -i kolosal-cli-*.deb")
-    endif()
-    message(STATUS "")
-    message(STATUS "  Package includes:")
-    message(STATUS "    - /usr/bin/kolosal (main CLI)")
-    message(STATUS "    - /usr/bin/kolosal-server (server executable)")
-    message(STATUS "    - /usr/lib/libkolosal_server.so (server library)")
-    message(STATUS "    - /usr/lib/lib${INFERENCE_TARGET_NAME}.so (inference engine)")
-    message(STATUS "    - /etc/kolosal/config.yaml (configuration)")
-    if(EXISTS "${CMAKE_CURRENT_SOURCE_DIR}/kolosal-server/kolosal-server.service")
-        message(STATUS "    - /etc/systemd/system/kolosal-server.service (systemd service)")
-    endif()
-    message(STATUS "    - Desktop entry and man page (if available)")
-    message(STATUS "")
-    message(STATUS "  Or use: make package")
-    message(STATUS "")
-    message(STATUS "Linux Build Requirements:")
-    message(STATUS "  - libcurl4-openssl-dev (Ubuntu/Debian) or libcurl-devel (RHEL/CentOS)")
-    message(STATUS "  - libssl-dev (Ubuntu/Debian) or openssl-devel (RHEL/CentOS)")
-    message(STATUS "  - zlib1g-dev (Ubuntu/Debian) or zlib-devel (RHEL/CentOS)")
-    message(STATUS "  - build-essential cmake (Ubuntu/Debian) or gcc-c++ cmake (RHEL/CentOS)")
-    if(USE_VULKAN)
-        message(STATUS "  - libvulkan-dev vulkan-tools (for Vulkan support)")
-    elseif(USE_CUDA)
-        message(STATUS "  - CUDA toolkit and runtime (for CUDA support)")
-    endif()
-endif()
