@@ -1250,6 +1250,10 @@ bool KolosalCLI::showInferenceEngines()
             if (m_serverClient && m_serverClient->setDefaultInferenceEngine(name))
             {
                 std::cout << "✓ Engine '" << name << "' has been set as the default inference engine." << std::endl;
+                std::cout << "\nTransitioning to model selection..." << std::endl;
+                
+                // Move to the main repository selection flow
+                return run("");
             }
             else
             {
@@ -1271,9 +1275,8 @@ bool KolosalCLI::showInferenceEngines()
             bool downloadSuccess = downloadEngineFile(name, filename);
             if (downloadSuccess)
             {
-                std::cout << "\nPress any key to continue...";
-                std::cin.get();
-                return true; // Return to main menu to allow rescanning
+                std::cout << "\nTransitioning to model selection..." << std::endl;
+                return run(""); // Transition to main repository selection flow
             }
         }
         
@@ -1374,6 +1377,8 @@ bool KolosalCLI::downloadEngineFile(const std::string& engineName, const std::st
                     if (m_serverClient->setDefaultInferenceEngine(engineName))
                     {
                         std::cout << "Engine '" << engineName << "' has been set as the default inference engine." << std::endl;
+                        std::cout << "\nTransitioning to model selection..." << std::endl;
+                        return true; // Success, caller will handle transition
                     }
                     else
                     {
@@ -1448,6 +1453,8 @@ bool KolosalCLI::downloadEngineFile(const std::string& engineName, const std::st
         if (m_serverClient->setDefaultInferenceEngine(engineName))
         {
             std::cout << "Engine '" << engineName << "' has been set as the default inference engine." << std::endl;
+            std::cout << "\nTransitioning to model selection..." << std::endl;
+            return true; // Success, caller will handle transition
         }
         else
         {
