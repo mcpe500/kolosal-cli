@@ -94,6 +94,13 @@ public:
     bool addInferenceEngine(const std::string& name, const std::string& libraryPath, bool loadOnStartup = true);
     
     /**
+     * @brief Set the default inference engine on the server
+     * @param engineName Name of the engine to set as default
+     * @return True if default engine was set successfully, false otherwise
+     */
+    bool setDefaultInferenceEngine(const std::string& engineName);
+    
+    /**
      * @brief Check if an engine with the given ID already exists on the server
      * @param engineId Engine ID to check
      * @return True if engine exists, false otherwise
@@ -227,6 +234,15 @@ private:
      * @return True if request was successful, false otherwise
      */
     bool makeDeleteRequest(const std::string& endpoint, const std::string& payload, std::string& response);
+    
+    /**
+     * @brief Make HTTP PUT request to the server
+     * @param endpoint API endpoint
+     * @param payload JSON payload to send
+     * @param response Output: response body
+     * @return True if request was successful, false otherwise
+     */
+    bool makePutRequest(const std::string& endpoint, const std::string& payload, std::string& response);
     
     /**
      * @brief Parse JSON response

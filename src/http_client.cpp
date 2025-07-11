@@ -238,6 +238,65 @@ bool HttpClient::deleteRequest(const std::string& url, const std::string& payloa
     return true;
 }
 
+bool HttpClient::put(const std::string& url, const std::string& payload, std::string& response, const std::vector<std::string>& headers) {
+    CURL* curl = curl_easy_init();
+    if (!curl) {
+        return false;
+    }
+    
+    // Clear any previous response data
+    response.clear();
+    
+    // Set curl options
+    curl_easy_setopt(curl, CURLOPT_URL, url.c_str());
+    curl_easy_setopt(curl, CURLOPT_CUSTOMREQUEST, "PUT");
+    curl_easy_setopt(curl, CURLOPT_WRITEFUNCTION, writeStringCallback);
+    curl_easy_setopt(curl, CURLOPT_WRITEDATA, &response);
+    curl_easy_setopt(curl, CURLOPT_FOLLOWLOCATION, 1L);
+    curl_easy_setopt(curl, CURLOPT_SSL_VERIFYPEER, 0L);
+    curl_easy_setopt(curl, CURLOPT_SSL_VERIFYHOST, 0L);
+    curl_easy_setopt(curl, CURLOPT_TIMEOUT, 30L);
+    curl_easy_setopt(curl, CURLOPT_USERAGENT, "Kolosal-CLI/1.0");
+    
+    // Set payload
+    curl_easy_setopt(curl, CURLOPT_POSTFIELDS, payload.c_str());
+    
+    // Set custom headers if provided
+    struct curl_slist* headerList = nullptr;
+    if (!headers.empty()) {
+        for (const auto& header : headers) {
+            headerList = curl_slist_append(headerList, header.c_str());
+        }
+        curl_easy_setopt(curl, CURLOPT_HTTPHEADER, headerList);
+    }
+    
+    // Perform the request
+    CURLcode res = curl_easy_perform(curl);
+    
+    // Cleanup headers
+    if (headerList) {
+        curl_slist_free_all(headerList);
+    }
+    
+    if (res != CURLE_OK) {
+        curl_easy_cleanup(curl);
+        return false;
+    }
+    
+    // Check HTTP status code
+    long response_code;
+    curl_easy_getinfo(curl, CURLINFO_RESPONSE_CODE, &response_code);
+    
+    curl_easy_cleanup(curl);
+    
+    // Accept 200-299 status codes as successful
+    if (response_code < 200 || response_code >= 300) {
+        return false;
+    }
+    
+    return true;
+}
+
 HttpClient& HttpClient::getInstance() {
     static HttpClient instance;
     return instance;

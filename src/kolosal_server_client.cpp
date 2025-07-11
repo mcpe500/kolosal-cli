@@ -800,6 +800,21 @@ bool KolosalServerClient::makeDeleteRequest(const std::string &endpoint, const s
     return client.deleteRequest(url, payload, response, headers);
 }
 
+bool KolosalServerClient::makePutRequest(const std::string &endpoint, const std::string &payload, std::string &response)
+{
+    std::string url = m_baseUrl + endpoint;
+
+    std::vector<std::string> headers;
+    headers.push_back("Content-Type: application/json");
+    if (!m_apiKey.empty())
+    {
+        headers.push_back("X-API-Key: " + m_apiKey);
+    }
+
+    HttpClient client;
+    return client.put(url, payload, response, headers);
+}
+
 bool KolosalServerClient::parseJsonValue(const std::string &jsonString, const std::string &key, std::string &value)
 {
     try
@@ -1298,6 +1313,44 @@ bool KolosalServerClient::getModelStatus(const std::string& modelId, std::string
         return true;
     }
     catch (const std::exception&) {
+        return false;
+    }
+}
+
+bool KolosalServerClient::setDefaultInferenceEngine(const std::string& engineName)
+{
+    try {
+        // Prepare JSON payload for the PUT request
+        json payload;
+        payload["engine_name"] = engineName;
+        
+        std::string requestBody = payload.dump();
+        std::string response;
+        
+        // Try both /v1/engines and /engines endpoints
+        if (!makePutRequest("/v1/engines", requestBody, response))
+        {
+            if (!makePutRequest("/engines", requestBody, response))
+            {
+                return false;
+            }
+        }
+        
+        // Parse the response to check if setting was successful
+        json responseJson = json::parse(response);
+        
+        // Check if the response indicates success
+        if (responseJson.contains("message"))
+        {
+            std::string message = responseJson["message"];
+            return message.find("successfully") != std::string::npos ||
+                   message.find("set") != std::string::npos;
+        }
+        
+        return false;
+    }
+    catch (const std::exception&)
+    {
         return false;
     }
 }

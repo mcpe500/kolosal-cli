@@ -1244,36 +1244,24 @@ bool KolosalCLI::showInferenceEngines()
 
         if (isRegistered)
         {
-            std::cout << "Status: REGISTERED (available to load)\n";
+            std::cout << "Status: REGISTERED (available)\n";
+            
+            // Automatically set this engine as the default
+            if (m_serverClient && m_serverClient->setDefaultInferenceEngine(name))
+            {
+                std::cout << "✓ Engine '" << name << "' has been set as the default inference engine." << std::endl;
+            }
+            else
+            {
+                std::cout << "✗ Failed to set '" << name << "' as the default inference engine." << std::endl;
+            }
         }
         else
         {
-            std::cout << "Status: NOT REGISTERED (available for download)\n";
+            std::cout << "Status: NOT REGISTERED (download)\n";
             if (!filename.empty())
             {
                 std::cout << "Download URL: https://huggingface.co/kolosal/engines/resolve/main/" << filename << "\n";
-            }
-        }
-
-        // Show additional details if available from server
-        if (isRegistered && serverEngineMap.find(name) != serverEngineMap.end())
-        {
-            const auto &serverEngine = serverEngineMap[name];
-            const std::string &version = std::get<1>(serverEngine);
-            const std::string &description = std::get<2>(serverEngine);
-            const std::string &library_path = std::get<3>(serverEngine);
-
-            if (!version.empty())
-            {
-                std::cout << "Version: " << version << "\n";
-            }
-            if (!description.empty())
-            {
-                std::cout << "Description: " << description << "\n";
-            }
-            if (!library_path.empty())
-            {
-                std::cout << "Library Path: " << library_path << "\n";
             }
         }
 
@@ -1371,23 +1359,27 @@ bool KolosalCLI::downloadEngineFile(const std::string& engineName, const std::st
     }
     else
     {
-        std::cout << "Remote file size: " << formatFileSize(remoteFileSize) << std::endl;
-        
+
         if (fileExists)
         {
-            std::cout << "Local file size: " << formatFileSize(localFileSize) << std::endl;
-            
             // Smart download logic: skip if local file is larger or equal
             if (localFileSize >= remoteFileSize)
             {
-                std::cout << "✓ Local file is up to date, skipping download." << std::endl;
-                std::cout << "Registering existing engine with server..." << std::endl;
-                
                 // Just register the existing file with the server
                 if (m_serverClient && m_serverClient->addInferenceEngine(engineName, targetPath, true))
                 {
-                    std::cout << "✓ Inference engine registered successfully!" << std::endl;
                     std::cout << "Engine '" << engineName << "' is now available for use." << std::endl;
+                    
+                    // Set this engine as the default
+                    if (m_serverClient->setDefaultInferenceEngine(engineName))
+                    {
+                        std::cout << "Engine '" << engineName << "' has been set as the default inference engine." << std::endl;
+                    }
+                    else
+                    {
+                        std::cout << "⚠ Warning: Engine registered but failed to set as default." << std::endl;
+                    }
+                    
                     return true;
                 }
                 else
@@ -1448,15 +1440,19 @@ bool KolosalCLI::downloadEngineFile(const std::string& engineName, const std::st
         return false;
     }
     
-    std::cout << "\n✓ Download completed successfully!" << std::endl;
-    
-    // Add the engine to the server using the new endpoint
-    std::cout << "Registering inference engine with server..." << std::endl;
-    
     if (m_serverClient && m_serverClient->addInferenceEngine(engineName, targetPath, true))
     {
-        std::cout << "✓ Inference engine registered successfully!" << std::endl;
         std::cout << "Engine '" << engineName << "' is now available for use." << std::endl;
+        
+        // Set this engine as the default
+        if (m_serverClient->setDefaultInferenceEngine(engineName))
+        {
+            std::cout << "Engine '" << engineName << "' has been set as the default inference engine." << std::endl;
+        }
+        else
+        {
+            std::cout << "⚠ Warning: Engine registered but failed to set as default." << std::endl;
+        }
     }
     else
     {
