@@ -50,6 +50,20 @@ public:
      */
     bool showInferenceEngines();
 
+    /**
+     * @brief Download an engine file to the executable directory
+     * @param engineName Name of the engine to download
+     * @param filename The filename of the engine file on Hugging Face
+     * @return True if download completed successfully, false otherwise
+     */
+    bool downloadEngineFile(const std::string& engineName, const std::string& filename);
+
+    /**
+     * @brief Get the directory where the kolosal-cli executable is located
+     * @return Path to the executable directory
+     */
+    std::string getExecutableDirectory();
+
 private:
     /**
      * @brief Parse Hugging Face repository URL or ID to extract model ID

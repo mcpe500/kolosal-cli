@@ -2,7 +2,7 @@
 #include <curl/curl.h>
 #include <iostream>
 #include <sstream>
-#include <sstream>
+#include <cstdio>
 
 void HttpClient::initialize() {
     curl_global_init(CURL_GLOBAL_DEFAULT);
@@ -384,5 +384,106 @@ bool HttpClient::makeStreamingRequest(const std::string& url, const std::string&
     }
     
     curl_easy_cleanup(curl);
+    return success;
+}
+
+// Helper structure for download progress
+struct DownloadData {
+    FILE* file;
+    std::function<void(size_t, size_t, double)> progressCallback;
+    size_t totalBytes;
+    size_t downloadedBytes;
+};
+
+// Callback for writing downloaded data to file
+size_t writeFileCallback(void* contents, size_t size, size_t nmemb, void* userp) {
+    DownloadData* data = static_cast<DownloadData*>(userp);
+    size_t written = fwrite(contents, size, nmemb, data->file);
+    data->downloadedBytes += written;
+    
+    // Call progress callback if available
+    if (data->progressCallback && data->totalBytes > 0) {
+        double percentage = (static_cast<double>(data->downloadedBytes) / data->totalBytes) * 100.0;
+        data->progressCallback(data->downloadedBytes, data->totalBytes, percentage);
+    }
+    
+    return written;
+}
+
+// Callback for getting download progress
+int downloadProgressCallback(void* userp, curl_off_t dltotal, curl_off_t dlnow, curl_off_t ultotal, curl_off_t ulnow) {
+    DownloadData* data = static_cast<DownloadData*>(userp);
+    data->totalBytes = static_cast<size_t>(dltotal);
+    data->downloadedBytes = static_cast<size_t>(dlnow);
+    
+    if (data->progressCallback && dltotal > 0) {
+        double percentage = (static_cast<double>(dlnow) / dltotal) * 100.0;
+        data->progressCallback(static_cast<size_t>(dlnow), static_cast<size_t>(dltotal), percentage);
+    }
+    
+    return 0; // Return 0 to continue download
+}
+
+bool HttpClient::downloadFile(const std::string& url, const std::string& filePath, 
+                             std::function<void(size_t, size_t, double)> progressCallback) {
+    CURL* curl = curl_easy_init();
+    if (!curl) {
+        return false;
+    }
+    
+    // Open file for writing
+    FILE* file = fopen(filePath.c_str(), "wb");
+    if (!file) {
+        curl_easy_cleanup(curl);
+        return false;
+    }
+    
+    // Setup download data structure
+    DownloadData downloadData;
+    downloadData.file = file;
+    downloadData.progressCallback = progressCallback;
+    downloadData.totalBytes = 0;
+    downloadData.downloadedBytes = 0;
+    
+    // Set curl options
+    curl_easy_setopt(curl, CURLOPT_URL, url.c_str());
+    curl_easy_setopt(curl, CURLOPT_WRITEFUNCTION, writeFileCallback);
+    curl_easy_setopt(curl, CURLOPT_WRITEDATA, &downloadData);
+    curl_easy_setopt(curl, CURLOPT_FOLLOWLOCATION, 1L);
+    curl_easy_setopt(curl, CURLOPT_SSL_VERIFYPEER, 0L);
+    curl_easy_setopt(curl, CURLOPT_SSL_VERIFYHOST, 0L);
+    curl_easy_setopt(curl, CURLOPT_TIMEOUT, 300L); // 5 minute timeout for downloads
+    curl_easy_setopt(curl, CURLOPT_USERAGENT, "Kolosal-CLI/1.0");
+    
+    // Enable progress callback
+    if (progressCallback) {
+        curl_easy_setopt(curl, CURLOPT_NOPROGRESS, 0L);
+        curl_easy_setopt(curl, CURLOPT_XFERINFOFUNCTION, downloadProgressCallback);
+        curl_easy_setopt(curl, CURLOPT_XFERINFODATA, &downloadData);
+    }
+    
+    // Perform the download
+    CURLcode res = curl_easy_perform(curl);
+    
+    // Close file
+    fclose(file);
+    
+    bool success = (res == CURLE_OK);
+    
+    if (success) {
+        // Check HTTP status code
+        long response_code;
+        curl_easy_getinfo(curl, CURLINFO_RESPONSE_CODE, &response_code);
+        success = (response_code >= 200 && response_code < 300);
+    }
+    
+    // Cleanup
+    curl_easy_cleanup(curl);
+    
+    // If download failed, remove the partial file
+    if (!success) {
+        remove(filePath.c_str());
+    }
+    
     return success;
 }

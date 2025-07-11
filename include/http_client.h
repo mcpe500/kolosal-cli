@@ -81,6 +81,16 @@ public:
     bool makeStreamingRequest(const std::string& url, const std::string& payload, 
                             const std::string& headers, std::function<void(const std::string&)> chunkCallback);
 
+    /**
+     * @brief Download a file from a URL to a local path
+     * @param url The URL to download from
+     * @param filePath The local file path to save to
+     * @param progressCallback Optional callback for progress updates (downloaded, total, percentage)
+     * @return true if the download was successful, false otherwise
+     */
+    static bool downloadFile(const std::string& url, const std::string& filePath, 
+                            std::function<void(size_t, size_t, double)> progressCallback = nullptr);
+
 private:
     /**
      * @brief Callback function for libcurl to write response data

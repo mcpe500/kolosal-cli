@@ -24,6 +24,7 @@
 #include <filesystem>
 #include <cstring>
 #include <cstdlib>
+#include <cctype>
 #include <chrono>
 #include <yaml-cpp/yaml.h>
 
@@ -1225,6 +1226,9 @@ bool KolosalCLI::showInferenceEngines()
         serverEngineMap[name] = engine;
     }
 
+    // Get executable directory to scan for engine files
+    std::string executableDir = getExecutableDirectory();
+    
     // Create combined engine list with download status
     std::vector<std::tuple<std::string, std::string, bool, bool>> combinedEngines; // name, filename, isDownloaded, isLoaded
 
@@ -1244,10 +1248,21 @@ bool KolosalCLI::showInferenceEngines()
             engineName = engineName.substr(0, lastDot);
         }
 
-        // Check if this engine exists on the server
-        bool isDownloaded = serverEngineMap.find(engineName) != serverEngineMap.end();
+        // Check if engine file actually exists in executable directory
+        bool isDownloaded = false;
+        if (!executableDir.empty())
+        {
+#ifdef _WIN32
+            std::string enginePath = executableDir + "\\" + filename;
+#else
+            std::string enginePath = executableDir + "/" + filename;
+#endif
+            isDownloaded = std::filesystem::exists(enginePath);
+        }
+        
+        // Check if engine is loaded on server (only if downloaded)
         bool isLoaded = false;
-        if (isDownloaded)
+        if (isDownloaded && serverEngineMap.find(engineName) != serverEngineMap.end())
         {
             isLoaded = std::get<4>(serverEngineMap[engineName]);
         }
@@ -1256,6 +1271,123 @@ bool KolosalCLI::showInferenceEngines()
     }
 
     // Add any server engines that weren't found in Hugging Face (custom engines)
+    // Also scan executable directory for any additional engine files
+    if (!executableDir.empty())
+    {
+        try
+        {
+            for (const auto &entry : std::filesystem::directory_iterator(executableDir))
+            {
+                if (entry.is_regular_file())
+                {
+                    std::string filename = entry.path().filename().string();
+                    std::string extension = entry.path().extension().string();
+                    
+                    // Check for common engine file extensions
+                    if (extension == ".dll" || extension == ".so" || extension == ".dylib")
+                    {
+                        // Extract engine name
+                        std::string engineName = entry.path().stem().string();
+                        
+                        // Filter out non-engine libraries (system libraries, dependencies, etc.)
+                        bool isEngineFile = false;
+                        
+                        // Known inference engine patterns
+                        std::vector<std::string> enginePatterns = {
+                            "llama", "ggml", "whisper", "stable-diffusion", "bert", "gpt",
+                            "transformers", "torch", "tensorflow", "onnx", "openvino",
+                            "tensorrt", "cuda", "rocm", "vulkan", "metal", "dml",
+                            "cpu", "gpu", "inference", "engine"
+                        };
+                        
+                        // Check if filename contains any engine-related patterns
+                        std::string lowerName = engineName;
+                        std::transform(lowerName.begin(), lowerName.end(), lowerName.begin(), ::tolower);
+                        
+                        for (const std::string& pattern : enginePatterns)
+                        {
+                            if (lowerName.find(pattern) != std::string::npos)
+                            {
+                                isEngineFile = true;
+                                break;
+                            }
+                        }
+                        
+                        // Also check if it's in the list from Hugging Face
+                        for (const std::string& hfFilename : availableEngineFiles)
+                        {
+                            std::string hfEngineName = hfFilename;
+                            size_t lastSlash = hfEngineName.find_last_of('/');
+                            if (lastSlash != std::string::npos)
+                            {
+                                hfEngineName = hfEngineName.substr(lastSlash + 1);
+                            }
+                            size_t lastDot = hfEngineName.find_last_of('.');
+                            if (lastDot != std::string::npos)
+                            {
+                                hfEngineName = hfEngineName.substr(0, lastDot);
+                            }
+                            
+                            if (engineName == hfEngineName)
+                            {
+                                isEngineFile = true;
+                                break;
+                            }
+                        }
+                        
+                        // Exclude known system/dependency libraries
+                        std::vector<std::string> excludePatterns = {
+                            "msvcr", "msvcp", "vcruntime", "api-ms-", "kernel32", "user32",
+                            "gdi32", "winspool", "comdlg32", "advapi32", "shell32", "ole32",
+                            "oleaut32", "uuid", "odbc32", "odbccp32", "libcurl", "yaml-cpp",
+                            "zlib", "ssl", "crypto", "pthread", "dl", "rt", "m", "c"
+                        };
+                        
+                        for (const std::string& pattern : excludePatterns)
+                        {
+                            if (lowerName.find(pattern) != std::string::npos)
+                            {
+                                isEngineFile = false;
+                                break;
+                            }
+                        }
+                        
+                        if (isEngineFile)
+                        {
+                            // Check if this engine is already in our list
+                            bool found = false;
+                            for (const auto &combined : combinedEngines)
+                            {
+                                if (std::get<0>(combined) == engineName)
+                                {
+                                    found = true;
+                                    break;
+                                }
+                            }
+                            
+                            if (!found)
+                            {
+                                // Check if engine is loaded on server
+                                bool isLoaded = false;
+                                if (serverEngineMap.find(engineName) != serverEngineMap.end())
+                                {
+                                    isLoaded = std::get<4>(serverEngineMap[engineName]);
+                                }
+                                
+                                combinedEngines.emplace_back(engineName, filename, true, isLoaded); // Local engine file found
+                            }
+                        }
+                    }
+                }
+            }
+        }
+        catch (const std::exception &e)
+        {
+            std::cerr << "Warning: Could not scan executable directory for engines: " << e.what() << std::endl;
+        }
+    }
+    
+    // Add any remaining server engines that weren't found as files (may be virtual/remote engines)
     for (const auto &serverEngine : serverEngines)
     {
         const std::string &name = std::get<0>(serverEngine);
@@ -1271,7 +1403,7 @@ bool KolosalCLI::showInferenceEngines()
         if (!found)
         {
             bool isLoaded = std::get<4>(serverEngine);
-            combinedEngines.emplace_back(name, "", true, isLoaded); // Custom engine, assume downloaded
+            combinedEngines.emplace_back(name, "", false, isLoaded); // Server engine without local file
         }
     }
 
@@ -1290,11 +1422,10 @@ bool KolosalCLI::showInferenceEngines()
     {
         const std::string &name = std::get<0>(engineEntry);
         bool isDownloaded = std::get<2>(engineEntry);
-        bool isLoaded = std::get<3>(engineEntry);
 
-        // Create display string with simplified status
+        // Create display string with accurate status based on file existence
         std::string displayString = name;
-        if (isLoaded || isDownloaded)
+        if (isDownloaded)
         {
             displayString += " (DOWNLOADED: ready)";
         }
@@ -1322,8 +1453,6 @@ bool KolosalCLI::showInferenceEngines()
         bool isDownloaded = std::get<2>(selectedEngine);
         bool isLoaded = std::get<3>(selectedEngine);
 
-        std::cout << "\nInference Engine Details:\n";
-        std::cout << std::string(50, '=') << "\n";
         std::cout << "Name: " << name << "\n";
         if (!filename.empty())
         {
@@ -1337,6 +1466,22 @@ bool KolosalCLI::showInferenceEngines()
         else if (isDownloaded)
         {
             std::cout << "Status: DOWNLOADED (available to load)\n";
+            
+            // Show local file path if downloaded
+            if (!executableDir.empty())
+            {
+#ifdef _WIN32
+                std::string localPath = executableDir + "\\" + (!filename.empty() ? filename : name + ".dll");
+#else
+                std::string localPath = executableDir + "/" + (!filename.empty() ? filename : name + ".so");
+#endif
+                if (std::filesystem::exists(localPath))
+                {
+                    auto fileSize = std::filesystem::file_size(localPath);
+                    std::cout << "Local Path: " << localPath << "\n";
+                    std::cout << "File Size: " << formatFileSize(fileSize) << "\n";
+                }
+            }
         }
         else
         {
@@ -1369,12 +1514,119 @@ bool KolosalCLI::showInferenceEngines()
             }
         }
 
-        std::cout << std::string(50, '=') << "\n";
-
-        // Future enhancement: Add actions like download, load/unload engine
+        // Provide download option for engines that are not downloaded
+        if (!isDownloaded && !filename.empty())
+        {
+            bool downloadSuccess = downloadEngineFile(name, filename);
+            if (downloadSuccess)
+            {
+                std::cout << "\nPress any key to continue...";
+                std::cin.get();
+                return true; // Return to main menu to allow rescanning
+            }
+        }
+        
         std::cout << "\nPress any key to continue...";
         std::cin.get();
     }
 
+    return true;
+}
+
+std::string KolosalCLI::getExecutableDirectory()
+{
+#ifdef _WIN32
+    char exePath[MAX_PATH];
+    GetModuleFileNameA(NULL, exePath, MAX_PATH);
+    std::string fullPath(exePath);
+    
+    // Extract directory from full path
+    size_t lastSlash = fullPath.find_last_of('\\');
+    if (lastSlash != std::string::npos)
+    {
+        return fullPath.substr(0, lastSlash);
+    }
+    return "";
+#else
+    char exePath[1024];
+    ssize_t len = readlink("/proc/self/exe", exePath, sizeof(exePath) - 1);
+    if (len != -1) {
+        exePath[len] = '\0';
+        std::string fullPath(exePath);
+        
+        // Extract directory from full path
+        size_t lastSlash = fullPath.find_last_of('/');
+        if (lastSlash != std::string::npos)
+        {
+            return fullPath.substr(0, lastSlash);
+        }
+    }
+    return "";
+#endif
+}
+
+bool KolosalCLI::downloadEngineFile(const std::string& engineName, const std::string& filename)
+{
+    // Get the executable directory
+    std::string executableDir = getExecutableDirectory();
+    if (executableDir.empty())
+    {
+        std::cerr << "Error: Could not determine executable directory" << std::endl;
+        return false;
+    }
+    
+    // Construct the target file path
+#ifdef _WIN32
+    std::string targetPath = executableDir + "\\" + filename;
+#else
+    std::string targetPath = executableDir + "/" + filename;
+#endif
+    
+    // Construct the download URL
+    std::string downloadUrl = "https://huggingface.co/kolosal/engines/resolve/main/" + filename;
+    
+    // Perform the download with progress bar
+    bool success = HttpClient::downloadFile(downloadUrl, targetPath, 
+        [](size_t downloaded, size_t total, double percentage) {
+            if (total > 0) {
+                std::cout << "\r";
+                // Create progress bar
+                int barWidth = 40;
+                int pos = static_cast<int>(barWidth * percentage / 100.0);
+
+                std::cout << "[";
+                for (int i = 0; i < barWidth; ++i)
+                {
+                    if (i < pos)
+                        std::cout << "█";
+                    else
+                        std::cout << "-";
+                }
+                std::cout << "] " << std::fixed << std::setprecision(1) << percentage << "%";
+
+                // Show file sizes
+                std::cout << " (" << formatFileSize(downloaded) << "/" << formatFileSize(total) << ")";
+                std::cout.flush();
+            }
+        }
+    );
+    
+    if (!success)
+    {
+        std::cout << "\n✗ Download failed!" << std::endl;
+        
+        // Clean up any partial download
+        if (std::filesystem::exists(targetPath))
+        {
+            try {
+                std::filesystem::remove(targetPath);
+            } catch (const std::exception& e) {
+                std::cerr << "Error cleaning up partial download: " << e.what() << std::endl;
+            }
+        }
+        
+        return false;
+    }
+    
     return true;
 }
