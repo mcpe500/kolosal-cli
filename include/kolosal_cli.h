@@ -149,15 +149,6 @@ private:
     void cancelActiveDownloads();
     
     /**
-     * @brief Update config.yaml to add a new model entry
-     * @param engineId The engine ID to add
-     * @param modelPath The local path to the model file
-     * @param loadImmediately Whether to load the model immediately on server start
-     * @return True if config was updated successfully, false otherwise
-     */
-    bool updateConfigWithModel(const std::string& engineId, const std::string& modelPath, bool loadImmediately = false);
-    
-    /**
      * @brief Start an interactive chat session with the given model
      * @param engineId The engine ID to use for chat
      * @return True if chat session completed successfully, false if there was an error

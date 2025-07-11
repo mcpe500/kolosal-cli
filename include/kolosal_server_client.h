@@ -85,6 +85,15 @@ public:
     bool getInferenceEngines(std::vector<std::tuple<std::string, std::string, std::string, std::string, bool>>& engines);
     
     /**
+     * @brief Add an inference engine to the server
+     * @param name Name of the inference engine
+     * @param libraryPath Path to the engine library file
+     * @param loadOnStartup Whether to load the engine on server startup (default: true)
+     * @return True if engine was added successfully, false otherwise
+     */
+    bool addInferenceEngine(const std::string& name, const std::string& libraryPath, bool loadOnStartup = true);
+    
+    /**
      * @brief Check if an engine with the given ID already exists on the server
      * @param engineId Engine ID to check
      * @return True if engine exists, false otherwise
@@ -189,13 +198,6 @@ public:
      */
     bool getModelStatus(const std::string& modelId, std::string& status, std::string& message);
 
-    /**
-     * @brief Remove a model from the local config file
-     * @param modelId Model ID to remove from config
-     * @return True if model was removed successfully, false otherwise
-     */
-    bool removeModelFromConfig(const std::string& modelId);
-
 private:
     std::string m_baseUrl;
     std::string m_apiKey;
@@ -242,14 +244,6 @@ private:
      * @return True if parsing was successful, false otherwise
      */
     bool parseJsonNumber(const std::string& jsonString, const std::string& key, double& value);
-    
-    /**
-     * @brief Update config.yaml to include a new model entry
-     * @param engineId Model ID/name to add
-     * @param modelPath Path to the model file
-     * @return True if config was updated successfully, false otherwise
-     */
-    bool updateConfigWithNewModel(const std::string& engineId, const std::string& modelPath, const std::string& inferenceEngine = "llama-cpu");
 };
 
 #endif // KOLOSAL_SERVER_CLIENT_H

@@ -512,8 +512,8 @@ bool KolosalServerClient::addEngine(const std::string &engineId, const std::stri
 {
     try
     {
-        // Note: Removed the early return for existing engines to handle cases where
-        // downloads were cancelled or models failed to load properly
+        // Note: The server now handles configuration updates automatically when models
+        // are successfully added. No client-side config manipulation is needed.
         
         // No loading animation for cleaner output - just show final result
         json payload;
@@ -568,18 +568,17 @@ bool KolosalServerClient::addEngine(const std::string &engineId, const std::stri
             if (responseJson.contains("status")) {
                 std::string status = responseJson["status"];
                 if (status == "loaded" || status == "created" || status == "downloading") {
-                    // Only update config if the add operation was successful
-                    updateConfigWithNewModel(engineId, modelUrl, inferenceEngine);
+                    // Server handles config updates automatically now
                     return true;
                 }
             }
             
             // If no clear status, assume success for backward compatibility
-            updateConfigWithNewModel(engineId, modelUrl, inferenceEngine);
+            // Server handles config updates automatically now
             return true;
         } catch (const std::exception&) {
             // If we can't parse the response, still consider it successful if we got here
-            updateConfigWithNewModel(engineId, modelUrl, inferenceEngine);
+            // Server handles config updates automatically now
             return true;
         }
     }
@@ -883,9 +882,7 @@ bool KolosalServerClient::cancelDownload(const std::string &modelId)
         bool success = cancelJson.value("success", false);
         if (success) {
             loading.complete("Download cancelled");
-            
-            // Remove the model from config since the download was cancelled
-            removeModelFromConfig(modelId);
+            // Server handles config updates automatically now
         } else {
             loading.stop();
         }
@@ -1048,110 +1045,7 @@ bool KolosalServerClient::getAllDownloads(std::vector<std::tuple<std::string, st
     }
 }
 
-bool KolosalServerClient::updateConfigWithNewModel(const std::string& engineId, const std::string& modelPath, const std::string& inferenceEngine)
-{
-    const std::string configPath = "config.yaml";
-    
-    try {
-        if (!std::filesystem::exists(configPath)) {
-            return false;
-        }
-        
-        std::ifstream configFile(configPath);
-        if (!configFile.is_open()) {
-            return false;
-        }
-        
-        std::string configContent;
-        std::string line;
-        bool inModelsSection = false;
-        bool modelsAdded = false;
-        
-        while (std::getline(configFile, line)) {
-            configContent += line + "\n";
-            
-            if (line.find("models:") == 0) {
-                inModelsSection = true;
-            }
-            else if (inModelsSection && !line.empty() && line[0] != ' ' && line[0] != '#' && line[0] != '-') {
-                inModelsSection = false;
-            }
-        }
-        configFile.close();
-        
-        // Check if model with this ID already exists
-        std::string searchPattern = "id: \"" + engineId + "\"";
-        if (configContent.find(searchPattern) != std::string::npos) {
-            // Model already exists in config, don't add duplicate
-            return true;
-        }
-        
-        std::string newModelEntry = "  - id: \"" + engineId + "\"\n"
-                                   "    path: \"" + modelPath + "\"\n"
-                                   "    load_immediately: false\n"
-                                   "    main_gpu_id: 0\n"
-                                   "    inference_engine: \"" + inferenceEngine + "\"\n"
-                                   "    load_params:\n"
-                                   "      n_ctx: 4096\n"
-                                   "      n_keep: 2048\n"
-                                   "      use_mmap: true\n"
-                                   "      use_mlock: true\n"
-                                   "      n_parallel: 4\n"
-                                   "      cont_batching: true\n"
-                                   "      warmup: false\n"
-                                   "      n_gpu_layers: 50\n"
-                                   "      n_batch: 2048\n"
-                                   "      n_ubatch: 512\n";
-        
-        size_t modelsPos = configContent.find("models:");
-        if (modelsPos != std::string::npos) {
-            size_t afterModels = modelsPos + 7;
-            size_t nextSection = configContent.find("\n# =====", afterModels);
-            if (nextSection == std::string::npos) {
-                nextSection = configContent.length();
-            }
-            
-            std::string modelsSection = configContent.substr(afterModels, nextSection - afterModels);
-            
-            bool hasActiveModels = modelsSection.find("\n  - id:") != std::string::npos;
-            
-            if (hasActiveModels) {
-                size_t lastModelEnd = configContent.rfind("      n_ubatch:", nextSection);
-                if (lastModelEnd != std::string::npos) {
-                    size_t lineEnd = configContent.find("\n", lastModelEnd);
-                    if (lineEnd != std::string::npos) {
-                        configContent.insert(lineEnd + 1, "\n" + newModelEntry);
-                    }
-                } else {
-                    size_t lineEnd = configContent.find("\n", modelsPos);
-                    if (lineEnd != std::string::npos) {
-                        configContent.insert(lineEnd + 1, newModelEntry);
-                    }
-                }
-            } else {
-                size_t lineEnd = configContent.find("\n", modelsPos);
-                if (lineEnd != std::string::npos) {
-                    configContent.insert(lineEnd + 1, newModelEntry);
-                }
-            }
-        } else {
-            return false;
-        }
-        
-        std::ofstream outFile(configPath);
-        if (!outFile.is_open()) {
-            return false;
-        }
-        
-        outFile << configContent;
-        outFile.close();
-        
-        return true;
-        
-    } catch (const std::exception&) {
-        return false;
-    }
-}
+
 
 bool KolosalServerClient::chatCompletion(const std::string& engineId, const std::string& message, std::string& response)
 {
@@ -1322,6 +1216,52 @@ bool KolosalServerClient::getInferenceEngines(std::vector<std::tuple<std::string
     }
 }
 
+bool KolosalServerClient::addInferenceEngine(const std::string& name, const std::string& libraryPath, bool loadOnStartup)
+{
+    try {
+        // Prepare JSON payload for the POST request
+        json payload;
+        payload["name"] = name;
+        payload["library_path"] = libraryPath;
+        payload["load_on_startup"] = loadOnStartup;
+        
+        std::string requestBody = payload.dump();
+        std::string response;
+        
+        // Try both /v1/engines and /engines endpoints
+        if (!makePostRequest("/v1/engines", requestBody, response))
+        {
+            if (!makePostRequest("/engines", requestBody, response))
+            {
+                return false;
+            }
+        }
+        
+        // Parse the response to check if addition was successful
+        json responseJson = json::parse(response);
+        
+        // Check if the response indicates success
+        if (responseJson.contains("status") && responseJson["status"] == "success")
+        {
+            return true;
+        }
+        
+        // Also accept if we get a success message
+        if (responseJson.contains("message"))
+        {
+            std::string message = responseJson["message"];
+            return message.find("successfully") != std::string::npos ||
+                   message.find("added") != std::string::npos;
+        }
+        
+        return false;
+    }
+    catch (const std::exception&)
+    {
+        return false;
+    }
+}
+
 bool KolosalServerClient::removeModel(const std::string& modelId)
 {
     try {
@@ -1362,96 +1302,4 @@ bool KolosalServerClient::getModelStatus(const std::string& modelId, std::string
     }
 }
 
-bool KolosalServerClient::removeModelFromConfig(const std::string& modelId)
-{
-    const std::string configPath = "config.yaml";
-    
-    try {
-        if (!std::filesystem::exists(configPath)) {
-            return false;
-        }
-        
-        std::ifstream configFile(configPath);
-        if (!configFile.is_open()) {
-            return false;
-        }
-        
-        std::string configContent;
-        std::string line;
-        std::vector<std::string> lines;
-        
-        // Read all lines
-        while (std::getline(configFile, line)) {
-            lines.push_back(line);
-        }
-        configFile.close();
-        
-        // Find and remove the model entry
-        std::vector<std::string> filteredLines;
-        bool inTargetModel = false;
-        int modelIndent = -1;
-        
-        for (size_t i = 0; i < lines.size(); i++) {
-            const std::string& currentLine = lines[i];
-            
-            // Check if this line starts a model entry
-            if (currentLine.find("- id:") != std::string::npos) {
-                // Extract the model ID from this line
-                size_t idPos = currentLine.find("\"");
-                if (idPos != std::string::npos) {
-                    size_t idEnd = currentLine.find("\"", idPos + 1);
-                    if (idEnd != std::string::npos) {
-                        std::string foundId = currentLine.substr(idPos + 1, idEnd - idPos - 1);
-                        if (foundId == modelId) {
-                            inTargetModel = true;
-                            // Calculate the indentation level
-                            modelIndent = 0;
-                            for (char c : currentLine) {
-                                if (c == ' ') modelIndent++;
-                                else break;
-                            }
-                            continue; // Skip this line
-                        }
-                    }
-                }
-                inTargetModel = false;
-                modelIndent = -1;
-            }
-            
-            if (inTargetModel) {
-                // Check if we've moved to the next model or section
-                int currentIndent = 0;
-                for (char c : currentLine) {
-                    if (c == ' ') currentIndent++;
-                    else break;
-                }
-                
-                // If the line is at the same or lower indentation level and not empty, we've left the model
-                if (!currentLine.empty() && currentIndent <= modelIndent && currentLine.find_first_not_of(' ') != std::string::npos) {
-                    inTargetModel = false;
-                    modelIndent = -1;
-                    filteredLines.push_back(currentLine);
-                }
-                // Otherwise, skip this line (it's part of the model we're removing)
-            } else {
-                filteredLines.push_back(currentLine);
-            }
-        }
-        
-        // Write the filtered content back to the file
-        std::ofstream outFile(configPath);
-        if (!outFile.is_open()) {
-            return false;
-        }
-        
-        for (const std::string& filteredLine : filteredLines) {
-            outFile << filteredLine << "\n";
-        }
-        outFile.close();
-        
-        return true;
-        
-    } catch (const std::exception&) {
-        return false;
-    }
-}
+

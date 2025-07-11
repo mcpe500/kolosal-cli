@@ -352,9 +352,8 @@ bool KolosalCLI::processModelDownload(const std::string &modelId, const ModelFil
     {
         std::cout << "Model ready for inference." << std::endl;
 
-        // Update config.yaml to persist the model across server restarts
-        std::string localPath = "./models/" + modelFile.filename;
-        updateConfigWithModel(engineId, localPath, false); // load_immediately = false for lazy loading
+        // Note: Server handles config updates automatically when models are successfully added
+        // No client-side config manipulation is needed
 
         // Start chat interface
         std::cout << "\nModel downloaded and registered successfully!" << std::endl;
@@ -460,9 +459,8 @@ bool KolosalCLI::handleDirectGGUFUrl(const std::string &url)
 
         std::cout << "\nDownload started successfully!" << std::endl;
 
-        // Update config.yaml to persist the model across server restarts
-        std::string localPath = "./models/" + modelFile.filename;
-        updateConfigWithModel(engineId, localPath, false); // load_immediately = false for lazy loading
+        // Note: Server handles config updates automatically when models are successfully added
+        // No client-side config manipulation is needed
 
         return true;
     }
@@ -568,8 +566,8 @@ bool KolosalCLI::handleLocalGGUFPath(const std::string &path)
 
     std::cout << "Model registered successfully with server." << std::endl;
 
-    // Update config.yaml to persist the model across server restarts
-    updateConfigWithModel(engineId, absolutePath, false); // load_immediately = false for lazy loading
+    // Note: Server handles config updates automatically when models are successfully added
+    // No client-side config manipulation is needed
 
     // Start chat interface
     std::cout << "\nModel loaded and registered successfully!" << std::endl;
@@ -978,90 +976,6 @@ bool KolosalCLI::ensureServerConnection()
     }
 
     return true;
-}
-
-bool KolosalCLI::updateConfigWithModel(const std::string &engineId, const std::string &modelPath, bool loadImmediately)
-{
-    try
-    {
-        std::string configPath = "config.yaml";
-        YAML::Node config;
-
-        // Try to load existing config
-        if (std::filesystem::exists(configPath))
-        {
-            config = YAML::LoadFile(configPath);
-        }
-        else
-        {
-            // Create a minimal config structure if file doesn't exist
-            config["models"] = YAML::Node(YAML::NodeType::Sequence);
-        }
-
-        // Ensure models section exists
-        if (!config["models"])
-        {
-            config["models"] = YAML::Node(YAML::NodeType::Sequence);
-        }
-
-        // Check if model with this ID already exists
-        bool modelExists = false;
-        for (const auto &model : config["models"])
-        {
-            if (model["id"] && model["id"].as<std::string>() == engineId)
-            {
-                modelExists = true;
-                break;
-            }
-        } // Only add if model doesn't already exist in config
-        if (!modelExists)
-        {
-            YAML::Node newModel;
-            newModel["id"] = engineId;
-            newModel["path"] = modelPath;
-            newModel["load_immediately"] = loadImmediately;
-            newModel["main_gpu_id"] = 0;
-
-            // Add load_params with specified configuration
-            YAML::Node loadParams;
-            loadParams["n_ctx"] = 4096;
-            loadParams["n_keep"] = 2048;
-            loadParams["use_mmap"] = true;
-            loadParams["use_mlock"] = true;
-            loadParams["n_parallel"] = 4;
-            loadParams["cont_batching"] = true;
-            loadParams["warmup"] = false;
-            loadParams["n_gpu_layers"] = 50;
-            loadParams["n_batch"] = 2048;
-            loadParams["n_ubatch"] = 512;
-            newModel["load_params"] = loadParams;
-
-            config["models"].push_back(newModel);
-
-            // Write updated config back to file
-            std::ofstream configFile(configPath);
-            if (!configFile.is_open())
-            {
-                std::cerr << "Failed to open config file for writing: " << configPath << std::endl;
-                return false;
-            }
-
-            configFile << config;
-            configFile.close();
-
-            return true;
-        }
-        else
-        {
-            // Model already exists in config - no need to announce this
-            return true;
-        }
-    }
-    catch (const std::exception &e)
-    {
-        std::cerr << "Error updating config: " << e.what() << std::endl;
-        return false;
-    }
 }
 
 bool KolosalCLI::startChatInterface(const std::string &engineId)
@@ -1626,6 +1540,23 @@ bool KolosalCLI::downloadEngineFile(const std::string& engineName, const std::st
         }
         
         return false;
+    }
+    
+    std::cout << "\n✓ Download completed successfully!" << std::endl;
+    
+    // Add the engine to the server using the new endpoint
+    std::cout << "Registering inference engine with server..." << std::endl;
+    
+    if (m_serverClient && m_serverClient->addInferenceEngine(engineName, targetPath, true))
+    {
+        std::cout << "✓ Inference engine registered successfully!" << std::endl;
+        std::cout << "Engine '" << engineName << "' is now available for use." << std::endl;
+    }
+    else
+    {
+        std::cout << "⚠ Warning: Engine downloaded but failed to register with server." << std::endl;
+        std::cout << "The engine file is available at: " << targetPath << std::endl;
+        std::cout << "You may need to restart the server or manually add the engine." << std::endl;
     }
     
     return true;
