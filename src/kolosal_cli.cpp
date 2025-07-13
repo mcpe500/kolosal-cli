@@ -786,12 +786,11 @@ int KolosalCLI::run(const std::string &repoId)
                             if (model["id"] && model["id"].as<std::string>() == modelId)
                             {
                                 std::string modelPath = model["path"].as<std::string>();
-                                std::string inferenceEngine = model["inference_engine"] ? model["inference_engine"].as<std::string>() : "llama-cpu";
-
+                                
                                 std::cout << "Re-adding model from: " << modelPath << std::endl;
 
                                 // Attempt to re-add the model
-                                if (m_serverClient->addEngine(modelId, modelPath, modelPath, inferenceEngine))
+                                if (m_serverClient->addEngine(modelId, modelPath, modelPath))
                                 {
                                     std::cout << "Model re-added successfully!" << std::endl;
 

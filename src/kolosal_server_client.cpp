@@ -504,24 +504,14 @@ bool KolosalServerClient::engineExists(const std::string& engineId)
 bool KolosalServerClient::addEngine(const std::string &engineId, const std::string &modelUrl,
                                     const std::string &modelPath)
 {
-    return addEngine(engineId, modelUrl, modelPath, "llama-cpu");
-}
-
-bool KolosalServerClient::addEngine(const std::string &engineId, const std::string &modelUrl,
-                                    const std::string &modelPath, const std::string &inferenceEngine)
-{
     try
     {
-        // Note: The server now handles configuration updates automatically when models
-        // are successfully added. No client-side config manipulation is needed.
-        
         // No loading animation for cleaner output - just show final result
         json payload;
         payload["model_id"] = engineId;
         payload["model_path"] = modelUrl; // For download, we pass URL as model_path
         payload["load_immediately"] = false;
         payload["main_gpu_id"] = 0;
-        payload["inference_engine"] = inferenceEngine; // Use specified inference engine
         
         // Set comprehensive loading parameters
         json loadParams;
