@@ -44,6 +44,7 @@ private:
     size_t viewportTop;
     size_t maxDisplayItems;
     bool isSearchMode;
+    std::string headerInfo;  // Additional info to display in header
     
 #ifdef _WIN32
     HANDLE hConsole;
@@ -78,6 +79,12 @@ public:
      * @param newItems New vector of strings to display
      */
     void updateItems(const std::vector<std::string>& newItems);
+
+    /**
+     * @brief Set additional header information to display
+     * @param info Information string to display in the header
+     */
+    void setHeaderInfo(const std::string& info);
 
 private:
     /**

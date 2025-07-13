@@ -616,8 +616,16 @@ int KolosalCLI::run(const std::string &repoId)
         }
         else
         {
+            // Get default engine info for display
+            std::string defaultEngine;
+            std::string engineHeaderInfo = "";
+            if (m_serverClient && m_serverClient->getDefaultInferenceEngine(defaultEngine) && !defaultEngine.empty())
+            {
+                engineHeaderInfo = "Current Inference Engine: " + defaultEngine;
+            }
+            
             // Use file selector to get the model file
-            ModelFile selectedFile = m_fileSelector->selectModelFile(modelId);
+            ModelFile selectedFile = m_fileSelector->selectModelFile(modelId, engineHeaderInfo);
 
             if (selectedFile.filename.empty())
             {
@@ -892,7 +900,15 @@ int KolosalCLI::run(const std::string &repoId)
             return 1;
         }
 
-        ModelFile selectedFile = m_fileSelector->selectModelFile(selectedModel);
+        // Get default engine info for display
+        std::string defaultEngine;
+        std::string engineHeaderInfo = "";
+        if (m_serverClient && m_serverClient->getDefaultInferenceEngine(defaultEngine) && !defaultEngine.empty())
+        {
+            engineHeaderInfo = "Current Inference Engine: " + defaultEngine;
+        }
+        
+        ModelFile selectedFile = m_fileSelector->selectModelFile(selectedModel, engineHeaderInfo);
 
         if (selectedFile.filename.empty())
         {
@@ -1128,6 +1144,14 @@ bool KolosalCLI::showInferenceEngines()
         return false;
     }
 
+    // Get the default inference engine from server
+    std::string defaultEngine;
+    if (!m_serverClient->getDefaultInferenceEngine(defaultEngine))
+    {
+        std::cout << "Warning: Could not retrieve default inference engine from server\n";
+        defaultEngine = ""; // Set to empty if retrieval fails
+    }
+
     // Fetch available engine files from Hugging Face
     std::cout << "Fetching engine files from kolosal/engines repository...\n";
     std::vector<std::string> availableEngineFiles = HuggingFaceClient::fetchEngineFiles();
@@ -1209,6 +1233,13 @@ bool KolosalCLI::showInferenceEngines()
 
         // Create display string with server-based status
         std::string displayString = name;
+        
+        // Add default engine indicator
+        if (!defaultEngine.empty() && name == defaultEngine)
+        {
+            displayString += " [DEFAULT]";
+        }
+        
         if (isRegistered)
         {
             displayString += " (REGISTERED: available)";

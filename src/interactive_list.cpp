@@ -245,16 +245,17 @@ size_t InteractiveList::calculateMaxDisplayItems() {
     
     // Calculate reserved lines more precisely:
     // 1. Title (1 line)
-    // 2. Instructions (1 line) 
-    // 3. Search instructions with double newline (2 lines)
-    // 4. Search bar (1 line)
-    // 5. Empty line after search (1 line)
-    // 6. Potential scroll indicator above (1 line max)
-    // 7. Potential scroll indicator below (1 line max)
-    // 8. Empty line before selection info (1 line)
-    // 9. Selection info (1 line)
-    // Total: 10 lines reserved
-    int reservedLines = 10;
+    // 2. Header info (1 line if present)
+    // 3. Instructions (1 line) 
+    // 4. Search instructions with double newline (2 lines)
+    // 5. Search bar (1 line)
+    // 6. Empty line after search (1 line)
+    // 7. Potential scroll indicator above (1 line max)
+    // 8. Potential scroll indicator below (1 line max)
+    // 9. Empty line before selection info (1 line)
+    // 10. Selection info (1 line)
+    // Total: 10-11 lines reserved
+    int reservedLines = headerInfo.empty() ? 10 : 11;
     
     int availableHeight = totalHeight - reservedLines;
     
@@ -289,6 +290,15 @@ void InteractiveList::displayList()
 
     // Display title
     std::cout << "Kolosal CLI - Select Model\n";
+    
+    // Display header info if available
+    if (!headerInfo.empty())
+    {
+        setColor(FOREGROUND_GREEN | FOREGROUND_INTENSITY);
+        std::cout << headerInfo << "\n";
+        resetColor();
+    }
+    
     std::cout << "Use UP/DOWN arrows to navigate, ENTER to select, ESC or Ctrl+C to exit\n";
     std::cout << "Press '/' to search, BACKSPACE to clear search\n\n";
 
@@ -834,6 +844,11 @@ void InteractiveList::updateItems(const std::vector<std::string>& newItems)
     
     // Recalculate display parameters
     maxDisplayItems = calculateMaxDisplayItems();
+}
+
+void InteractiveList::setHeaderInfo(const std::string& info)
+{
+    headerInfo = info;
 }
 
 #ifndef _WIN32

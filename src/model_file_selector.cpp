@@ -13,6 +13,10 @@ ModelFileSelector::~ModelFileSelector() {
 }
 
 ModelFile ModelFileSelector::selectModelFile(const std::string& modelId) {
+    return selectModelFile(modelId, "");
+}
+
+ModelFile ModelFileSelector::selectModelFile(const std::string& modelId, const std::string& headerInfo) {
     std::cout << "Selected model: " << modelId << std::endl;
 
     // Fetch .gguf files for the selected model
@@ -29,7 +33,7 @@ ModelFile ModelFileSelector::selectModelFile(const std::string& modelId) {
     std::cout << "Found " << modelFiles.size() << " .gguf file(s)!\n\n";
 
     // Show model files with real-time async memory updates and cache after completion
-    int fileResult = ModelFileUtils::displayAsyncModelFileList(modelFiles, "Select a .gguf file:");
+    int fileResult = ModelFileUtils::displayAsyncModelFileList(modelFiles, "Select a .gguf file:", headerInfo);
 
     // Cache the files with completed memory information (runs in background)
     std::thread cacheThread([modelId, modelFiles]() mutable {

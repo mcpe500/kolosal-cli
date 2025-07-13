@@ -143,6 +143,15 @@ public:
     static int displayAsyncModelFileList(std::vector<ModelFile>& modelFiles, const std::string& title);
     
     /**
+     * @brief Display model files with real-time async memory updates (with header info)
+     * @param modelFiles Vector of ModelFile objects to display and update
+     * @param title Title to show above the list
+     * @param headerInfo Additional header information to display
+     * @return Index of selected file, or -1 if cancelled
+     */
+    static int displayAsyncModelFileList(std::vector<ModelFile>& modelFiles, const std::string& title, const std::string& headerInfo);
+    
+    /**
      * @brief Ensure model files have async memory calculations running if needed
      * @param modelFiles Vector of ModelFile objects to check and start calculations for
      */

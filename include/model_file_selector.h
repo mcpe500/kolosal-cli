@@ -28,6 +28,14 @@ public:
     ModelFile selectModelFile(const std::string& modelId);
     
     /**
+     * @brief Show file selection menu for a specific model (with header info)
+     * @param modelId The model ID to fetch files for
+     * @param headerInfo Additional header information to display
+     * @return Selected ModelFile, or empty ModelFile if cancelled
+     */
+    ModelFile selectModelFile(const std::string& modelId, const std::string& headerInfo);
+    
+    /**
      * @brief Handle direct GGUF file URL input
      * @param url Direct URL to a GGUF file
      * @return ModelFile object with URL and metadata

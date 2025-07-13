@@ -581,6 +581,11 @@ bool ModelFile::updateDisplayIfReady()
 
 int ModelFileUtils::displayAsyncModelFileList(std::vector<ModelFile>& modelFiles, const std::string& title)
 {
+    return displayAsyncModelFileList(modelFiles, title, "");
+}
+
+int ModelFileUtils::displayAsyncModelFileList(std::vector<ModelFile>& modelFiles, const std::string& title, const std::string& headerInfo)
+{
     if (modelFiles.empty()) {
         std::cout << "No model files available." << std::endl;
         return -1;
@@ -625,6 +630,12 @@ int ModelFileUtils::displayAsyncModelFileList(std::vector<ModelFile>& modelFiles
     
     // Create interactive list
     InteractiveList list(displayItems);
+    
+    // Set header info if provided
+    if (!headerInfo.empty())
+    {
+        list.setHeaderInfo(headerInfo);
+    }
     
     // Run with periodic updates
     int result = list.runWithUpdates([&]() -> bool {

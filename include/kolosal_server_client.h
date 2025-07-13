@@ -94,6 +94,13 @@ public:
     bool addInferenceEngine(const std::string& name, const std::string& libraryPath, bool loadOnStartup = true);
     
     /**
+     * @brief Get the current default inference engine from the server
+     * @param defaultEngine Output: name of the default inference engine
+     * @return True if default engine was retrieved successfully, false otherwise
+     */
+    bool getDefaultInferenceEngine(std::string& defaultEngine);
+    
+    /**
      * @brief Set the default inference engine on the server
      * @param engineName Name of the engine to set as default
      * @return True if default engine was set successfully, false otherwise

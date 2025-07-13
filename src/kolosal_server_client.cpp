@@ -1355,4 +1355,36 @@ bool KolosalServerClient::setDefaultInferenceEngine(const std::string& engineNam
     }
 }
 
+bool KolosalServerClient::getDefaultInferenceEngine(std::string& defaultEngine)
+{
+    std::string response;
+    
+    // Try both /v1/engines and /engines endpoints
+    if (!makeGetRequest("/v1/engines", response))
+    {
+        if (!makeGetRequest("/engines", response))
+        {
+            return false;
+        }
+    }
+
+    try
+    {
+        json enginesJson = json::parse(response);
+        
+        // Extract the default engine from the response
+        if (enginesJson.contains("default_engine"))
+        {
+            defaultEngine = enginesJson["default_engine"].get<std::string>();
+            return true;
+        }
+        
+        return false;
+    }
+    catch (const std::exception&)
+    {
+        return false;
+    }
+}
+
 
