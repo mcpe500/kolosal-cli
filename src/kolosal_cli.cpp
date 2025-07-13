@@ -786,7 +786,7 @@ int KolosalCLI::run(const std::string &repoId)
                             if (model["id"] && model["id"].as<std::string>() == modelId)
                             {
                                 std::string modelPath = model["path"].as<std::string>();
-                                
+
                                 std::cout << "Re-adding model from: " << modelPath << std::endl;
 
                                 // Attempt to re-add the model
@@ -1236,7 +1236,7 @@ bool KolosalCLI::showInferenceEngines()
         // Add default engine indicator
         if (!defaultEngine.empty() && name == defaultEngine)
         {
-            displayString += " [DEFAULT]";
+            displayString += " (SELECTED: selected)";
         }
         
         if (isRegistered)
