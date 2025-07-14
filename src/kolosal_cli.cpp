@@ -1238,8 +1238,7 @@ bool KolosalCLI::showInferenceEngines()
         {
             displayString += " (SELECTED: selected)";
         }
-        
-        if (isRegistered)
+        else if (isRegistered)
         {
             displayString += " (REGISTERED: available)";
         }
