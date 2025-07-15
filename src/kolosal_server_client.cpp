@@ -382,6 +382,7 @@ bool KolosalServerClient::startServer(const std::string &serverPath, int port)
         freopen(logPath.c_str(), "w", stdout);
         freopen(logPath.c_str(), "w", stderr);
         
+        // Execute with config parameter if available
         execl(actualServerPath.c_str(), "kolosal-server", nullptr);
         
         // If execl fails, log the error and exit child process

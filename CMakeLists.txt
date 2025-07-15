@@ -270,16 +270,8 @@ else()
     )
 endif()
 
-# Copy config.yaml to output directory for all platforms
-if(WIN32)
-    add_custom_command(TARGET kolosal POST_BUILD
-        COMMAND ${CMAKE_COMMAND} -E make_directory "${CMAKE_BINARY_DIR}/bin/$<CONFIG>"
-        COMMAND ${CMAKE_COMMAND} -E copy_if_different
-        "${CMAKE_CURRENT_SOURCE_DIR}/config.yaml"
-        "${CMAKE_BINARY_DIR}/bin/$<CONFIG>/config.yaml"
-        COMMENT "Copying config.yaml to output directory"
-    )
-else()
+# Copy config.yaml to output directory for Linux only (Windows uses NSIS installer)
+if(UNIX)
     add_custom_command(TARGET kolosal POST_BUILD
         COMMAND ${CMAKE_COMMAND} -E make_directory "${CMAKE_BINARY_DIR}/bin"
         COMMAND ${CMAKE_COMMAND} -E copy_if_different
@@ -315,6 +307,24 @@ if(WIN32)
         )
     endif()
     
+    # Install additional inference engine DLLs if they exist (regardless of build config)
+    set(INFERENCE_DLL_CANDIDATES
+        "${CMAKE_BINARY_DIR}/bin/$<CONFIG>/llama-vulkan.dll"
+        "${CMAKE_BINARY_DIR}/bin/$<CONFIG>/llama-cuda.dll"
+        "${CMAKE_BINARY_DIR}/bin/$<CONFIG>/llama-cpu.dll"
+        "${CMAKE_BINARY_DIR}/kolosal-server/$<CONFIG>/llama-vulkan.dll"
+        "${CMAKE_BINARY_DIR}/kolosal-server/$<CONFIG>/llama-cuda.dll"
+        "${CMAKE_BINARY_DIR}/kolosal-server/$<CONFIG>/llama-cpu.dll"
+    )
+    
+    foreach(INFERENCE_DLL_PATH ${INFERENCE_DLL_CANDIDATES})
+        install(FILES "${INFERENCE_DLL_PATH}"
+            DESTINATION bin
+            COMPONENT Runtime
+            OPTIONAL
+        )
+    endforeach()
+    
     # Install CURL DLL if it exists
     if(EXISTS "${CURL_DIR}/bin/libcurl.dll")
         install(FILES "${CURL_DIR}/bin/libcurl.dll"
@@ -340,6 +350,38 @@ if(WIN32)
             COMPONENT Runtime
         )
     endif()
+    
+    # Install additional inference engine DLLs if they exist (fallback approach)
+    install(CODE "
+        # Define build output directories where inference DLLs might be found
+        set(INFERENCE_OUTPUT_DIRS
+            \"${CMAKE_BINARY_DIR}/bin/Debug\"
+            \"${CMAKE_BINARY_DIR}/bin/Release\"
+            \"${CMAKE_BINARY_DIR}/kolosal-server/Debug\"
+            \"${CMAKE_BINARY_DIR}/kolosal-server/Release\"
+            \"${CMAKE_BINARY_DIR}/kolosal-server/inference/Debug\"
+            \"${CMAKE_BINARY_DIR}/kolosal-server/inference/Release\"
+        )
+        
+        # Inference engine DLLs that might be available
+        set(INFERENCE_DLLS
+            \"llama-vulkan.dll\"
+            \"llama-cuda.dll\"
+            \"llama-cpu.dll\"
+        )
+        
+        # Copy inference DLLs if found
+        foreach(dll_name \${INFERENCE_DLLS})
+            foreach(search_dir \${INFERENCE_OUTPUT_DIRS})
+                set(dll_path \"\${search_dir}/\${dll_name}\")
+                if(EXISTS \"\${dll_path}\")
+                    file(INSTALL \"\${dll_path}\" DESTINATION \"\${CMAKE_INSTALL_PREFIX}/bin\")
+                    message(STATUS \"Installed inference engine: \${dll_name}\")
+                    break()
+                endif()
+            endforeach()
+        endforeach()
+    ")
     
     # Install CURL DLL with multiple fallback paths
     set(CURL_DLL_CANDIDATES
@@ -417,7 +459,7 @@ if(WIN32)
         endif()
     ")
     
-    # Install configuration file to the root directory
+    # Install configuration file to the installation directory only (NSIS handles user config)
     install(FILES config.yaml
         DESTINATION .
         COMPONENT Runtime
@@ -443,7 +485,6 @@ if(WIN32)
         FILES_MATCHING 
         PATTERN "*.dll"
         PATTERN "*.exe"
-        PATTERN "config.yaml"
         PERMISSIONS OWNER_READ OWNER_WRITE OWNER_EXECUTE GROUP_READ GROUP_EXECUTE WORLD_READ WORLD_EXECUTE
     )
     
@@ -470,6 +511,27 @@ elseif(UNIX)
             ARCHIVE DESTINATION lib
         )
     endif()
+    
+    # Install additional inference engine shared libraries if they exist (regardless of build config)
+    set(INFERENCE_SO_CANDIDATES
+        "${CMAKE_BINARY_DIR}/lib/libllama-vulkan.so"
+        "${CMAKE_BINARY_DIR}/lib/libllama-cuda.so"
+        "${CMAKE_BINARY_DIR}/lib/libllama-cpu.so"
+        "${CMAKE_BINARY_DIR}/bin/libllama-vulkan.so"
+        "${CMAKE_BINARY_DIR}/bin/libllama-cuda.so"
+        "${CMAKE_BINARY_DIR}/bin/libllama-cpu.so"
+        "${CMAKE_BINARY_DIR}/kolosal-server/lib/libllama-vulkan.so"
+        "${CMAKE_BINARY_DIR}/kolosal-server/lib/libllama-cuda.so"
+        "${CMAKE_BINARY_DIR}/kolosal-server/lib/libllama-cpu.so"
+    )
+    
+    foreach(INFERENCE_SO_PATH ${INFERENCE_SO_CANDIDATES})
+        install(FILES "${INFERENCE_SO_PATH}"
+            DESTINATION lib
+            PERMISSIONS OWNER_READ OWNER_WRITE OWNER_EXECUTE GROUP_READ GROUP_EXECUTE WORLD_READ WORLD_EXECUTE
+            OPTIONAL
+        )
+    endforeach()
     
     # Install configuration file to etc/kolosal directory
     install(FILES config.yaml
@@ -586,6 +648,29 @@ if(WIN32)
         WriteRegStr HKCU \\\"SOFTWARE\\\\Microsoft\\\\Windows\\\\CurrentVersion\\\\App Paths\\\\kolosal.exe\\\" \\\"\\\" \\\"\$INSTDIR\\\\bin\\\\kolosal.exe\\\"
         WriteRegStr HKCU \\\"SOFTWARE\\\\Microsoft\\\\Windows\\\\CurrentVersion\\\\App Paths\\\\kolosal.exe\\\" \\\"Path\\\" \\\"\$INSTDIR\\\\bin\\\"
         
+        ; Create user config directory and copy config.yaml for writable access
+        DetailPrint \\\"Setting up user configuration directory...\\\"
+        
+        ; Get the user's AppData\\\\Roaming directory explicitly
+        ReadEnvStr \$3 \\\"USERPROFILE\\\"
+        StrCpy \$4 \\\"\$3\\\\AppData\\\\Roaming\\\\Kolosal\\\"
+        
+        ; Create the directory
+        CreateDirectory \\\"\$4\\\"
+        
+        ; Check if config already exists
+        IfFileExists \\\"\$4\\\\config.yaml\\\" config_exists 0
+        
+        ; Copy config file to user directory
+        CopyFiles \\\"\$INSTDIR\\\\config.yaml\\\" \\\"\$4\\\\config.yaml\\\"
+        DetailPrint \\\"Configuration file copied to \$4\\\\config.yaml\\\"
+        Goto config_done
+        
+        config_exists:
+        DetailPrint \\\"User configuration already exists at \$4\\\\config.yaml, preserving existing settings\\\"
+        
+        config_done:
+        
         ; Broadcast environment change to notify all applications
         SendMessage \\\${HWND_BROADCAST} \\\${WM_WININICHANGE} 0 \\\"STR:Environment\\\" /TIMEOUT=5000
     ")
@@ -631,7 +716,7 @@ This installer includes:
 - Kolosal CLI executable (kolosal.exe)
 - Kolosal Server executable (kolosal-server.exe)
 - Kolosal Server library (kolosal_server.dll)
-- Inference Engine library (${INFERENCE_TARGET_NAME}.dll)
+- Inference Engine libraries (llama-vulkan.dll, llama-cuda.dll, llama-cpu.dll as available)
 - Required dependencies (libcurl.dll, etc.)
 - Configuration file (config.yaml)
 
@@ -639,6 +724,8 @@ The installation will:
 - Install to your user profile directory
 - Add the bin directory to your user PATH
 - Create App Paths registry entries for easier access
+- Copy config.yaml to %USERPROFILE%\\\\AppData\\\\Roaming\\\\Kolosal\\\\ for writable access
+- Configure the server to use the writable config file
 ")
     
     # Architecture detection for Windows
@@ -653,56 +740,26 @@ else()
     set(CPACK_DEBIAN_PACKAGE_SECTION "devel")
     set(CPACK_DEBIAN_PACKAGE_PRIORITY "optional")
     
-    # More comprehensive dependencies for better compatibility
-    set(CPACK_DEBIAN_PACKAGE_DEPENDS "libc6 (>= 2.17), libgcc-s1 (>= 3.0), libstdc++6 (>= 9)")
-    
-    # Add SSL/TLS support dependencies
-    if(OpenSSL_FOUND)
-        set(CPACK_DEBIAN_PACKAGE_DEPENDS "${CPACK_DEBIAN_PACKAGE_DEPENDS}, libssl3 (>= 3.0.0) | libssl1.1 (>= 1.1.0)")
-    else()
-        # Add basic SSL support even if not found during build
-        set(CPACK_DEBIAN_PACKAGE_DEPENDS "${CPACK_DEBIAN_PACKAGE_DEPENDS}, libssl3 | libssl1.1")
-    endif()
-    
-    # Add CURL dependencies
-    if(CURL_FOUND)
-        set(CPACK_DEBIAN_PACKAGE_DEPENDS "${CPACK_DEBIAN_PACKAGE_DEPENDS}, libcurl4 (>= 7.16.2)")
-    else()
-        # Add basic CURL support even if not found during build
-        set(CPACK_DEBIAN_PACKAGE_DEPENDS "${CPACK_DEBIAN_PACKAGE_DEPENDS}, libcurl4")
-    endif()
-    
-    # Add compression support
-    if(ZLIB_FOUND)
-        set(CPACK_DEBIAN_PACKAGE_DEPENDS "${CPACK_DEBIAN_PACKAGE_DEPENDS}, zlib1g (>= 1:1.1.4)")
-    else()
-        # Add basic zlib support even if not found during build
-        set(CPACK_DEBIAN_PACKAGE_DEPENDS "${CPACK_DEBIAN_PACKAGE_DEPENDS}, zlib1g")
-    endif()
-    
-    # Add threading support - use libpthread0 which is more universally available
-    set(CPACK_DEBIAN_PACKAGE_DEPENDS "${CPACK_DEBIAN_PACKAGE_DEPENDS}, libpthread0 | libc6")
-    
-    # Initialize suggests packages list
-    set(DEBIAN_SUGGESTS_LIST "")
+    # Essential runtime dependencies based on ldd output
+    set(CPACK_DEBIAN_PACKAGE_DEPENDS "libc6 (>= 2.17), libgcc-s1, libstdc++6, libcurl4, libgomp1, libssl3 | libssl1.1, zlib1g")
     
     # Add acceleration-specific dependencies
     if(USE_CUDA)
         set(CPACK_DEBIAN_PACKAGE_DEPENDS "${CPACK_DEBIAN_PACKAGE_DEPENDS}, nvidia-cuda-runtime | cuda-runtime")
-        set(DEBIAN_SUGGESTS_LIST "nvidia-cuda-dev")
+        set(DEBIAN_SUGGESTS_LIST "libvulkan1")
     elseif(USE_VULKAN)
         set(CPACK_DEBIAN_PACKAGE_DEPENDS "${CPACK_DEBIAN_PACKAGE_DEPENDS}, libvulkan1")
-        set(DEBIAN_SUGGESTS_LIST "vulkan-tools, vulkan-validationlayers")
+        set(DEBIAN_SUGGESTS_LIST "")
+    else()
+        # Always suggest vulkan runtime since we include vulkan inference engine by default
+        set(DEBIAN_SUGGESTS_LIST "libvulkan1")
     endif()
-    
-    # Add optional but recommended packages
-    set(CPACK_DEBIAN_PACKAGE_RECOMMENDS "ca-certificates")
     
     # Build suggests list properly
     if(DEBIAN_SUGGESTS_LIST)
-        set(CPACK_DEBIAN_PACKAGE_SUGGESTS "${DEBIAN_SUGGESTS_LIST}, systemd")
+        set(CPACK_DEBIAN_PACKAGE_SUGGESTS "${DEBIAN_SUGGESTS_LIST}")
     else()
-        set(CPACK_DEBIAN_PACKAGE_SUGGESTS "systemd")
+        set(CPACK_DEBIAN_PACKAGE_SUGGESTS "")
     endif()
     
     set(CPACK_DEBIAN_FILE_NAME DEB-DEFAULT)
@@ -787,6 +844,15 @@ INFERENCE_LIB=\"/usr/lib/lib@INFERENCE_TARGET_NAME@.so\"
 if [ -f \"\$INFERENCE_LIB\" ] && [ ! -e \"/usr/lib/x86_64-linux-gnu/lib@INFERENCE_TARGET_NAME@.so\" ]; then
     ln -sf \"\$INFERENCE_LIB\" \"/usr/lib/x86_64-linux-gnu/lib@INFERENCE_TARGET_NAME@.so\" 2>/dev/null || true
 fi
+
+# Handle additional inference engine libraries that may exist
+for inference_engine in llama-vulkan llama-cuda llama-cpu; do
+    INFERENCE_LIB_PATH=\"/usr/lib/lib\$inference_engine.so\"
+    if [ -f \"\$INFERENCE_LIB_PATH\" ] && [ ! -e \"/usr/lib/x86_64-linux-gnu/lib\$inference_engine.so\" ]; then
+        ln -sf \"\$INFERENCE_LIB_PATH\" \"/usr/lib/x86_64-linux-gnu/lib\$inference_engine.so\" 2>/dev/null || true
+        echo \"Created symlink for \$inference_engine\"
+    fi
+done
 
 # Create kolosal user and group if they don't exist (for systemd service)
 if ! id \"kolosal\" >/dev/null 2>&1; then
@@ -883,6 +949,11 @@ fi
 rm -f /usr/lib/x86_64-linux-gnu/libkolosal_server.so 2>/dev/null || true
 rm -f \"/usr/lib/x86_64-linux-gnu/lib@INFERENCE_TARGET_NAME@.so\" 2>/dev/null || true
 
+# Remove additional inference engine symlinks
+for inference_engine in llama-vulkan llama-cuda llama-cpu; do
+    rm -f \"/usr/lib/x86_64-linux-gnu/lib\$inference_engine.so\" 2>/dev/null || true
+done
+
 echo \"Kolosal CLI has been removed.\"
 echo \"User data in /var/lib/kolosal has been preserved.\"
 echo \"To completely remove all data: sudo rm -rf /var/lib/kolosal /etc/kolosal && sudo userdel kolosal\"
@@ -917,40 +988,23 @@ exit 0
     set(CPACK_RPM_PACKAGE_VENDOR "Kolosal Project")
     set(CPACK_RPM_PACKAGE_DESCRIPTION "${CPACK_PACKAGE_DESCRIPTION}")
     
-    # Base RPM dependencies
-    set(CPACK_RPM_PACKAGE_REQUIRES "glibc >= 2.17, libgcc, libstdc++")
-    
-    # Add SSL/TLS support
-    if(OpenSSL_FOUND)
-        set(CPACK_RPM_PACKAGE_REQUIRES "${CPACK_RPM_PACKAGE_REQUIRES}, openssl-libs")
-    endif()
-    
-    # Add CURL support
-    if(CURL_FOUND)
-        set(CPACK_RPM_PACKAGE_REQUIRES "${CPACK_RPM_PACKAGE_REQUIRES}, libcurl")
-    endif()
-    
-    # Add compression support
-    if(ZLIB_FOUND)
-        set(CPACK_RPM_PACKAGE_REQUIRES "${CPACK_RPM_PACKAGE_REQUIRES}, zlib")
-    endif()
-    
-    # Initialize RPM suggests list
-    set(RPM_SUGGESTS_LIST "")
+    # Essential runtime dependencies based on ldd output
+    set(CPACK_RPM_PACKAGE_REQUIRES "glibc >= 2.17, libgcc, libstdc++, libcurl, libgomp, openssl-libs, zlib")
     
     # Add acceleration-specific dependencies
     if(USE_CUDA)
         set(CPACK_RPM_PACKAGE_REQUIRES "${CPACK_RPM_PACKAGE_REQUIRES}, cuda-runtime")
-        set(RPM_SUGGESTS_LIST "cuda-devel")
+        set(RPM_SUGGESTS_LIST "vulkan-loader")
     elseif(USE_VULKAN)
         set(CPACK_RPM_PACKAGE_REQUIRES "${CPACK_RPM_PACKAGE_REQUIRES}, vulkan-loader")
-        set(RPM_SUGGESTS_LIST "vulkan-tools, vulkan-validation-layers")
+        set(RPM_SUGGESTS_LIST "")
+    else()
+        # Always suggest vulkan runtime since we include vulkan inference engine by default
+        set(RPM_SUGGESTS_LIST "vulkan-loader")
     endif()
     
-    # Set RPM suggests only if there are acceleration-specific suggestions
-    if(RPM_SUGGESTS_LIST)
-        set(CPACK_RPM_PACKAGE_SUGGESTS "${RPM_SUGGESTS_LIST}")
-    endif()
+    # Set RPM suggests (always include since we package all available inference engines)
+    set(CPACK_RPM_PACKAGE_SUGGESTS "${RPM_SUGGESTS_LIST}")
     
     # RPM post-install and pre-uninstall scripts
     set(CPACK_RPM_POST_INSTALL_SCRIPT_FILE "${POSTINST_SCRIPT}")

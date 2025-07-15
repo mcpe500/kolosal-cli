@@ -89,21 +89,21 @@ features:
 inference_engines:
   # CPU inference engine (default)
   - name: "llama-cpu"
-    library_path: "./llama-cpu.dll"    # Windows: .dll, Linux: ./libllama-cpu.so
+    library_path: "./libllama-cpu.so"    # Windows: .dll, Linux: ./libllama-cpu.so
     version: "1.0.0"
     description: "CPU-based inference engine for GGUF models"
     load_on_startup: true              # Load automatically at server start
   
   # CUDA inference engine (if available)
   # - name: "llama-cuda"
-  #   library_path: "./llama-cuda.dll"  # Windows: .dll, Linux: ./libllama-cuda.so
+  #   library_path: "./libllama-cuda.so"  # Windows: .dll, Linux: ./libllama-cuda.so
   #   version: "1.0.0"
   #   description: "CUDA GPU acceleration engine for GGUF models"
   #   load_on_startup: false           # Load on-demand
   
   # Vulkan inference engine (if available)  
   - name: "llama-vulkan"
-    library_path: "./llama-vulkan.dll" # Windows: .dll, Linux: ./libllama-vulkan.so
+    library_path: "./libllama-vulkan.so" # Windows: .dll, Linux: ./libllama-vulkan.so
     version: "1.0.0"
     description: "Vulkan GPU acceleration engine for GGUF models"
     load_on_startup: false           # Load on-demand
