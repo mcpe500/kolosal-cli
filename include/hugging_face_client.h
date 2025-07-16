@@ -31,7 +31,10 @@ public:
     
     /**
      * @brief Fetch available engine files from kolosal/engines repository
-     * @return Vector of engine file names available for download
+     * Filters results based on the current platform:
+     * - Windows: Returns only .dll files
+     * - Linux/Unix: Returns only .so files
+     * @return Vector of platform-specific engine file names available for download
      */
     static std::vector<std::string> fetchEngineFiles();
 
