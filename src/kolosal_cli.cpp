@@ -1172,18 +1172,8 @@ bool KolosalCLI::showInferenceEngines()
     // Process engines from Hugging Face with smart status detection
     for (const std::string &filename : availableEngineFiles)
     {
-        // Extract engine name from filename (remove extension and path)
-        std::string engineName = filename;
-        size_t lastSlash = engineName.find_last_of('/');
-        if (lastSlash != std::string::npos)
-        {
-            engineName = engineName.substr(lastSlash + 1);
-        }
-        size_t lastDot = engineName.find_last_of('.');
-        if (lastDot != std::string::npos)
-        {
-            engineName = engineName.substr(0, lastDot);
-        }
+        // Extract normalized engine name for cross-platform compatibility
+        std::string engineName = normalizeEngineName(filename);
 
         // Check if engine is available on server (registered and potentially loaded)
         bool isRegistered = (serverEngineMap.find(engineName) != serverEngineMap.end());
@@ -1498,4 +1488,35 @@ bool KolosalCLI::downloadEngineFile(const std::string& engineName, const std::st
     }
     
     return true;
+}
+
+std::string KolosalCLI::normalizeEngineName(const std::string& filename)
+{
+    // Extract engine name from filename (remove extension and path)
+    // This ensures cross-platform compatibility for engine names
+    // Examples:
+    // - Windows: "llama-cpu.dll" -> "llama-cpu"
+    // - Linux: "libllama-cpu.so" -> "llama-cpu" (removes both lib prefix and .so extension)
+    std::string engineName = filename;
+    size_t lastSlash = engineName.find_last_of('/');
+    if (lastSlash != std::string::npos)
+    {
+        engineName = engineName.substr(lastSlash + 1);
+    }
+    size_t lastDot = engineName.find_last_of('.');
+    if (lastDot != std::string::npos)
+    {
+        engineName = engineName.substr(0, lastDot);
+    }
+
+    // Normalize engine name for cross-platform compatibility
+    // On Linux, remove 'lib' prefix to match Windows naming convention
+#ifndef _WIN32
+    if (engineName.find("lib") == 0 && engineName.length() > 3)
+    {
+        engineName = engineName.substr(3); // Remove "lib" prefix
+    }
+#endif
+
+    return engineName;
 }

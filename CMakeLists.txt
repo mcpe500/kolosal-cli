@@ -270,14 +270,14 @@ else()
     )
 endif()
 
-# Copy config.yaml to output directory for Linux only (Windows uses NSIS installer)
+# Copy platform-specific config to output directory (Linux uses config.linux.yaml, Windows uses NSIS installer)
 if(UNIX)
     add_custom_command(TARGET kolosal POST_BUILD
         COMMAND ${CMAKE_COMMAND} -E make_directory "${CMAKE_BINARY_DIR}/bin"
         COMMAND ${CMAKE_COMMAND} -E copy_if_different
-        "${CMAKE_CURRENT_SOURCE_DIR}/config.yaml"
+        "${CMAKE_CURRENT_SOURCE_DIR}/config.linux.yaml"
         "${CMAKE_BINARY_DIR}/bin/config.yaml"
-        COMMENT "Copying config.yaml to output directory"
+        COMMENT "Copying config.linux.yaml to output directory as config.yaml"
     )
 endif()
 
@@ -533,14 +533,15 @@ elseif(UNIX)
         )
     endforeach()
     
-    # Install configuration file to etc/kolosal directory
-    install(FILES config.yaml
-        DESTINATION etc/kolosal
+    # Install configuration file to etc/kolosal directory (use config.linux.yaml directly for reliable packaging)
+    install(FILES "${CMAKE_CURRENT_SOURCE_DIR}/config.linux.yaml"
+        DESTINATION /etc/kolosal
+        RENAME config.yaml
         PERMISSIONS OWNER_READ OWNER_WRITE GROUP_READ WORLD_READ
     )
     
     # Create the kolosal configuration directory during install
-    install(DIRECTORY DESTINATION etc/kolosal
+    install(DIRECTORY DESTINATION /etc/kolosal
         DIRECTORY_PERMISSIONS OWNER_READ OWNER_WRITE OWNER_EXECUTE GROUP_READ GROUP_EXECUTE WORLD_READ WORLD_EXECUTE
     )
     
@@ -680,7 +681,7 @@ if(WIN32)
         StrCmp \\\$DO_NOT_ADD_TO_PATH \\\"1\\\" skip_custom_unpath
         
         DetailPrint \\\"Removing \$INSTDIR\\\\bin from user PATH using PowerShell...\\\"
-        nsExec::ExecToLog 'powershell.exe -ExecutionPolicy Bypass -Command \\\"\$currentPath = [Environment]::GetEnvironmentVariable('PATH', 'User'); if (\$currentPath) { \$pathEntries = \$currentPath -split ';' | Where-Object { \$_.Trim() -ne '\$INSTDIR\\\\bin' -and \$_.Trim() -ne '' }; \$newPath = \$pathEntries -join ';'; [Environment]::SetEnvironmentVariable('PATH', \$newPath, 'User') }\\\"'
+        nsExec::ExecToLog 'powershell.exe -ExecutionPolicy Bypass -Command \\\"\$currentPath = [Environment]::GetEnvironmentVariable('PATH', 'User'); if (\$currentPath) { \$pathEntries = \$currentPath -split ';' | Where-Object { \$_.Trim() -ne '\$INSTDIR\\\\bin' -and \$_.Trim() -ne '' }; \$newPath = \$pathEntries -join ';'; [Environment]::SetEnvironmentVariable('PATH', \$newPath, 'User'); }\\\"'
         Pop \$0
         
         skip_custom_unpath:
@@ -781,52 +782,13 @@ if [ ! -d /etc/kolosal ]; then
     chmod 755 /etc/kolosal
 fi
 
-# Ensure config file has proper permissions (if it was installed)
+# Ensure config file has proper permissions
 if [ -f /etc/kolosal/config.yaml ]; then
     chmod 644 /etc/kolosal/config.yaml
+    echo "Configuration file found at /etc/kolosal/config.yaml"
 else
-    # If config file is missing, create a default one
-    cat > /etc/kolosal/config.yaml << 'EOF'
-server:
-  port: \"8080\"
-  host: \"0.0.0.0\"
-  allow_public_access: false
-  allow_internet_access: false
-  idle_timeout: 300
-
-logging:
-  level: \"INFO\"
-  file: \"\"
-  access_log: false
-  quiet_mode: false
-  show_request_details: true
-
-auth:
-  enabled: true
-  require_api_key: false
-  api_key_header: \"X-API-Key\"
-  api_keys: []
-  
-  rate_limit:
-    enabled: true
-    max_requests: 100
-    window_size: 60
-    
-  cors:
-    enabled: true
-    allow_credentials: false
-    max_age: 86400
-    allowed_origins: [\"*\"]
-    allowed_methods: [\"GET\", \"POST\", \"OPTIONS\"]
-    allowed_headers: [\"Content-Type\", \"Authorization\", \"X-API-Key\"]
-
-models: []
-
-features:
-  health_check: true
-  metrics: false
-EOF
-    chmod 644 /etc/kolosal/config.yaml
+    echo "Warning: Configuration file not found at /etc/kolosal/config.yaml"
+    echo "This may indicate an installation issue."
 fi
 
 # Update library cache to include the new shared libraries

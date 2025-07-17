@@ -64,6 +64,18 @@ public:
      */
     std::string getExecutableDirectory();
 
+    /**
+     * @brief Normalize engine name for cross-platform compatibility
+     * @param filename The original filename from Hugging Face repository
+     * @return Normalized engine name (removes lib prefix on Linux, removes extension and path)
+     * 
+     * Examples:
+     * - Windows: "llama-cpu.dll" → "llama-cpu"
+     * - Linux: "libllama-cpu.so" → "llama-cpu"
+     * - Both: "path/to/libllama-vulkan.so" → "llama-vulkan" (on Linux)
+     */
+    static std::string normalizeEngineName(const std::string& filename);
+
 private:
     /**
      * @brief Parse Hugging Face repository URL or ID to extract model ID
