@@ -249,7 +249,7 @@ elseif(APPLE)
         # Apple Silicon (M1/M2/M3+) optimizations
         target_compile_definitions(kolosal PRIVATE __ARM64__)
         if(ENABLE_NATIVE_OPTIMIZATION)
-            target_compile_options(kolosal PRIVATE -march=armv8.4-a -mtune=native -fvectorize -ffp-model=fast)
+            target_compile_options(kolosal PRIVATE -mcpu=apple-m1 -O3)
         endif()
     else()
         # Intel Mac optimizations
