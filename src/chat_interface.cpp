@@ -162,6 +162,12 @@ bool ChatInterface::startChatInterface(const std::string& engineId) {
         int terminalWidth = 80; // Default width, will be updated
         int terminalHeight = 24; // Default height, will be updated
         
+        // Check if we're on macOS and disable complex ANSI sequences
+        bool useSimpleMode = false;
+#ifdef __APPLE__
+        useSimpleMode = true;  // Use simplified output for macOS
+#endif
+
 #ifdef _WIN32
         // Get actual terminal dimensions on Windows
         CONSOLE_SCREEN_BUFFER_INFO csbi;
@@ -171,7 +177,7 @@ bool ChatInterface::startChatInterface(const std::string& engineId) {
             terminalHeight = csbi.srWindow.Bottom - csbi.srWindow.Top + 1;
         }
 #else
-        // Get actual terminal dimensions on Linux
+        // Get actual terminal dimensions on Linux/macOS
         struct winsize w;
         if (ioctl(STDOUT_FILENO, TIOCGWINSZ, &w) == 0) {
             terminalWidth = w.ws_col;
@@ -193,21 +199,23 @@ bool ChatInterface::startChatInterface(const std::string& engineId) {
                     std::cout.flush();
                     fullResponse += chunk;
                     
-                    // Update cursor position tracking for the first chunk
-                    for (char c : chunk) {
-                        if (c == '\n') {
-                            currentColumn = 0;
-                        } else if (c >= 32 && c <= 126) { // Printable characters
-                            currentColumn++;
-                            if (currentColumn >= terminalWidth) {
-                                currentColumn = 0; // Wrapped to new line
+                    if (!useSimpleMode) {
+                        // Update cursor position tracking for the first chunk (only if not in simple mode)
+                        for (char c : chunk) {
+                            if (c == '\n') {
+                                currentColumn = 0;
+                            } else if (c >= 32 && c <= 126) { // Printable characters
+                                currentColumn++;
+                                if (currentColumn >= terminalWidth) {
+                                    currentColumn = 0; // Wrapped to new line
+                                }
                             }
                         }
+                        
+                        // Update line state
+                        bool containsNewline = chunk.find('\n') != std::string::npos;
+                        lastWasNewline = containsNewline;
                     }
-                    
-                    // Update line state
-                    bool containsNewline = chunk.find('\n') != std::string::npos;
-                    lastWasNewline = containsNewline;
                     
                     // Return early since we've already processed this chunk
                     return;
@@ -222,71 +230,80 @@ bool ChatInterface::startChatInterface(const std::string& engineId) {
                     ttft = timeToFirstToken;
                 }
                 
-                // Check if we need to clear previous metrics due to newline
-                bool containsNewline = chunk.find('\n') != std::string::npos;
-                if (containsNewline && metricsShown) {
-                    // Clear the metrics line before printing the chunk
-                    std::cout << "\033[s";  // Save cursor position
-                    std::cout << "\033[B\033[1G\033[2K"; // Move down, go to column 1, clear entire line
-                    std::cout << "\033[u";  // Restore cursor position
-                    metricsShown = false;
-                }
-                
-                // Calculate if this chunk will cause line wrapping
-                bool willWrap = false;
-                int chunkVisibleLength = 0;
-                for (char c : chunk) {
-                    if (c == '\n') {
-                        currentColumn = 0;
-                    } else if (c >= 32 && c <= 126) { // Printable characters
-                        chunkVisibleLength++;
-                        if (currentColumn + chunkVisibleLength >= terminalWidth) {
-                            willWrap = true;
-                            break;
-                        }
-                    }
-                }
-                
-                // Clear metrics if line wrapping will occur
-                if (willWrap && metricsShown) {
-                    std::cout << "\033[s";  // Save cursor position
-                    std::cout << "\033[B\033[1G\033[2K"; // Move down, go to column 1, clear entire line
-                    std::cout << "\033[u";  // Restore cursor position
-                    metricsShown = false;
-                }
-                
-                std::cout << chunk;
-                std::cout.flush();
-                fullResponse += chunk;
-                
-                // Update cursor position tracking
-                for (char c : chunk) {
-                    if (c == '\n') {
-                        currentColumn = 0;
-                    } else if (c >= 32 && c <= 126) { // Printable characters
-                        currentColumn++;
-                        if (currentColumn >= terminalWidth) {
-                            currentColumn = 0; // Wrapped to new line
-                        }
-                    }
-                }
-                
-                // Update line state and clear metrics if newline was processed
-                if (containsNewline || willWrap) {
-                    lastWasNewline = true;
-                    // Clear metrics again after printing the chunk to ensure they're gone
-                    if (metricsShown) {
+                if (useSimpleMode) {
+                    // Simple mode for macOS - just output the chunk without complex ANSI sequences
+                    std::cout << chunk;
+                    std::cout.flush();
+                    fullResponse += chunk;
+                } else {
+                    // Complex mode for Windows/Linux with metrics and cursor management
+                    // Check if we need to clear previous metrics due to newline
+                    bool containsNewline = chunk.find('\n') != std::string::npos;
+                    if (containsNewline && metricsShown) {
+                        // Clear the metrics line before printing the chunk
                         std::cout << "\033[s";  // Save cursor position
                         std::cout << "\033[B\033[1G\033[2K"; // Move down, go to column 1, clear entire line
                         std::cout << "\033[u";  // Restore cursor position
                         metricsShown = false;
                     }
-                } else {
-                    lastWasNewline = false;
+                    
+                    // Calculate if this chunk will cause line wrapping
+                    bool willWrap = false;
+                    int chunkVisibleLength = 0;
+                    for (char c : chunk) {
+                        if (c == '\n') {
+                            currentColumn = 0;
+                        } else if (c >= 32 && c <= 126) { // Printable characters
+                            chunkVisibleLength++;
+                            if (currentColumn + chunkVisibleLength >= terminalWidth) {
+                                willWrap = true;
+                                break;
+                            }
+                        }
+                    }
+                    
+                    // Clear metrics if line wrapping will occur
+                    if (willWrap && metricsShown) {
+                        std::cout << "\033[s";  // Save cursor position
+                        std::cout << "\033[B\033[1G\033[2K"; // Move down, go to column 1, clear entire line
+                        std::cout << "\033[u";  // Restore cursor position
+                        metricsShown = false;
+                    }
+                    
+                    std::cout << chunk;
+                    std::cout.flush();
+                    fullResponse += chunk;
+                    
+                    // Update cursor position tracking
+                    for (char c : chunk) {
+                        if (c == '\n') {
+                            currentColumn = 0;
+                        } else if (c >= 32 && c <= 126) { // Printable characters
+                            currentColumn++;
+                            if (currentColumn >= terminalWidth) {
+                                currentColumn = 0; // Wrapped to new line
+                            }
+                        }
+                    }
+                    
+                    // Update line state and clear metrics if newline was processed
+                    if (containsNewline || willWrap) {
+                        lastWasNewline = true;
+                        // Clear metrics again after printing the chunk to ensure they're gone
+                        if (metricsShown) {
+                            std::cout << "\033[s";  // Save cursor position
+                            std::cout << "\033[B\033[1G\033[2K"; // Move down, go to column 1, clear entire line
+                            std::cout << "\033[u";  // Restore cursor position
+                            metricsShown = false;
+                        }
+                    } else {
+                        lastWasNewline = false;
+                    }
                 }
                 
                 // Show metrics in real-time below the response (but not immediately after newlines)
-                if (hasMetrics && !lastWasNewline) {
+                // Skip metrics display in simple mode to avoid ANSI sequence issues on macOS
+                if (!useSimpleMode && hasMetrics && !lastWasNewline) {
                     // Check if we're near the bottom of the terminal to avoid overriding text
                     bool canShowMetricsBelow = true;
                     
@@ -409,8 +426,8 @@ bool ChatInterface::startChatInterface(const std::string& engineId) {
             std::cout.flush();
         }
 
-        // Clear metrics line after completion to clean up
-        if (metricsShown) {
+        // Clear metrics line after completion to clean up (only if not in simple mode)
+        if (!useSimpleMode && metricsShown) {
             std::cout << "\033[s";  // Save cursor position
             std::cout << "\033[B\033[1G\033[2K"; // Move down, go to column 1, clear entire line
             std::cout << "\033[u";  // Restore cursor position
@@ -430,15 +447,28 @@ bool ChatInterface::startChatInterface(const std::string& engineId) {
         
         // Display final metrics below the completed response
         if (hasMetrics && (ttft > 0 || currentTps > 0)) {
-            std::cout << "\n\033[90m"; // New line and dim gray color
-            if (ttft > 0) {
-                std::cout << "TTFT: " << std::fixed << std::setprecision(2) << ttft << "ms";
+            if (useSimpleMode) {
+                // Simple metrics display for macOS without complex ANSI sequences
+                std::cout << "\n";
+                if (ttft > 0) {
+                    std::cout << "TTFT: " << std::fixed << std::setprecision(2) << ttft << "ms";
+                }
+                if (currentTps > 0) {
+                    if (ttft > 0) std::cout << " | ";
+                    std::cout << "TPS: " << std::fixed << std::setprecision(1) << currentTps;
+                }
+            } else {
+                // Full metrics display with colors for Windows/Linux
+                std::cout << "\n\033[90m"; // New line and dim gray color
+                if (ttft > 0) {
+                    std::cout << "TTFT: " << std::fixed << std::setprecision(2) << ttft << "ms";
+                }
+                if (currentTps > 0) {
+                    if (ttft > 0) std::cout << " | ";
+                    std::cout << "TPS: " << std::fixed << std::setprecision(1) << currentTps;
+                }
+                std::cout << "\033[0m"; // Reset color
             }
-            if (currentTps > 0) {
-                if (ttft > 0) std::cout << " | ";
-                std::cout << "TPS: " << std::fixed << std::setprecision(1) << currentTps;
-            }
-            std::cout << "\033[0m"; // Reset color
         }
         
         std::cout << std::endl;
