@@ -38,21 +38,18 @@ set(USE_METAL ${USE_METAL} CACHE BOOL "Enable Apple Metal support" FORCE)
 # Add the kolosal-server submodule
 add_subdirectory(kolosal-server)
 
-# Add the inference engine as a separate target (built independently)
-option(BUILD_INFERENCE_ENGINE "Build the inference engine separately" ON)
-if(BUILD_INFERENCE_ENGINE)
-    add_subdirectory(kolosal-server/inference)
-    
-    # Determine the inference target name based on acceleration options
-    if(USE_CUDA)
-        set(INFERENCE_TARGET_NAME "llama-cuda")
-    elseif(USE_VULKAN)
-        set(INFERENCE_TARGET_NAME "llama-vulkan")
-    elseif(USE_METAL)
-        set(INFERENCE_TARGET_NAME "llama-metal")
-    else()
-        set(INFERENCE_TARGET_NAME "llama-cpu")
-    endif()
+# The inference engine is built as part of kolosal-server, but we keep this option for compatibility
+option(BUILD_INFERENCE_ENGINE "Build the inference engine (built as part of kolosal-server)" ON)
+
+# Determine the inference target name based on acceleration options
+if(USE_CUDA)
+    set(INFERENCE_TARGET_NAME "llama-cuda")
+elseif(USE_VULKAN)
+    set(INFERENCE_TARGET_NAME "llama-vulkan")
+elseif(USE_METAL)
+    set(INFERENCE_TARGET_NAME "llama-metal")
+else()
+    set(INFERENCE_TARGET_NAME "llama-cpu")
 endif()
 
 # Add external libraries
