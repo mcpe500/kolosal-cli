@@ -308,6 +308,12 @@ std::vector<std::string> HuggingFaceClient::fetchEngineFiles()
                 {
                     isValidEngineFile = true;
                 }
+#elif defined(__APPLE__)
+                // On macOS, only include .dylib files
+                if (filename.find(".dylib") != std::string::npos)
+                {
+                    isValidEngineFile = true;
+                }
 #else
                 // On Linux/Unix, only include .so files
                 if (filename.find(".so") != std::string::npos)

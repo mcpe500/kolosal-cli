@@ -94,20 +94,6 @@ inference_engines:
     version: "1.0.0"
     description: "Apple Metal GPU acceleration engine for GGUF models (macOS native)"
     load_on_startup: true               # Load automatically - Metal is the default on macOS
-    
-  # CPU inference engine (fallback)
-  - name: "llama-cpu"
-    library_path: "./libllama-cpu.dylib"    # macOS: .dylib extension
-    version: "1.0.0"
-    description: "CPU-based inference engine for GGUF models"
-    load_on_startup: true              # Load as fallback option
-  
-  # Vulkan inference engine (optional - for external GPU support)
-  # - name: "llama-vulkan"
-  #   library_path: "./libllama-vulkan.dylib" # macOS: .dylib extension
-  #   version: "1.0.0"
-  #   description: "Vulkan GPU acceleration engine for GGUF models"
-  #   load_on_startup: false           # Load on-demand
 
 # =============================================================================
 # Model Configuration (macOS paths)
