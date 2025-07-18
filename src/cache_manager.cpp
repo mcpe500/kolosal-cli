@@ -43,6 +43,15 @@ void CacheManager::initialize()
     {
         cacheDirectory = ".\\cache"; // Fallback to current directory
     }
+#elif defined(__APPLE__)
+    // macOS: Use ~/Library/Caches/Kolosal/kolosal-cli
+    const char *homeDir = getenv("HOME");
+    if (!homeDir)
+    {
+        struct passwd *pw = getpwuid(getuid());
+        homeDir = pw->pw_dir;
+    }
+    cacheDirectory = std::string(homeDir) + "/Library/Caches/Kolosal/kolosal-cli";
 #else
     // Unix/Linux: Use ~/.cache/kolosal-cli
     const char *homeDir = getenv("HOME");

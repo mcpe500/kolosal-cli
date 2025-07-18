@@ -17,7 +17,7 @@ A cross-platform command-line interface for browsing, downloading, and running K
 
 - ✅ **Windows** - Fully supported with Visual Studio and MinGW
 - ✅ **Linux** - Fully supported on Ubuntu, Debian, CentOS, Fedora, Arch Linux  
-- ⚠️ **macOS** - Should work but not extensively tested
+- ✅ **macOS** - Fully supported with detailed build instructions (Intel and Apple Silicon)
 
 ## Features
 
@@ -142,6 +142,13 @@ See [CACHING.md](docs/CACHING.md) for detailed information.
 - libyaml-cpp-dev (optional, built from source if not available)
 - build-essential or equivalent
 
+#### macOS
+- Xcode Command Line Tools or Xcode (for clang compiler)
+- Homebrew (recommended for dependency management)
+- cmake (via Homebrew or official installer)
+- curl (usually pre-installed, or via Homebrew)
+- openssl (via Homebrew for secure connections)
+
 ### Quick Start (Linux)
 
 1. **Install dependencies:**
@@ -168,30 +175,175 @@ See [CACHING.md](docs/CACHING.md) for detailed information.
    ./kolosal-cli
    ```
 
+### Quick Start (macOS)
+
+1. **Install dependencies:**
+   ```bash
+   # Install Xcode Command Line Tools (if not already installed)
+   xcode-select --install
+   
+   # Install Homebrew (if not already installed)
+   /bin/bash -c "$(curl -fsSL https://raw.githubusercontent.com/Homebrew/install/HEAD/install.sh)"
+   
+   # Install required dependencies
+   brew install cmake curl openssl git
+   ```
+
+2. **Build the project:**
+   ```bash
+   mkdir build && cd build
+   cmake .. -DCMAKE_BUILD_TYPE=Release
+   make -j$(sysctl -n hw.ncpu)
+   ```
+
+3. **Run the application:**
+   ```bash
+   ./kolosal-cli
+   ```
+
 ### Manual Build Instructions
 
-#### Linux/macOS
+#### Linux
 
-1. Navigate to the project directory:
+1. **Install dependencies:**
+   ```bash
+   # Ubuntu/Debian:
+   sudo apt update
+   sudo apt install build-essential cmake git libcurl4-openssl-dev libssl-dev zlib1g-dev
+   
+   # CentOS/RHEL/Fedora:
+   sudo dnf install gcc-c++ cmake git libcurl-devel openssl-devel zlib-devel
+   
+   # Arch Linux:
+   sudo pacman -S base-devel cmake git curl openssl zlib
+   ```
+
+2. **Navigate to the project directory:**
    ```bash
    cd kolosal-cli
    ```
 
-2. Create and enter build directory:
+3. **Create and enter build directory:**
    ```bash
    mkdir build
    cd build
    ```
 
-3. Configure with CMake:
+4. **Configure with CMake:**
    ```bash
    cmake .. -DCMAKE_BUILD_TYPE=Release
    ```
 
-4. Build the project:
+5. **Build the project:**
    ```bash
    make -j$(nproc)
    ```
+
+6. **Run the application:**
+   ```bash
+   ./kolosal-cli
+   ```
+
+#### macOS
+
+1. **Install Xcode Command Line Tools:**
+   ```bash
+   # Install if not already available
+   xcode-select --install
+   
+   # Verify installation
+   xcode-select -p
+   ```
+
+2. **Install Homebrew (if not already installed):**
+   ```bash
+   /bin/bash -c "$(curl -fsSL https://raw.githubusercontent.com/Homebrew/install/HEAD/install.sh)"
+   
+   # Add Homebrew to PATH (if needed)
+   echo 'eval "$(/opt/homebrew/bin/brew shellenv)"' >> ~/.zshrc
+   source ~/.zshrc
+   ```
+
+3. **Install dependencies:**
+   ```bash
+   # Install required packages
+   brew install cmake curl openssl git
+   
+   # Verify installations
+   cmake --version    # Should be >= 3.14
+   curl --version
+   openssl version
+   ```
+
+4. **Navigate to the project directory:**
+   ```bash
+   cd kolosal-cli
+   ```
+
+5. **Create and enter build directory:**
+   ```bash
+   mkdir build
+   cd build
+   ```
+
+6. **Configure with CMake:**
+   ```bash
+   # Basic configuration
+   cmake .. -DCMAKE_BUILD_TYPE=Release
+   
+   # Or with OpenSSL path specification (if needed)
+   cmake .. -DCMAKE_BUILD_TYPE=Release \
+            -DOPENSSL_ROOT_DIR=$(brew --prefix openssl)
+   ```
+
+7. **Build the project:**
+   ```bash
+   # Use all available CPU cores
+   make -j$(sysctl -n hw.ncpu)
+   
+   # Or specify number of cores manually
+   # make -j8
+   ```
+
+8. **Run the application:**
+   ```bash
+   ./kolosal-cli
+   ```
+
+#### macOS Advanced Build Options
+
+**For Apple Silicon (M1/M2) optimization:**
+```bash
+cmake .. -DCMAKE_BUILD_TYPE=Release \
+         -DCMAKE_OSX_ARCHITECTURES=arm64 \
+         -DUSE_METAL=ON
+make -j$(sysctl -n hw.ncpu)
+```
+
+**For Intel Macs:**
+```bash
+cmake .. -DCMAKE_BUILD_TYPE=Release \
+         -DCMAKE_OSX_ARCHITECTURES=x86_64
+make -j$(sysctl -n hw.ncpu)
+```
+
+**For Universal Binary (both Intel and Apple Silicon):**
+```bash
+cmake .. -DCMAKE_BUILD_TYPE=Release \
+         -DCMAKE_OSX_ARCHITECTURES="arm64;x86_64"
+make -j$(sysctl -n hw.ncpu)
+```
+
+**For macOS Deployment Target:**
+```bash
+# Target macOS 11.0 and later (recommended for Apple Silicon features)
+cmake .. -DCMAKE_BUILD_TYPE=Release \
+         -DCMAKE_OSX_DEPLOYMENT_TARGET=11.0
+
+# Or target macOS 10.15 for broader compatibility
+cmake .. -DCMAKE_BUILD_TYPE=Release \
+         -DCMAKE_OSX_DEPLOYMENT_TARGET=10.15
+```
 
 #### Windows
 
@@ -399,7 +551,7 @@ For users who prefer a portable version without installation:
 
 - ✅ **Windows** - Fully supported with Visual Studio and MinGW
 - ✅ **Linux** - Fully supported on Ubuntu, Debian, CentOS, Fedora, Arch Linux
-- ⚠️ **macOS** - Should work but not extensively tested
+- ✅ **macOS** - Fully supported with detailed build instructions (Intel and Apple Silicon)
 
 ### Troubleshooting
 
@@ -489,6 +641,148 @@ For users who prefer a portable version without installation:
    chmod +x kolosal-cli
    chmod -R 755 ./models/
    ```
+
+#### macOS Build Issues
+
+1. **Xcode Command Line Tools not installed:**
+   ```bash
+   # Install Xcode Command Line Tools
+   xcode-select --install
+   
+   # If already installed but having issues, reset it
+   sudo xcode-select --reset
+   sudo xcode-select --install
+   
+   # Verify installation
+   xcode-select -p  # Should output: /Applications/Xcode.app/Contents/Developer or /Library/Developer/CommandLineTools
+   ```
+
+2. **Homebrew not found or not in PATH:**
+   ```bash
+   # Install Homebrew
+   /bin/bash -c "$(curl -fsSL https://raw.githubusercontent.com/Homebrew/install/HEAD/install.sh)"
+   
+   # Add to PATH for Apple Silicon Macs
+   echo 'eval "$(/opt/homebrew/bin/brew shellenv)"' >> ~/.zshrc
+   source ~/.zshrc
+   
+   # Add to PATH for Intel Macs
+   echo 'eval "$(/usr/local/bin/brew shellenv)"' >> ~/.zshrc
+   source ~/.zshrc
+   
+   # Verify installation
+   brew --version
+   ```
+
+3. **CMake version too old:**
+   ```bash
+   # Update Homebrew and install latest CMake
+   brew update
+   brew install cmake
+   
+   # Or install from official CMake website
+   # Download from: https://cmake.org/download/
+   
+   # Verify version
+   cmake --version  # Should be >= 3.14
+   ```
+
+4. **OpenSSL linking issues:**
+   ```bash
+   # Install OpenSSL via Homebrew
+   brew install openssl
+   
+   # Configure CMake with OpenSSL path
+   cmake .. -DCMAKE_BUILD_TYPE=Release \
+            -DOPENSSL_ROOT_DIR=$(brew --prefix openssl) \
+            -DOPENSSL_LIBRARIES=$(brew --prefix openssl)/lib
+   
+   # For persistent configuration, add to shell profile
+   echo 'export OPENSSL_ROOT_DIR=$(brew --prefix openssl)' >> ~/.zshrc
+   source ~/.zshrc
+   ```
+
+5. **Metal framework not found (Apple Silicon):**
+   ```bash
+   # Ensure you're on macOS 10.13+ with Metal support
+   system_profiler SPSoftwareDataType | grep "System Version"
+   
+   # For Apple Silicon Macs, enable Metal acceleration
+   cmake .. -DCMAKE_BUILD_TYPE=Release \
+            -DUSE_METAL=ON \
+            -DCMAKE_OSX_ARCHITECTURES=arm64
+   
+   # If Metal still not found, disable it
+   cmake .. -DCMAKE_BUILD_TYPE=Release \
+            -DUSE_METAL=OFF
+   ```
+
+6. **Architecture mismatch issues:**
+   ```bash
+   # Check your Mac's architecture
+   uname -m  # arm64 for Apple Silicon, x86_64 for Intel
+   
+   # For Apple Silicon Macs
+   cmake .. -DCMAKE_BUILD_TYPE=Release \
+            -DCMAKE_OSX_ARCHITECTURES=arm64
+   
+   # For Intel Macs
+   cmake .. -DCMAKE_BUILD_TYPE=Release \
+            -DCMAKE_OSX_ARCHITECTURES=x86_64
+   
+   # Clean build directory if switching architectures
+   rm -rf build && mkdir build && cd build
+   ```
+
+7. **Permission denied errors:**
+   ```bash
+   # Fix permissions for build directory
+   chmod -R 755 ./build
+   
+   # Fix permissions for the executable
+   chmod +x ./build/kolosal-cli
+   
+   # If installing system-wide, you may need sudo
+   sudo make install
+   ```
+
+8. **Server fails to start on macOS:**
+   ```bash
+   # Check if port is available
+   lsof -i :8080
+   
+   # Check macOS firewall settings
+   sudo /usr/libexec/ApplicationFirewall/socketfilterfw --getglobalstate
+   
+   # Allow kolosal-cli through firewall if needed
+   sudo /usr/libexec/ApplicationFirewall/socketfilterfw --add ./kolosal-cli
+   sudo /usr/libexec/ApplicationFirewall/socketfilterfw --unblock ./kolosal-cli
+   ```
+
+9. **Rosetta 2 issues (Apple Silicon running Intel code):**
+   ```bash
+   # Install Rosetta 2 if needed
+   softwareupdate --install-rosetta
+   
+   # Force Intel build on Apple Silicon if needed
+   arch -x86_64 cmake .. -DCMAKE_BUILD_TYPE=Release \
+                         -DCMAKE_OSX_ARCHITECTURES=x86_64
+   arch -x86_64 make -j$(sysctl -n hw.ncpu)
+   ```
+
+10. **macOS version compatibility issues:**
+    ```bash
+    # Check macOS version
+    sw_vers -productVersion
+    
+    # Set deployment target for older macOS versions
+    cmake .. -DCMAKE_BUILD_TYPE=Release \
+             -DCMAKE_OSX_DEPLOYMENT_TARGET=10.15  # Adjust as needed
+    
+    # For macOS 11.0+ (recommended for full feature support)
+    cmake .. -DCMAKE_BUILD_TYPE=Release \
+             -DCMAKE_OSX_DEPLOYMENT_TARGET=11.0
+    ```
 
 #### Windows Build Issues
 

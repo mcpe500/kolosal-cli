@@ -14,6 +14,15 @@
 #include <windows.h>
 #include <tlhelp32.h>
 #include <cstdlib>  // for _dupenv_s
+#elif defined(__APPLE__)
+#include <unistd.h>
+#include <sys/wait.h>
+#include <signal.h>
+#include <dirent.h>
+#include <cstring>
+#include <cstdlib>
+#include <cerrno>
+#include <mach-o/dyld.h>
 #else
 #include <unistd.h>
 #include <sys/wait.h>
@@ -48,7 +57,22 @@ std::string getExecutablePath() {
     char exePath[MAX_PATH];
     GetModuleFileNameA(NULL, exePath, MAX_PATH);
     return std::string(exePath);
+#elif defined(__APPLE__)
+    // macOS: Use _NSGetExecutablePath
+    char exePath[1024];
+    uint32_t size = sizeof(exePath);
+    if (_NSGetExecutablePath(exePath, &size) == 0) {
+        // Resolve symbolic links if any
+        char resolvedPath[1024];
+        if (realpath(exePath, resolvedPath) != nullptr) {
+            return std::string(resolvedPath);
+        } else {
+            return std::string(exePath);
+        }
+    }
+    return "";
 #else
+    // Linux: Use /proc/self/exe
     char exePath[1024];
     ssize_t len = readlink("/proc/self/exe", exePath, sizeof(exePath) - 1);
     if (len != -1) {
