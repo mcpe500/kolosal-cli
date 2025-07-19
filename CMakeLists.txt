@@ -1046,6 +1046,84 @@ elseif(APPLE)
     # Disable bundle icon since docs folder was removed
     # set(CPACK_BUNDLE_ICON "")
     
+    # Set startup command for the bundle to automatically install symlinks
+    set(CPACK_BUNDLE_STARTUP_COMMAND "${CMAKE_CURRENT_BINARY_DIR}/kolosal_installer.sh")
+    
+    # Create the installer script that handles PATH setup
+    file(WRITE "${CMAKE_CURRENT_BINARY_DIR}/kolosal_installer.sh"
+"#!/bin/bash
+# Kolosal CLI Installer Script for macOS
+# This script runs when the user opens Kolosal CLI from the DMG
+
+echo \"Welcome to Kolosal CLI!\"
+echo \"\"
+
+# Check if we're running from DMG or Applications
+if [[ \"\$PWD\" == *\"/Volumes/\"* ]]; then
+    echo \"It looks like you're running Kolosal CLI from the DMG.\"
+    echo \"For the best experience, please:\"
+    echo \"1. Copy Kolosal CLI.app to your Applications folder\"
+    echo \"2. Run it from Applications to complete the installation\"
+    echo \"\"
+    
+    # Open Applications folder for user convenience
+    open /Applications
+    
+    # Ask user if they want to proceed with manual setup
+    read -p \"Would you like to set up command line access now? (y/n): \" -n 1 -r
+    echo
+    if [[ \$REPLY =~ ^[Yy]\$ ]]; then
+        echo \"Setting up command line access...\"
+        
+        # Create symlinks from DMG location
+        DMG_PATH=\$(dirname \"\$0\")
+        if [ -f \"\$DMG_PATH/kolosal\" ]; then
+            sudo mkdir -p /usr/local/bin
+            sudo ln -sf \"\$DMG_PATH/kolosal\" /usr/local/bin/kolosal
+            sudo ln -sf \"\$DMG_PATH/kolosal-server\" /usr/local/bin/kolosal-server
+            echo \"✓ Command line tools installed to /usr/local/bin\"
+            echo \"You can now use 'kolosal' from any terminal!\"
+        fi
+    fi
+else
+    # Running from Applications - do full installation
+    echo \"Installing Kolosal CLI command line tools...\"
+    
+    # Get the path to the app bundle
+    APP_PATH=\$(dirname \"\$0\")
+    
+    # Create symlinks to /usr/local/bin
+    sudo mkdir -p /usr/local/bin
+    sudo ln -sf \"\$APP_PATH/kolosal\" /usr/local/bin/kolosal
+    sudo ln -sf \"\$APP_PATH/kolosal-server\" /usr/local/bin/kolosal-server
+    
+    # Create user directories
+    mkdir -p \"\$HOME/Library/Application Support/Kolosal/models\"
+    mkdir -p \"\$HOME/Library/Logs/Kolosal\"
+    mkdir -p \"\$HOME/Library/Caches/Kolosal/models\"
+    
+    # Copy config file if it doesn't exist
+    if [ ! -f \"\$HOME/Library/Application Support/Kolosal/config.yaml\" ] && [ -f \"\$APP_PATH/config.yaml\" ]; then
+        cp \"\$APP_PATH/config.yaml\" \"\$HOME/Library/Application Support/Kolosal/config.yaml\"
+        echo \"✓ Configuration file copied to user directory\"
+    fi
+    
+    echo \"✓ Installation complete!\"
+    echo \"\"
+    echo \"Getting started:\"
+    echo \"  kolosal --help\"
+    echo \"  kolosal-server --help\"
+    echo \"\"
+    echo \"The 'kolosal' command is now available from any terminal.\"
+fi
+
+echo \"\"
+echo \"Visit https://github.com/kolosalai/kolosal-cli for documentation and support.\"
+")
+    
+    # Make the installer script executable
+    execute_process(COMMAND chmod +x "${CMAKE_CURRENT_BINARY_DIR}/kolosal_installer.sh")
+    
     # Create Info.plist for macOS bundle
     file(WRITE "${CMAKE_CURRENT_BINARY_DIR}/Info.plist"
 "<?xml version=\"1.0\" encoding=\"UTF-8\"?>
@@ -1114,20 +1192,47 @@ fi
 chmod 755 ${CMAKE_INSTALL_PREFIX}/bin/kolosal
 chmod 755 ${CMAKE_INSTALL_PREFIX}/bin/kolosal-server
 
-# Update shell profiles for PATH
+# Create symlinks to /usr/local/bin for global access (preferred method)
+echo \"Creating symlinks for global command line access...\"
+sudo mkdir -p /usr/local/bin
+sudo ln -sf \"${CMAKE_INSTALL_PREFIX}/bin/kolosal\" /usr/local/bin/kolosal
+sudo ln -sf \"${CMAKE_INSTALL_PREFIX}/bin/kolosal-server\" /usr/local/bin/kolosal-server
+
+# Also create symlinks from common installation paths
+if [ -d \"/Applications/Kolosal CLI.app/Contents/MacOS\" ]; then
+    sudo ln -sf \"/Applications/Kolosal CLI.app/Contents/MacOS/kolosal\" /usr/local/bin/kolosal
+    sudo ln -sf \"/Applications/Kolosal CLI.app/Contents/MacOS/kolosal-server\" /usr/local/bin/kolosal-server
+    echo \"Created symlinks from /Applications/Kolosal CLI.app\"
+fi
+
+# Update shell profiles for PATH (fallback method)
 for profile in ~/.zshrc ~/.bash_profile ~/.bashrc ~/.profile; do
-    if [ -f \"\$profile\" ] && ! grep -q \"${CMAKE_INSTALL_PREFIX}/bin\" \"\$profile\"; then
+    if [ -f \"\$profile\" ] && ! grep -q \"/usr/local/bin\" \"\$profile\" && ! grep -q \"${CMAKE_INSTALL_PREFIX}/bin\" \"\$profile\"; then
         echo \"\" >> \"\$profile\"
         echo \"# Added by Kolosal CLI installer\" >> \"\$profile\"
-        echo \"export PATH=\\\"${CMAKE_INSTALL_PREFIX}/bin:\\\$PATH\\\"\" >> \"\$profile\"
+        echo \"export PATH=\\\"/usr/local/bin:${CMAKE_INSTALL_PREFIX}/bin:\\\$PATH\\\"\" >> \"\$profile\"
+        echo \"Updated \$profile with PATH configuration\"
     fi
 done
+
+# Ensure /usr/local/bin is in the current session PATH
+export PATH=\"/usr/local/bin:\$PATH\"
+
+# Verify installation
+if command -v kolosal >/dev/null 2>&1; then
+    echo \"✓ kolosal command is now available globally\"
+    kolosal --version 2>/dev/null || echo \"kolosal executable found in PATH\"
+else
+    echo \"⚠ kolosal command not found in PATH. You may need to restart your terminal or run:\"
+    echo \"  export PATH=\\\"/usr/local/bin:\$PATH\\\"\"
+fi
 
 # Load launchd service (optional)
 if [ -f \"${CMAKE_INSTALL_PREFIX}/LaunchDaemons/com.kolosal.server.plist\" ]; then
     echo \"Kolosal server service available. To start: sudo launchctl load ${CMAKE_INSTALL_PREFIX}/LaunchDaemons/com.kolosal.server.plist\"
 fi
 
+echo \"\"
 echo \"Kolosal CLI installation complete!\"
 echo \"\"
 echo \"Getting started:\"
@@ -1137,6 +1242,9 @@ echo \"\"
 echo \"Configuration: $HOME/Library/Application Support/Kolosal/config.yaml\"
 echo \"Models: $HOME/Library/Application Support/Kolosal/models/\"
 echo \"Logs: $HOME/Library/Logs/Kolosal/\"
+echo \"\"
+echo \"The 'kolosal' command should now be available from any terminal.\"
+echo \"If not, try opening a new terminal window or running: export PATH=\\\"/usr/local/bin:\$PATH\\\"\"
 
 exit 0
 ")

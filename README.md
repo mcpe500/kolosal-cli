@@ -543,18 +543,58 @@ Kolosal CLI supports creating .dmg disk image packages for easy distribution and
 
 3. **Install the package:**
    ```bash
-   # Mount the DMG (double-click in Finder or use command line)
+   # Method 1: GUI Installation (Recommended)
+   # Double-click the DMG file to mount it
    open kolosal-1.0.0-apple-silicon.dmg
    
-   # Drag and drop the application to Applications folder
-   # Or install via command line
-   sudo make install
+   # This will open Finder with the DMG contents
+   # Drag the Kolosal CLI application to your Applications folder
+   # Then run Kolosal CLI from Applications to automatically set up command line access
+   
+   # Method 2: Command Line Installation with Automatic PATH Setup
+   # Mount the DMG first
+   hdiutil attach kolosal-1.0.0-apple-silicon.dmg
+   
+   # Copy to Applications and set up command line access
+   sudo cp -R "/Volumes/Kolosal CLI/Kolosal CLI.app" /Applications/
+   
+   # Run the installer script to automatically create symlinks
+   "/Applications/Kolosal CLI.app/Contents/MacOS/kolosal_installer.sh"
+   
+   # Method 3: Manual Installation from DMG
+   # After mounting the DMG, copy the files manually
+   sudo cp -R "/Volumes/Kolosal CLI/Kolosal CLI.app" /Applications/
+   
+   # Manually create symlinks for command line access
+   sudo ln -sf "/Applications/Kolosal CLI.app/Contents/MacOS/kolosal" /usr/local/bin/kolosal
+   sudo ln -sf "/Applications/Kolosal CLI.app/Contents/MacOS/kolosal-server" /usr/local/bin/kolosal-server
+   
+   # Unmount the DMG when done
+   hdiutil detach "/Volumes/Kolosal CLI"
    ```
 
 4. **Verify installation:**
    ```bash
+   # The kolosal command should now be automatically available
+   kolosal --help
+   
+   # If the command is not found, the installation may need manual setup:
+   # Option 1: Run the installer script manually
+   "/Applications/Kolosal CLI.app/Contents/MacOS/kolosal_installer.sh"
+   
+   # Option 2: Create symlinks manually
+   sudo ln -sf "/Applications/Kolosal CLI.app/Contents/MacOS/kolosal" /usr/local/bin/kolosal
+   
+   # Option 3: Add to your shell profile (if installed to user directory)
+   echo 'export PATH="/usr/local/bin:$PATH"' >> ~/.zshrc
+   source ~/.zshrc
+   
+   # Test the installation
+   kolosal --version
    kolosal --help
    ```
+
+   **Note:** The new DMG installer automatically creates symlinks to `/usr/local/bin/kolosal` when you run the application from the Applications folder, making the command available system-wide without manual PATH configuration.
 
    After installation, you can run the CLI from anywhere using just `kolosal`.
 
