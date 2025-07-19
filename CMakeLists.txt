@@ -1165,7 +1165,59 @@ exit 0
 </dict>
 </plist>")
     
-    # Create a LaunchAgent that automatically sets up symlinks when the user logs in
+    # Create setup script for LaunchAgent
+    set(SETUP_SCRIPT "${CMAKE_CURRENT_BINARY_DIR}/kolosal-setup.sh")
+    file(WRITE ${SETUP_SCRIPT}
+"#!/bin/bash
+# Automatic Kolosal CLI setup script
+
+# Exit on any error
+set -e
+
+# Log all actions
+exec > /tmp/kolosal-setup.log 2>&1
+
+echo \"Starting Kolosal CLI setup at \$(date)\"
+
+# Check if the app exists
+if [ ! -d \"/Applications/Kolosal CLI.app/Contents/MacOS\" ]; then
+    echo \"Kolosal CLI.app not found in /Applications\"
+    exit 0
+fi
+
+echo \"Found Kolosal CLI.app in /Applications\"
+
+# Create user directories (these don't require sudo)
+mkdir -p \"\$HOME/Library/Application Support/Kolosal/models\" || true
+mkdir -p \"\$HOME/Library/Logs/Kolosal\" || true  
+mkdir -p \"\$HOME/Library/Caches/Kolosal/models\" || true
+echo \"Created user directories\"
+
+# Copy config if needed
+if [ ! -f \"\$HOME/Library/Application Support/Kolosal/config.yaml\" ] && [ -f \"/Applications/Kolosal CLI.app/Contents/Resources/config.yaml\" ]; then
+    cp \"/Applications/Kolosal CLI.app/Contents/Resources/config.yaml\" \"\$HOME/Library/Application Support/Kolosal/config.yaml\" || true
+    echo \"Copied config file to user directory\"
+fi
+
+# Try to create symlinks (may fail if no sudo access, that's OK)
+if [ ! -L \"/usr/local/bin/kolosal\" ]; then
+    mkdir -p /usr/local/bin 2>/dev/null || true
+    ln -sf \"/Applications/Kolosal CLI.app/Contents/MacOS/kolosal\" /usr/local/bin/kolosal 2>/dev/null || true
+    ln -sf \"/Applications/Kolosal CLI.app/Contents/MacOS/kolosal-server\" /usr/local/bin/kolosal-server 2>/dev/null || true
+    if [ -L \"/usr/local/bin/kolosal\" ]; then
+        echo \"Created symlinks in /usr/local/bin\"
+    else
+        echo \"Could not create symlinks in /usr/local/bin (no permissions)\"
+    fi
+fi
+
+echo \"Kolosal CLI setup completed at \$(date)\"
+")
+
+    # Make the script executable
+    execute_process(COMMAND chmod +x ${SETUP_SCRIPT})
+
+    # Create a LaunchAgent that runs the setup script
     set(LAUNCH_AGENT_PLIST "${CMAKE_CURRENT_BINARY_DIR}/com.kolosal.cli.setup.plist")
     file(WRITE ${LAUNCH_AGENT_PLIST}
 "<?xml version=\"1.0\" encoding=\"UTF-8\"?>
@@ -1174,36 +1226,10 @@ exit 0
 <dict>
     <key>Label</key>
     <string>com.kolosal.cli.setup</string>
-    <key>ProgramArguments</key>
-    <array>
-        <string>/bin/bash</string>
-        <string>-c</string>
-        <string>
-        # Automatic Kolosal CLI setup
-        if [ -d \"/Applications/Kolosal CLI.app/Contents/MacOS\" ]; then
-            # Create symlinks if they don't exist
-            if [ ! -L \"/usr/local/bin/kolosal\" ]; then
-                mkdir -p /usr/local/bin 2>/dev/null || true
-                ln -sf \"/Applications/Kolosal CLI.app/Contents/MacOS/kolosal\" /usr/local/bin/kolosal 2>/dev/null || true
-                ln -sf \"/Applications/Kolosal CLI.app/Contents/MacOS/kolosal-server\" /usr/local/bin/kolosal-server 2>/dev/null || true
-            fi
-            
-            # Create user directories
-            mkdir -p \"\$HOME/Library/Application Support/Kolosal/models\" 2>/dev/null || true
-            mkdir -p \"\$HOME/Library/Logs/Kolosal\" 2>/dev/null || true
-            mkdir -p \"\$HOME/Library/Caches/Kolosal/models\" 2>/dev/null || true
-            
-            # Copy config if needed
-            if [ ! -f \"\$HOME/Library/Application Support/Kolosal/config.yaml\" ] && [ -f \"/Applications/Kolosal CLI.app/Contents/Resources/config.yaml\" ]; then
-                cp \"/Applications/Kolosal CLI.app/Contents/Resources/config.yaml\" \"\$HOME/Library/Application Support/Kolosal/config.yaml\" 2>/dev/null || true
-            fi
-        fi
-        </string>
-    </array>
+    <key>Program</key>
+    <string>${SETUP_SCRIPT}</string>
     <key>RunAtLoad</key>
     <true/>
-    <key>KeepAlive</key>
-    <false/>
     <key>LaunchOnlyOnce</key>
     <true/>
     <key>StandardOutPath</key>

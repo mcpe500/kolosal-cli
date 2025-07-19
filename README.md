@@ -555,8 +555,20 @@ Kolosal CLI supports creating .dmg disk image packages for easy distribution and
    # Mount the DMG first
    hdiutil attach kolosal-1.0.0-apple-silicon.dmg
    
-   # Copy to Applications (automatic setup included)
-   sudo cp -R "/Volumes/Kolosal CLI/Kolosal CLI.app" /Applications/
+   # First check what's actually in the DMG
+   ls -la "/Volumes/Kolosal CLI/"
+   
+   # Copy to Applications - check the exact structure first
+   # The structure might be different, so adapt the command based on what you see:
+   
+   # If there's a .app bundle directly:
+   sudo cp -R "/Volumes/Kolosal CLI/"*.app /Applications/
+   
+   # Or if there's a specific app name:
+   sudo cp -R "/Volumes/Kolosal CLI/kolosal.app" /Applications/
+   
+   # Or if the files are in a different structure:
+   sudo cp -R "/Volumes/Kolosal CLI/"* /Applications/
    
    # Method 3: Manual Installation with Manual Symlinks
    # After mounting the DMG, copy the files manually
@@ -570,7 +582,39 @@ Kolosal CLI supports creating .dmg disk image packages for easy distribution and
    hdiutil detach "/Volumes/Kolosal CLI"
    ```
 
-4. **Verify installation:**
+4. **Troubleshooting DMG Installation:**
+   ```bash
+   # If you get "No such file or directory" errors:
+   
+   # Step 1: Check what's actually in the mounted DMG
+   ls -la "/Volumes/Kolosal CLI/"
+   find "/Volumes/Kolosal CLI/" -name "*.app" -type d
+   
+   # Step 2: Use the correct path based on what you find
+   # Common variations:
+   
+   # If the app has a different name:
+   sudo cp -R "/Volumes/Kolosal CLI/kolosal.app" /Applications/
+   
+   # If there's no .app extension visible:
+   sudo cp -R "/Volumes/Kolosal CLI/kolosal" /Applications/
+   
+   # If files are in subdirectories:
+   sudo cp -R "/Volumes/Kolosal CLI/bin/"* /usr/local/bin/
+   sudo cp -R "/Volumes/Kolosal CLI/lib/"* /usr/local/lib/
+   
+   # Step 3: Alternative - Install from command line executables
+   # If there's no app bundle, install the binaries directly:
+   sudo cp "/Volumes/Kolosal CLI/bin/kolosal" /usr/local/bin/
+   sudo cp "/Volumes/Kolosal CLI/bin/kolosal-server" /usr/local/bin/
+   sudo chmod +x /usr/local/bin/kolosal /usr/local/bin/kolosal-server
+   
+   # Step 4: Manual symlink creation if automatic setup fails
+   sudo ln -sf "/Applications/kolosal.app/Contents/MacOS/kolosal" /usr/local/bin/kolosal
+   sudo ln -sf "/Applications/kolosal.app/Contents/MacOS/kolosal-server" /usr/local/bin/kolosal-server
+   ```
+
+5. **Verify installation:**
    ```bash
    # The kolosal command should now be automatically available
    kolosal --help
