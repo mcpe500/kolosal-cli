@@ -670,15 +670,14 @@ elseif(APPLE)
         )
     endforeach()
     
-    # Install configuration file to /usr/local/etc/kolosal directory (use config.apple.yaml)
-    install(FILES "${CMAKE_CURRENT_SOURCE_DIR}/config.apple.yaml"
-        DESTINATION /usr/local/etc/kolosal
-        RENAME config.yaml
+    # Install configuration file to etc/kolosal directory (use the config.yaml already copied to bin)
+    install(FILES "${CMAKE_BINARY_DIR}/bin/config.yaml"
+        DESTINATION etc/kolosal
         PERMISSIONS OWNER_READ OWNER_WRITE GROUP_READ WORLD_READ
     )
     
     # Create the kolosal configuration directory during install
-    install(DIRECTORY DESTINATION /usr/local/etc/kolosal
+    install(DIRECTORY DESTINATION etc/kolosal
         DIRECTORY_PERMISSIONS OWNER_READ OWNER_WRITE OWNER_EXECUTE GROUP_READ GROUP_EXECUTE WORLD_READ WORLD_EXECUTE
     )
     
@@ -720,11 +719,19 @@ elseif(APPLE)
         
         # Copy config to user directory if it doesn't exist
         if(NOT EXISTS \"\$ENV{HOME}/Library/Application Support/Kolosal/config.yaml\")
-            execute_process(
-                COMMAND \${CMAKE_COMMAND} -E copy_if_different
-                \"\${CMAKE_INSTALL_PREFIX}/../config.apple.yaml\"
-                \"\$ENV{HOME}/Library/Application Support/Kolosal/config.yaml\"
-            )
+            if(EXISTS \"\${CMAKE_INSTALL_PREFIX}/etc/kolosal/config.yaml\")
+                execute_process(
+                    COMMAND \${CMAKE_COMMAND} -E copy_if_different
+                    \"\${CMAKE_INSTALL_PREFIX}/etc/kolosal/config.yaml\"
+                    \"\$ENV{HOME}/Library/Application Support/Kolosal/config.yaml\"
+                )
+            elseif(EXISTS \"${CMAKE_BINARY_DIR}/bin/config.yaml\")
+                execute_process(
+                    COMMAND \${CMAKE_COMMAND} -E copy_if_different
+                    \"${CMAKE_BINARY_DIR}/bin/config.yaml\"
+                    \"\$ENV{HOME}/Library/Application Support/Kolosal/config.yaml\"
+                )
+            endif()
         endif()
     ")
     
@@ -739,25 +746,25 @@ elseif(APPLE)
     <string>com.kolosal.server</string>
     <key>ProgramArguments</key>
     <array>
-        <string>/usr/local/bin/kolosal-server</string>
+        <string>${CMAKE_INSTALL_PREFIX}/bin/kolosal-server</string>
         <string>--config</string>
-        <string>/usr/local/etc/kolosal/config.yaml</string>
+        <string>${CMAKE_INSTALL_PREFIX}/etc/kolosal/config.yaml</string>
     </array>
     <key>RunAtLoad</key>
     <false/>
     <key>KeepAlive</key>
     <false/>
     <key>StandardOutPath</key>
-    <string>/usr/local/var/log/kolosal-server.log</string>
+    <string>${CMAKE_INSTALL_PREFIX}/var/log/kolosal-server.log</string>
     <key>StandardErrorPath</key>
-    <string>/usr/local/var/log/kolosal-server-error.log</string>
+    <string>${CMAKE_INSTALL_PREFIX}/var/log/kolosal-server-error.log</string>
     <key>WorkingDirectory</key>
-    <string>/usr/local/var/lib/kolosal</string>
+    <string>${CMAKE_INSTALL_PREFIX}/var/lib/kolosal</string>
 </dict>
 </plist>")
     
     install(FILES ${LAUNCHD_PLIST_FILE}
-        DESTINATION /usr/local/LaunchDaemons
+        DESTINATION LaunchDaemons
         OPTIONAL
     )
     
@@ -1023,10 +1030,19 @@ elseif(APPLE)
     # macOS-specific packaging settings
     set(CPACK_DMG_VOLUME_NAME "Kolosal CLI")
     set(CPACK_DMG_FORMAT "UDBZ")  # Compressed DMG
-    set(CPACK_DMG_BACKGROUND_IMAGE "${CMAKE_CURRENT_SOURCE_DIR}/docs/dmg_background.png")
     
-    # DMG window settings
-    set(CPACK_DMG_DS_STORE_SETUP_SCRIPT "${CMAKE_CURRENT_SOURCE_DIR}/docs/dmg_setup.scpt")
+    # Only set background image if it exists
+    if(EXISTS "${CMAKE_CURRENT_SOURCE_DIR}/docs/dmg_background.png")
+        set(CPACK_DMG_BACKGROUND_IMAGE "${CMAKE_CURRENT_SOURCE_DIR}/docs/dmg_background.png")
+    else()
+        # Disable background image if not found
+        set(CPACK_DMG_BACKGROUND_IMAGE "")
+    endif()
+    
+    # DMG window settings (only if setup script exists)
+    if(EXISTS "${CMAKE_CURRENT_SOURCE_DIR}/docs/dmg_setup.scpt")
+        set(CPACK_DMG_DS_STORE_SETUP_SCRIPT "${CMAKE_CURRENT_SOURCE_DIR}/docs/dmg_setup.scpt")
+    endif()
     
     # Create symbolic link to Applications folder in DMG
     set(CPACK_DMG_DISABLE_APPLICATIONS_SYMLINK OFF)
@@ -1034,7 +1050,11 @@ elseif(APPLE)
     # Bundle configuration
     set(CPACK_BUNDLE_NAME "Kolosal CLI")
     set(CPACK_BUNDLE_PLIST "${CMAKE_CURRENT_BINARY_DIR}/Info.plist")
-    set(CPACK_BUNDLE_ICON "${CMAKE_CURRENT_SOURCE_DIR}/docs/kolosal.icns")
+    
+    # Only set bundle icon if it exists
+    if(EXISTS "${CMAKE_CURRENT_SOURCE_DIR}/docs/kolosal.icns")
+        set(CPACK_BUNDLE_ICON "${CMAKE_CURRENT_SOURCE_DIR}/docs/kolosal.icns")
+    endif()
     
     # Create Info.plist for macOS bundle
     file(WRITE "${CMAKE_CURRENT_BINARY_DIR}/Info.plist"
@@ -1094,28 +1114,28 @@ mkdir -p \"$HOME/Library/Caches/Kolosal/models\"
 
 # Copy configuration file if it doesn't exist
 if [ ! -f \"$HOME/Library/Application Support/Kolosal/config.yaml\" ]; then
-    if [ -f \"/usr/local/etc/kolosal/config.yaml\" ]; then
-        cp \"/usr/local/etc/kolosal/config.yaml\" \"$HOME/Library/Application Support/Kolosal/config.yaml\"
+    if [ -f \"${CMAKE_INSTALL_PREFIX}/etc/kolosal/config.yaml\" ]; then
+        cp \"${CMAKE_INSTALL_PREFIX}/etc/kolosal/config.yaml\" \"$HOME/Library/Application Support/Kolosal/config.yaml\"
         echo \"Configuration file copied to user directory\"
     fi
 fi
 
 # Set proper permissions
-chmod 755 /usr/local/bin/kolosal
-chmod 755 /usr/local/bin/kolosal-server
+chmod 755 ${CMAKE_INSTALL_PREFIX}/bin/kolosal
+chmod 755 ${CMAKE_INSTALL_PREFIX}/bin/kolosal-server
 
 # Update shell profiles for PATH
 for profile in ~/.zshrc ~/.bash_profile ~/.bashrc ~/.profile; do
-    if [ -f \"\$profile\" ] && ! grep -q \"/usr/local/bin\" \"\$profile\"; then
+    if [ -f \"\$profile\" ] && ! grep -q \"${CMAKE_INSTALL_PREFIX}/bin\" \"\$profile\"; then
         echo \"\" >> \"\$profile\"
         echo \"# Added by Kolosal CLI installer\" >> \"\$profile\"
-        echo \"export PATH=\\\"/usr/local/bin:\\\$PATH\\\"\" >> \"\$profile\"
+        echo \"export PATH=\\\"${CMAKE_INSTALL_PREFIX}/bin:\\\$PATH\\\"\" >> \"\$profile\"
     fi
 done
 
 # Load launchd service (optional)
-if [ -f \"/usr/local/LaunchDaemons/com.kolosal.server.plist\" ]; then
-    echo \"Kolosal server service available. To start: sudo launchctl load /usr/local/LaunchDaemons/com.kolosal.server.plist\"
+if [ -f \"${CMAKE_INSTALL_PREFIX}/LaunchDaemons/com.kolosal.server.plist\" ]; then
+    echo \"Kolosal server service available. To start: sudo launchctl load ${CMAKE_INSTALL_PREFIX}/LaunchDaemons/com.kolosal.server.plist\"
 fi
 
 echo \"Kolosal CLI installation complete!\"

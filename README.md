@@ -505,6 +505,271 @@ To remove the installed package:
 # C:\Program Files\Kolosal\uninstall.exe
 ```
 
+### Creating a DMG Package (macOS)
+
+Kolosal CLI supports creating .dmg disk image packages for easy distribution and installation on macOS systems.
+
+1. **Build the project for packaging:**
+   ```bash
+   mkdir build-release
+   cd build-release
+   cmake .. -DCMAKE_BUILD_TYPE=Release
+   make -j$(sysctl -n hw.ncpu)
+   ```
+
+2. **Create the DMG package:**
+   ```bash
+   make package
+   ```
+   
+   **Note:** If you encounter permission errors about creating `/usr/local/etc/kolosal` or other system directories, you have several options:
+   
+   ```bash
+   # Option 1: Use sudo (requires admin privileges)
+   sudo make package
+   
+   # Option 2: Build for user installation (no admin privileges needed)
+   cd ..
+   rm -rf build-release
+   mkdir build-release && cd build-release
+   cmake .. -DCMAKE_BUILD_TYPE=Release \
+            -DCMAKE_INSTALL_PREFIX="$HOME/local" \
+            -DCPACK_PACKAGING_INSTALL_PREFIX="$HOME/local"
+   make -j$(sysctl -n hw.ncpu)
+   make package  # No sudo required
+   ```
+
+   This will create a compressed DMG file named `kolosal-1.0.0-apple-silicon.dmg` (for Apple Silicon) or `kolosal-1.0.0-intel-mac.dmg` (for Intel Macs).
+
+3. **Install the package:**
+   ```bash
+   # Mount the DMG (double-click in Finder or use command line)
+   open kolosal-1.0.0-apple-silicon.dmg
+   
+   # Drag and drop the application to Applications folder
+   # Or install via command line
+   sudo make install
+   ```
+
+4. **Verify installation:**
+   ```bash
+   kolosal --help
+   ```
+
+   After installation, you can run the CLI from anywhere using just `kolosal`.
+
+### macOS Package Features
+
+- **System Integration**: Installs to `/usr/local/bin/kolosal` for system-wide access
+- **Application Bundle**: Creates proper macOS application bundle structure
+- **Native Libraries**: Includes all required dylib files (libkolosal_server.dylib, inference engines)
+- **Configuration**: Installs default config to `/usr/local/etc/kolosal/config.yaml`
+- **User Configuration**: Creates user config directory at `~/Library/Application Support/Kolosal/`
+- **Homebrew Compatible**: Follows Homebrew conventions for easy integration
+- **Metal Support**: Includes Apple Metal inference engine for Apple Silicon optimization
+- **Universal Binary**: Supports both Intel and Apple Silicon architectures (if built universally)
+- **Code Signing Ready**: Prepared for code signing and notarization
+
+### macOS Advanced Packaging Options
+
+**For Universal Binary (Intel + Apple Silicon):**
+```bash
+cmake .. -DCMAKE_BUILD_TYPE=Release \
+         -DCMAKE_OSX_ARCHITECTURES="arm64;x86_64" \
+         -DUSE_METAL=ON
+make -j$(sysctl -n hw.ncpu)
+make package
+```
+
+**For Apple Silicon Only:**
+```bash
+cmake .. -DCMAKE_BUILD_TYPE=Release \
+         -DCMAKE_OSX_ARCHITECTURES=arm64 \
+         -DUSE_METAL=ON
+make -j$(sysctl -n hw.ncpu)
+make package
+```
+
+**For Intel Mac Only:**
+```bash
+cmake .. -DCMAKE_BUILD_TYPE=Release \
+         -DCMAKE_OSX_ARCHITECTURES=x86_64
+make -j$(sysctl -n hw.ncpu)
+make package
+```
+
+**With Custom DMG Background (if available):**
+```bash
+# Place custom background image at docs/dmg_background.png
+# DMG will use custom background for enhanced presentation
+make package
+```
+
+**Quick Fix for Common DMG Issues:**
+```bash
+# If you encounter DMG creation errors, try this streamlined approach:
+# 1. Create missing directories and files
+mkdir -p docs
+
+# 2. Create or disable background image
+echo "Creating simple background..." 
+# Either create a simple background or disable it entirely
+cmake .. -DCMAKE_BUILD_TYPE=Release \
+         -DCMAKE_INSTALL_PREFIX="$HOME/local" \
+         -DCPACK_PACKAGING_INSTALL_PREFIX="$HOME/local" \
+         -DCPACK_DMG_BACKGROUND_IMAGE=""
+
+# 3. Build and package
+make -j$(sysctl -n hw.ncpu)
+make package
+```
+
+### macOS Installation Methods
+
+**Method 1: DMG Installation (Recommended)**
+```bash
+# Download or build the DMG package
+# Double-click the DMG file in Finder
+# Drag Kolosal CLI to Applications folder
+# Optional: Add to PATH by symlinking to /usr/local/bin
+sudo ln -sf /Applications/Kolosal\ CLI.app/Contents/MacOS/kolosal /usr/local/bin/kolosal
+```
+
+**Method 2: Direct System Installation**
+```bash
+# Build and install directly to system directories
+mkdir build-release
+cd build-release
+cmake .. -DCMAKE_BUILD_TYPE=Release
+make -j$(sysctl -n hw.ncpu)
+sudo make install
+```
+
+**Method 3: User-Local Installation (No sudo required)**
+```bash
+# Install to user directory (recommended for development)
+mkdir build-release
+cd build-release
+cmake .. -DCMAKE_BUILD_TYPE=Release \
+         -DCMAKE_INSTALL_PREFIX="$HOME/local"
+make -j$(sysctl -n hw.ncpu)
+make install  # No sudo needed
+
+# Add to PATH in shell profile
+echo 'export PATH="$HOME/local/bin:$PATH"' >> ~/.zshrc
+source ~/.zshrc
+```
+
+**Method 4: Homebrew-style Installation**
+```bash
+# Install to Homebrew-compatible locations
+cmake .. -DCMAKE_BUILD_TYPE=Release \
+         -DCMAKE_INSTALL_PREFIX=/opt/homebrew \
+         -DCMAKE_OSX_DEPLOYMENT_TARGET=11.0
+make -j$(sysctl -n hw.ncpu)
+sudo make install
+```
+
+### macOS Packaging for Distribution
+
+**For Personal Use (No admin privileges required):**
+```bash
+# Build package that doesn't require system directories
+mkdir build-release
+cd build-release
+cmake .. -DCMAKE_BUILD_TYPE=Release \
+         -DCMAKE_INSTALL_PREFIX="$HOME/local" \
+         -DCPACK_PACKAGING_INSTALL_PREFIX="$HOME/local"
+make -j$(sysctl -n hw.ncpu)
+make package  # No sudo required
+```
+
+**For System-Wide Distribution (Requires admin privileges):**
+```bash
+# Build standard system package
+mkdir build-release
+cd build-release
+cmake .. -DCMAKE_BUILD_TYPE=Release
+make -j$(sysctl -n hw.ncpu)
+sudo make package  # Requires sudo for system directories
+```
+
+**For Portable Distribution:**
+```bash
+# Create standalone package with all dependencies
+cmake .. -DCMAKE_BUILD_TYPE=Release \
+         -DCMAKE_INSTALL_RPATH="@executable_path" \
+         -DCPACK_BUNDLE_STARTUP_COMMAND="bin/kolosal"
+make -j$(sysctl -n hw.ncpu)
+make package
+```
+
+### macOS Uninstalling
+
+**If installed via DMG to Applications:**
+```bash
+# Remove application bundle
+sudo rm -rf "/Applications/Kolosal CLI.app"
+
+# Remove symlink if created
+sudo rm -f /usr/local/bin/kolosal
+
+# Remove user configuration (optional)
+rm -rf ~/Library/Application\ Support/Kolosal
+rm -rf ~/Library/Logs/Kolosal
+rm -rf ~/Library/Caches/Kolosal
+```
+
+**If installed via system installation:**
+```bash
+# Remove binaries
+sudo rm -f /usr/local/bin/kolosal
+sudo rm -f /usr/local/bin/kolosal-server
+
+# Remove libraries
+sudo rm -f /usr/local/lib/libkolosal_server.dylib
+sudo rm -f /usr/local/lib/libllama-*.dylib
+
+# Remove configuration
+sudo rm -rf /usr/local/etc/kolosal
+
+# Remove user data (optional)
+rm -rf ~/Library/Application\ Support/Kolosal
+rm -rf ~/Library/Logs/Kolosal
+rm -rf ~/Library/Caches/Kolosal
+```
+
+### macOS Manual Verification
+
+Check installation status and files:
+```bash
+# Check if application bundle exists
+ls -la "/Applications/Kolosal CLI.app"
+
+# Check system binaries
+which kolosal
+which kolosal-server
+
+# Check library dependencies
+otool -L /usr/local/bin/kolosal 2>/dev/null || echo "Binary not found in system path"
+
+# Check system configuration
+ls -la /usr/local/etc/kolosal/
+
+# Check user configuration directory
+ls -la ~/Library/Application\ Support/Kolosal/
+
+# Check user logs
+ls -la ~/Library/Logs/Kolosal/
+
+# Check if service is running (if installed)
+sudo launchctl list | grep kolosal
+
+# Verify version and functionality
+kolosal --version
+kolosal --help
+```
+
 ### Windows Manual Verification
 
 Check installation status:
@@ -783,6 +1048,356 @@ For users who prefer a portable version without installation:
     cmake .. -DCMAKE_BUILD_TYPE=Release \
              -DCMAKE_OSX_DEPLOYMENT_TARGET=11.0
     ```
+
+#### macOS Packaging Issues
+
+**Common Issues and Quick Solutions:**
+
+If you're experiencing multiple packaging errors, try this comprehensive fix first:
+
+```bash
+# Complete clean and rebuild with error-free configuration
+cd ..
+rm -rf build build-release
+
+# Create docs directory and disable problematic features
+mkdir -p docs
+
+# Start fresh with minimal configuration
+mkdir build && cd build
+
+# Configure for user installation with all problematic features disabled
+cmake .. -DCMAKE_BUILD_TYPE=Release \
+         -DCMAKE_INSTALL_PREFIX="$HOME/local" \
+         -DCPACK_PACKAGING_INSTALL_PREFIX="$HOME/local" \
+         -DCMAKE_OSX_ARCHITECTURES=$(uname -m) \
+         -DCPACK_DMG_BACKGROUND_IMAGE="" \
+         -DCPACK_BUNDLE_STARTUP_COMMAND=""
+
+# Suppress ranlib warnings and build
+export RANLIB="ranlib -no_warning_for_no_symbols"
+make -j$(sysctl -n hw.ncpu)
+make package
+```
+
+**Specific Error Solutions:**
+
+**Config File Path Error (`Error copying file...config.apple.yaml`):**
+```bash
+# This error occurs when the config file path is incorrectly constructed
+# The CMakeLists.txt has been updated to use the config.yaml already built in bin/
+
+# Simply rebuild - the config file issue is now resolved in the CMakeLists.txt
+cmake .. -DCMAKE_BUILD_TYPE=Release \
+         -DCMAKE_INSTALL_PREFIX="$HOME/local" \
+         -DCPACK_PACKAGING_INSTALL_PREFIX="$HOME/local"
+make -j$(sysctl -n hw.ncpu)
+make package
+```
+
+**DMG Background Image Error (`Error copying disk volume background image`):**
+```bash
+# This error occurs when the DMG background image is missing or inaccessible
+# Quick fix: Disable the background image entirely
+
+# Method 1: Disable background image
+cmake .. -DCMAKE_BUILD_TYPE=Release \
+         -DCPACK_DMG_BACKGROUND_IMAGE="" \
+         -DCMAKE_INSTALL_PREFIX="$HOME/local"
+make -j$(sysctl -n hw.ncpu)
+make package
+
+# Method 2: Create the missing docs directory and background image
+mkdir -p docs
+# Create a simple background image (requires ImageMagick or skip this step)
+convert -size 600x400 xc:lightblue docs/dmg_background.png 2>/dev/null || \
+echo "Background image creation skipped - DMG will use default background"
+
+**Directory Compression Error (`Problem compressing the directory`):**
+```bash
+# This error often follows from permission issues or corrupted package structure
+# Complete reset and rebuild approach:
+
+# Step 1: Clean everything
+cd ..
+sudo rm -rf build build-release _CPack_Packages
+git clean -fdx build*/  # Remove any build artifacts
+
+# Step 2: Check disk space and permissions
+df -h .  # Ensure sufficient disk space (at least 2GB free)
+ls -la . # Check directory permissions
+
+# Step 3: Rebuild with fresh configuration
+mkdir build && cd build
+
+# Use the most compatible configuration
+cmake .. -DCMAKE_BUILD_TYPE=Release \
+         -DCMAKE_INSTALL_PREFIX="$HOME/local" \
+         -DCPACK_PACKAGING_INSTALL_PREFIX="$HOME/local" \
+         -DCPACK_DMG_BACKGROUND_IMAGE="" \
+         -DCPACK_GENERATOR="DragNDrop" \
+         -DCPACK_DMG_FORMAT="UDZO"
+
+# Step 4: Build and package with verbose output
+make -j$(sysctl -n hw.ncpu) VERBOSE=1
+make package VERBOSE=1
+
+# Alternative: Create ZIP package instead of DMG
+cmake .. -DCMAKE_BUILD_TYPE=Release \
+         -DCMAKE_INSTALL_PREFIX="$HOME/local" \
+         -DCPACK_GENERATOR="ZIP"
+make -j$(sysctl -n hw.ncpu)
+make package
+```
+
+**Permission Issues During Packaging:**
+```bash
+# If you get permission denied errors during packaging:
+
+# Option 1: Fix permissions recursively
+chmod -R 755 build/
+sudo chown -R $USER:staff build/
+
+# Option 2: Use completely user-local installation
+cmake .. -DCMAKE_BUILD_TYPE=Release \
+         -DCMAKE_INSTALL_PREFIX="$HOME/.local" \
+         -DCPACK_PACKAGING_INSTALL_PREFIX="$HOME/.local" \
+         -DCPACK_SET_DESTDIR=OFF
+
+# Option 3: Skip system directories entirely
+cmake .. -DCMAKE_BUILD_TYPE=Release \
+         -DSKIP_INSTALL_FILES=ON \
+         -DCPACK_COMPONENTS_ALL="Runtime"
+make package
+
+# Option 4: Use sudo only for packaging (not recommended for development)
+make -j$(sysctl -n hw.ncpu)
+sudo make package
+```
+
+**Individual Issue Solutions:**
+
+1. **DMG creation fails due to permission errors:**
+   ```bash
+   # If you get "Maybe need administrative privileges" errors:
+   # Use sudo for packaging when system directories are involved
+   sudo make package
+   
+   # Or configure for user-only installation (recommended for development)
+   cmake .. -DCMAKE_BUILD_TYPE=Release \
+            -DCMAKE_INSTALL_PREFIX="$HOME/local" \
+            -DCPACK_PACKAGING_INSTALL_PREFIX="$HOME/local"
+   make -j$(sysctl -n hw.ncpu)
+   make package
+   
+   # Alternative: Build without system integration
+   cmake .. -DCMAKE_BUILD_TYPE=Release \
+            -DSKIP_SYSTEM_INSTALL=ON
+   make -j$(sysctl -n hw.ncpu)
+   make package
+   ```
+
+2. **DMG creation fails due to missing dependencies:**
+   ```bash
+   # Ensure all dependencies are properly linked
+   otool -L ./kolosal-cli
+   
+   # Check for missing dylib files
+   ldd ./kolosal-cli 2>/dev/null || echo "ldd not available on macOS, use otool -L instead"
+   
+   # Rebuild with proper library paths
+   cmake .. -DCMAKE_BUILD_TYPE=Release \
+            -DCMAKE_INSTALL_RPATH_USE_LINK_PATH=TRUE
+   make -j$(sysctl -n hw.ncpu)
+   make package
+   ```
+
+3. **Ranlib warnings about "no symbols" and architecture mismatch:**
+   ```bash
+   # These warnings are generally harmless but can be suppressed
+   # They occur when object files are empty for certain architectures
+   # The x86_64 warnings while building arm64 are due to universal binary remnants
+   
+   # To suppress warnings and fix architecture issues:
+   export RANLIB="ranlib -no_warning_for_no_symbols"
+   
+   # Ensure clean architecture-specific build
+   cmake .. -DCMAKE_BUILD_TYPE=Release \
+            -DCMAKE_OSX_ARCHITECTURES=$(uname -m) \
+            -DCMAKE_INSTALL_PREFIX="$HOME/local"
+   make clean  # Clean any mixed architecture artifacts
+   make -j$(sysctl -n hw.ncpu)
+   make package
+   
+   # Alternative: Force architecture and suppress warnings completely
+   rm -rf CMakeFiles CMakeCache.txt
+   cmake .. -DCMAKE_BUILD_TYPE=Release \
+            -DCMAKE_OSX_ARCHITECTURES=arm64 \
+            -DCMAKE_INSTALL_PREFIX="$HOME/local" \
+            -DCPACK_PACKAGING_INSTALL_PREFIX="$HOME/local"
+   AR="ar" RANLIB="ranlib -no_warning_for_no_symbols" make -j$(sysctl -n hw.ncpu)
+   make package
+   ```
+
+4. **DMG background image errors:**
+   ```bash
+   # If you get "Error copying disk volume background image" errors:
+   # Create missing docs directory and background image
+   mkdir -p docs
+   
+   # Create a simple background image or disable it
+   # Option 1: Create a simple solid color background
+   convert -size 600x400 xc:lightgray docs/dmg_background.png 2>/dev/null || \
+   sips -s format png --setProperty pixelWidth 600 --setProperty pixelHeight 400 \
+        --setProperty hasAlpha no --fillColor lightgray \
+        /System/Library/ColorSync/Profiles/Generic\ Gray\ Gamma\ 2.2\ Profile.icc \
+        docs/dmg_background.png 2>/dev/null || \
+   echo "Background image creation failed, will disable DMG background"
+   
+   # Option 2: Disable DMG background image
+   cmake .. -DCMAKE_BUILD_TYPE=Release \
+            -DCPACK_DMG_BACKGROUND_IMAGE=""
+   make -j$(sysctl -n hw.ncpu)
+   make package
+   
+   # Option 3: Use a different image format or path
+   # Place any PNG image (600x400 recommended) at docs/dmg_background.png
+   ```
+
+5. **Configuration file path issues:**
+   ```bash
+   # If you get config file copying errors with wrong paths:
+   # Clean and rebuild with proper path configuration
+   rm -rf build
+   mkdir build && cd build
+   
+   # Ensure config.apple.yaml exists in the source directory
+   ls -la ../config.apple.yaml || echo "Warning: config.apple.yaml not found"
+   
+   # Configure with explicit paths
+   cmake .. -DCMAKE_BUILD_TYPE=Release \
+            -DCMAKE_INSTALL_PREFIX="$HOME/local" \
+            -DCPACK_PACKAGING_INSTALL_PREFIX="$HOME/local"
+   make -j$(sysctl -n hw.ncpu)
+   make package
+   ```
+
+6. **Complete clean rebuild for persistent issues:**
+   ```bash
+   # If packaging continues to fail, do a complete clean rebuild
+   cd ..
+   rm -rf build build-release
+   git clean -fdx  # Warning: removes all untracked files
+   
+   # Create fresh build
+   mkdir build && cd build
+   cmake .. -DCMAKE_BUILD_TYPE=Release \
+            -DCMAKE_INSTALL_PREFIX="$HOME/local" \
+            -DCPACK_PACKAGING_INSTALL_PREFIX="$HOME/local" \
+            -DCPACK_DMG_BACKGROUND_IMAGE=""  # Disable background
+   make -j$(sysctl -n hw.ncpu)
+   make package
+   ```
+
+2. **Code signing issues (for distribution):**
+   ```bash
+   # Check if you have a developer certificate
+   security find-identity -v -p codesigning
+   
+   # Sign the application manually if needed
+   codesign --force --deep --sign "Developer ID Application: Your Name" ./kolosal-cli
+   
+   # Verify signature
+   codesign --verify --verbose ./kolosal-cli
+   
+   # For distribution, notarize with Apple
+   xcrun notarytool submit kolosal-1.0.0-apple-silicon.dmg \
+                           --apple-id your-email@example.com \
+                           --password your-app-specific-password \
+                           --team-id YOUR_TEAM_ID
+   ```
+
+3. **Bundle structure issues:**
+   ```bash
+   # Check bundle structure
+   ls -la /Applications/Kolosal\ CLI.app/Contents/
+   
+   # Verify Info.plist
+   plutil -p /Applications/Kolosal\ CLI.app/Contents/Info.plist
+   
+   # Fix bundle if needed
+   mkdir -p MyApp.app/Contents/{MacOS,Resources}
+   cp kolosal-cli MyApp.app/Contents/MacOS/
+   cp Info.plist MyApp.app/Contents/
+   ```
+
+4. **Library dependency issues:**
+   ```bash
+   # Check all library dependencies
+   otool -L ./kolosal-cli
+   
+   # Fix library paths using install_name_tool
+   install_name_tool -change old_path new_path ./kolosal-cli
+   
+   # Example: Fix libkolosal_server.dylib path
+   install_name_tool -change libkolosal_server.dylib \
+                           @executable_path/libkolosal_server.dylib \
+                           ./kolosal-cli
+   ```
+
+5. **Universal binary issues:**
+   ```bash
+   # Check architecture of binary
+   lipo -info ./kolosal-cli
+   
+   # Create universal binary manually if needed
+   lipo -create -arch arm64 ./kolosal-cli-arm64 \
+               -arch x86_64 ./kolosal-cli-x86_64 \
+               -output ./kolosal-cli-universal
+   
+   # Verify universal binary
+   lipo -detailed_info ./kolosal-cli-universal
+   ```
+
+6. **DMG mounting issues:**
+   ```bash
+   # Check DMG integrity
+   hdiutil verify kolosal-1.0.0-apple-silicon.dmg
+   
+   # Manually mount DMG for debugging
+   hdiutil attach kolosal-1.0.0-apple-silicon.dmg -readonly
+   
+   # Check mounted volume
+   ls -la /Volumes/Kolosal\ CLI/
+   
+   # Unmount when done
+   hdiutil detach /Volumes/Kolosal\ CLI/
+   ```
+
+7. **Gatekeeper and quarantine issues:**
+   ```bash
+   # Remove quarantine attribute if needed
+   xattr -rd com.apple.quarantine /Applications/Kolosal\ CLI.app
+   
+   # Check Gatekeeper status
+   spctl --status
+   
+   # Test Gatekeeper assessment
+   spctl --assess --type execute /Applications/Kolosal\ CLI.app
+   
+   # Temporarily disable Gatekeeper (not recommended for production)
+   sudo spctl --master-disable
+   ```
+
+8. **Installation permission issues:**
+   ```bash
+   # Install to user Applications folder instead of system
+   cp -R Kolosal\ CLI.app ~/Applications/
+   
+   # Or install with proper permissions
+   sudo cp -R Kolosal\ CLI.app /Applications/
+   sudo chown -R root:admin /Applications/Kolosal\ CLI.app
+   ```
 
 #### Windows Build Issues
 
