@@ -1212,22 +1212,6 @@ exit 0
     <string>/tmp/kolosal-setup-error.log</string>
 </dict>
 </plist>")
-    <key>CFBundleShortVersionString</key>
-    <string>${PROJECT_VERSION}</string>
-    <key>CFBundleInfoDictionaryVersion</key>
-    <string>6.0</string>
-    <key>CFBundlePackageType</key>
-    <string>APPL</string>
-    <key>LSMinimumSystemVersion</key>
-    <string>10.13</string>
-    <key>LSRequiresNativeExecution</key>
-    <true/>
-    <key>NSHumanReadableCopyright</key>
-    <string>Copyright © 2025 Kolosal Project. All rights reserved.</string>
-    <key>LSApplicationCategoryType</key>
-    <string>public.app-category.developer-tools</string>
-</dict>
-</plist>")
     
     # Add macOS-specific package information
     set(CPACK_PACKAGE_DESCRIPTION_FILE "${CMAKE_CURRENT_SOURCE_DIR}/README.md")
