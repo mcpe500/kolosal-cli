@@ -683,10 +683,9 @@ elseif(APPLE)
     
     # Install to Homebrew-compatible location if Homebrew is detected
     if(EXISTS "/opt/homebrew" OR EXISTS "/usr/local/Homebrew")
-        # Also install config to Homebrew etc directory
-        install(FILES "${CMAKE_CURRENT_SOURCE_DIR}/config.apple.yaml"
+        # Also install config to Homebrew etc directory (use the same processed config)
+        install(FILES "${CMAKE_BINARY_DIR}/bin/config.yaml"
             DESTINATION /opt/homebrew/etc/kolosal
-            RENAME config.yaml
             PERMISSIONS OWNER_READ OWNER_WRITE GROUP_READ WORLD_READ
             OPTIONAL
         )
@@ -1031,18 +1030,11 @@ elseif(APPLE)
     set(CPACK_DMG_VOLUME_NAME "Kolosal CLI")
     set(CPACK_DMG_FORMAT "UDBZ")  # Compressed DMG
     
-    # Only set background image if it exists
-    if(EXISTS "${CMAKE_CURRENT_SOURCE_DIR}/docs/dmg_background.png")
-        set(CPACK_DMG_BACKGROUND_IMAGE "${CMAKE_CURRENT_SOURCE_DIR}/docs/dmg_background.png")
-    else()
-        # Disable background image if not found
-        set(CPACK_DMG_BACKGROUND_IMAGE "")
-    endif()
+    # Disable background image since docs folder was removed
+    set(CPACK_DMG_BACKGROUND_IMAGE "")
     
-    # DMG window settings (only if setup script exists)
-    if(EXISTS "${CMAKE_CURRENT_SOURCE_DIR}/docs/dmg_setup.scpt")
-        set(CPACK_DMG_DS_STORE_SETUP_SCRIPT "${CMAKE_CURRENT_SOURCE_DIR}/docs/dmg_setup.scpt")
-    endif()
+    # Disable DMG setup script since docs folder was removed  
+    # set(CPACK_DMG_DS_STORE_SETUP_SCRIPT "")
     
     # Create symbolic link to Applications folder in DMG
     set(CPACK_DMG_DISABLE_APPLICATIONS_SYMLINK OFF)
@@ -1051,10 +1043,8 @@ elseif(APPLE)
     set(CPACK_BUNDLE_NAME "Kolosal CLI")
     set(CPACK_BUNDLE_PLIST "${CMAKE_CURRENT_BINARY_DIR}/Info.plist")
     
-    # Only set bundle icon if it exists
-    if(EXISTS "${CMAKE_CURRENT_SOURCE_DIR}/docs/kolosal.icns")
-        set(CPACK_BUNDLE_ICON "${CMAKE_CURRENT_SOURCE_DIR}/docs/kolosal.icns")
-    endif()
+    # Disable bundle icon since docs folder was removed
+    # set(CPACK_BUNDLE_ICON "")
     
     # Create Info.plist for macOS bundle
     file(WRITE "${CMAKE_CURRENT_BINARY_DIR}/Info.plist"
