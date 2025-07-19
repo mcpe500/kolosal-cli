@@ -543,29 +543,26 @@ Kolosal CLI supports creating .dmg disk image packages for easy distribution and
 
 3. **Install the package:**
    ```bash
-   # Method 1: GUI Installation (Recommended)
+   # Method 1: Automatic GUI Installation (Recommended)
    # Double-click the DMG file to mount it
    open kolosal-1.0.0-apple-silicon.dmg
    
-   # This will open Finder with the DMG contents
    # Drag the Kolosal CLI application to your Applications folder
-   # Then run Kolosal CLI from Applications to automatically set up command line access
+   # The command line tools are automatically set up when you drag to Applications!
+   # No additional steps needed - the symlinks are created automatically.
    
-   # Method 2: Command Line Installation with Automatic PATH Setup
+   # Method 2: Command Line Installation
    # Mount the DMG first
    hdiutil attach kolosal-1.0.0-apple-silicon.dmg
    
-   # Copy to Applications and set up command line access
+   # Copy to Applications (automatic setup included)
    sudo cp -R "/Volumes/Kolosal CLI/Kolosal CLI.app" /Applications/
    
-   # Run the installer script to automatically create symlinks
-   "/Applications/Kolosal CLI.app/Contents/MacOS/kolosal_installer.sh"
-   
-   # Method 3: Manual Installation from DMG
+   # Method 3: Manual Installation with Manual Symlinks
    # After mounting the DMG, copy the files manually
    sudo cp -R "/Volumes/Kolosal CLI/Kolosal CLI.app" /Applications/
    
-   # Manually create symlinks for command line access
+   # Manually create symlinks for command line access (only if automatic setup fails)
    sudo ln -sf "/Applications/Kolosal CLI.app/Contents/MacOS/kolosal" /usr/local/bin/kolosal
    sudo ln -sf "/Applications/Kolosal CLI.app/Contents/MacOS/kolosal-server" /usr/local/bin/kolosal-server
    
@@ -578,14 +575,14 @@ Kolosal CLI supports creating .dmg disk image packages for easy distribution and
    # The kolosal command should now be automatically available
    kolosal --help
    
-   # If the command is not found, the installation may need manual setup:
-   # Option 1: Run the installer script manually
-   "/Applications/Kolosal CLI.app/Contents/MacOS/kolosal_installer.sh"
+   # If the command is not found after dragging to Applications:
+   # Option 1: Check if symlinks exist
+   ls -la /usr/local/bin/kolosal*
    
-   # Option 2: Create symlinks manually
+   # Option 2: Manually create symlinks if needed
    sudo ln -sf "/Applications/Kolosal CLI.app/Contents/MacOS/kolosal" /usr/local/bin/kolosal
    
-   # Option 3: Add to your shell profile (if installed to user directory)
+   # Option 3: Add to your shell profile as fallback
    echo 'export PATH="/usr/local/bin:$PATH"' >> ~/.zshrc
    source ~/.zshrc
    
@@ -594,13 +591,15 @@ Kolosal CLI supports creating .dmg disk image packages for easy distribution and
    kolosal --help
    ```
 
-   **Note:** The new DMG installer automatically creates symlinks to `/usr/local/bin/kolosal` when you run the application from the Applications folder, making the command available system-wide without manual PATH configuration.
+   **Note:** The new DMG automatically creates symlinks to `/usr/local/bin/kolosal` when you drag the application to the Applications folder. The setup happens automatically via a LaunchAgent that runs when you log in, making the command available system-wide without any manual configuration.
 
    After installation, you can run the CLI from anywhere using just `kolosal`.
 
 ### macOS Package Features
 
-- **System Integration**: Installs to `/usr/local/bin/kolosal` for system-wide access
+- **Automatic Installation**: Simply drag to Applications folder - command line tools are set up automatically
+- **LaunchAgent Integration**: Automatic setup via macOS LaunchAgent that runs on login
+- **System Integration**: Creates symlinks to `/usr/local/bin/kolosal` for system-wide access
 - **Application Bundle**: Creates proper macOS application bundle structure
 - **Native Libraries**: Includes all required dylib files (libkolosal_server.dylib, inference engines)
 - **Configuration**: Installs default config to `/usr/local/etc/kolosal/config.yaml`
@@ -608,6 +607,7 @@ Kolosal CLI supports creating .dmg disk image packages for easy distribution and
 - **Homebrew Compatible**: Follows Homebrew conventions for easy integration
 - **Metal Support**: Includes Apple Metal inference engine for Apple Silicon optimization
 - **Universal Binary**: Supports both Intel and Apple Silicon architectures (if built universally)
+- **Zero-Configuration**: No manual shell scripts or PATH setup required
 - **Code Signing Ready**: Prepared for code signing and notarization
 
 ### macOS Advanced Packaging Options

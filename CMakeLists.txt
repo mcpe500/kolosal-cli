@@ -732,6 +732,40 @@ elseif(APPLE)
                 )
             endif()
         endif()
+        
+        # Automatically create symlinks to /usr/local/bin for immediate access
+        execute_process(
+            COMMAND \${CMAKE_COMMAND} -E make_directory /usr/local/bin
+            ERROR_QUIET
+        )
+        execute_process(
+            COMMAND ln -sf \"\${CMAKE_INSTALL_PREFIX}/bin/kolosal\" /usr/local/bin/kolosal
+            ERROR_QUIET
+        )
+        execute_process(
+            COMMAND ln -sf \"\${CMAKE_INSTALL_PREFIX}/bin/kolosal-server\" /usr/local/bin/kolosal-server
+            ERROR_QUIET
+        )
+        
+        # Also create symlinks from Applications if installed there
+        if(EXISTS \"/Applications/Kolosal CLI.app/Contents/MacOS/kolosal\")
+            execute_process(
+                COMMAND ln -sf \"/Applications/Kolosal CLI.app/Contents/MacOS/kolosal\" /usr/local/bin/kolosal
+                ERROR_QUIET
+            )
+            execute_process(
+                COMMAND ln -sf \"/Applications/Kolosal CLI.app/Contents/MacOS/kolosal-server\" /usr/local/bin/kolosal-server
+                ERROR_QUIET
+            )
+        endif()
+        
+        # Load the LaunchAgent for automatic future setup
+        if(EXISTS \"\$ENV{HOME}/Library/LaunchAgents/com.kolosal.cli.setup.plist\")
+            execute_process(
+                COMMAND launchctl load \"\$ENV{HOME}/Library/LaunchAgents/com.kolosal.cli.setup.plist\"
+                ERROR_QUIET
+            )
+        endif()
     ")
     
     # Create launchd plist for kolosal-server (macOS system service)
@@ -764,6 +798,12 @@ elseif(APPLE)
     
     install(FILES ${LAUNCHD_PLIST_FILE}
         DESTINATION LaunchDaemons
+        OPTIONAL
+    )
+    
+    # Install the LaunchAgent for automatic setup
+    install(FILES ${LAUNCH_AGENT_PLIST}
+        DESTINATION "$ENV{HOME}/Library/LaunchAgents"
         OPTIONAL
     )
     
@@ -1046,85 +1086,51 @@ elseif(APPLE)
     # Disable bundle icon since docs folder was removed
     # set(CPACK_BUNDLE_ICON "")
     
-    # Set startup command for the bundle to automatically install symlinks
-    set(CPACK_BUNDLE_STARTUP_COMMAND "${CMAKE_CURRENT_BINARY_DIR}/kolosal_installer.sh")
-    
-    # Create the installer script that handles PATH setup
-    file(WRITE "${CMAKE_CURRENT_BINARY_DIR}/kolosal_installer.sh"
+    # Create automatic installer script that runs post-installation
+    set(DMG_POSTINSTALL_SCRIPT "${CMAKE_CURRENT_BINARY_DIR}/dmg_postinstall.sh")
+    file(WRITE ${DMG_POSTINSTALL_SCRIPT}
 "#!/bin/bash
-# Kolosal CLI Installer Script for macOS
-# This script runs when the user opens Kolosal CLI from the DMG
+# Automatic post-installation script for Kolosal CLI DMG
+# This runs automatically when the app is copied to Applications
 
-echo \"Welcome to Kolosal CLI!\"
-echo \"\"
+echo \"Setting up Kolosal CLI command line access...\"
 
-# Check if we're running from DMG or Applications
-if [[ \"\$PWD\" == *\"/Volumes/\"* ]]; then
-    echo \"It looks like you're running Kolosal CLI from the DMG.\"
-    echo \"For the best experience, please:\"
-    echo \"1. Copy Kolosal CLI.app to your Applications folder\"
-    echo \"2. Run it from Applications to complete the installation\"
-    echo \"\"
-    
-    # Open Applications folder for user convenience
-    open /Applications
-    
-    # Ask user if they want to proceed with manual setup
-    read -p \"Would you like to set up command line access now? (y/n): \" -n 1 -r
-    echo
-    if [[ \$REPLY =~ ^[Yy]\$ ]]; then
-        echo \"Setting up command line access...\"
-        
-        # Create symlinks from DMG location
-        DMG_PATH=\$(dirname \"\$0\")
-        if [ -f \"\$DMG_PATH/kolosal\" ]; then
-            sudo mkdir -p /usr/local/bin
-            sudo ln -sf \"\$DMG_PATH/kolosal\" /usr/local/bin/kolosal
-            sudo ln -sf \"\$DMG_PATH/kolosal-server\" /usr/local/bin/kolosal-server
-            echo \"✓ Command line tools installed to /usr/local/bin\"
-            echo \"You can now use 'kolosal' from any terminal!\"
-        fi
-    fi
-else
-    # Running from Applications - do full installation
-    echo \"Installing Kolosal CLI command line tools...\"
-    
-    # Get the path to the app bundle
-    APP_PATH=\$(dirname \"\$0\")
-    
-    # Create symlinks to /usr/local/bin
-    sudo mkdir -p /usr/local/bin
-    sudo ln -sf \"\$APP_PATH/kolosal\" /usr/local/bin/kolosal
-    sudo ln -sf \"\$APP_PATH/kolosal-server\" /usr/local/bin/kolosal-server
-    
-    # Create user directories
-    mkdir -p \"\$HOME/Library/Application Support/Kolosal/models\"
-    mkdir -p \"\$HOME/Library/Logs/Kolosal\"
-    mkdir -p \"\$HOME/Library/Caches/Kolosal/models\"
-    
-    # Copy config file if it doesn't exist
-    if [ ! -f \"\$HOME/Library/Application Support/Kolosal/config.yaml\" ] && [ -f \"\$APP_PATH/config.yaml\" ]; then
-        cp \"\$APP_PATH/config.yaml\" \"\$HOME/Library/Application Support/Kolosal/config.yaml\"
-        echo \"✓ Configuration file copied to user directory\"
-    fi
-    
-    echo \"✓ Installation complete!\"
-    echo \"\"
-    echo \"Getting started:\"
-    echo \"  kolosal --help\"
-    echo \"  kolosal-server --help\"
-    echo \"\"
-    echo \"The 'kolosal' command is now available from any terminal.\"
+# Create symlinks to /usr/local/bin for global access
+sudo mkdir -p /usr/local/bin 2>/dev/null || true
+
+# Create symlinks from Applications folder
+if [ -d \"/Applications/Kolosal CLI.app/Contents/MacOS\" ]; then
+    sudo ln -sf \"/Applications/Kolosal CLI.app/Contents/MacOS/kolosal\" /usr/local/bin/kolosal 2>/dev/null || true
+    sudo ln -sf \"/Applications/Kolosal CLI.app/Contents/MacOS/kolosal-server\" /usr/local/bin/kolosal-server 2>/dev/null || true
+    echo \"✓ Command line tools linked to /usr/local/bin\"
 fi
 
-echo \"\"
-echo \"Visit https://github.com/kolosalai/kolosal-cli for documentation and support.\"
+# Create user directories
+mkdir -p \"\$HOME/Library/Application Support/Kolosal/models\" 2>/dev/null || true
+mkdir -p \"\$HOME/Library/Logs/Kolosal\" 2>/dev/null || true
+mkdir -p \"\$HOME/Library/Caches/Kolosal/models\" 2>/dev/null || true
+
+# Copy config file if it doesn't exist and is available
+if [ ! -f \"\$HOME/Library/Application Support/Kolosal/config.yaml\" ]; then
+    if [ -f \"/Applications/Kolosal CLI.app/Contents/Resources/config.yaml\" ]; then
+        cp \"/Applications/Kolosal CLI.app/Contents/Resources/config.yaml\" \"\$HOME/Library/Application Support/Kolosal/config.yaml\" 2>/dev/null || true
+        echo \"✓ Configuration file copied to user directory\"
+    fi
+fi
+
+echo \"✓ Kolosal CLI setup complete!\"
+echo \"The 'kolosal' command is now available from any terminal.\"
+
+exit 0
 ")
     
-    # Make the installer script executable
-    execute_process(COMMAND chmod +x "${CMAKE_CURRENT_BINARY_DIR}/kolosal_installer.sh")
+    # Make the script executable
+    execute_process(COMMAND chmod +x ${DMG_POSTINSTALL_SCRIPT})
     
-    # Create Info.plist for macOS bundle
+    # Use CPack's built-in post-install mechanism instead of startup command
+    set(CPACK_POSTFLIGHT_SCRIPT ${DMG_POSTINSTALL_SCRIPT})
+    
+    # Create Info.plist for macOS bundle with automatic setup
     file(WRITE "${CMAKE_CURRENT_BINARY_DIR}/Info.plist"
 "<?xml version=\"1.0\" encoding=\"UTF-8\"?>
 <!DOCTYPE plist PUBLIC \"-//Apple//DTD PLIST 1.0//EN\" \"http://www.apple.com/DTDs/PropertyList-1.0.dtd\">
@@ -1138,6 +1144,74 @@ echo \"Visit https://github.com/kolosalai/kolosal-cli for documentation and supp
     <string>Kolosal CLI</string>
     <key>CFBundleVersion</key>
     <string>${PROJECT_VERSION}</string>
+    <key>CFBundleShortVersionString</key>
+    <string>${PROJECT_VERSION}</string>
+    <key>CFBundleInfoDictionaryVersion</key>
+    <string>6.0</string>
+    <key>CFBundlePackageType</key>
+    <string>APPL</string>
+    <key>LSMinimumSystemVersion</key>
+    <string>10.13</string>
+    <key>LSRequiresNativeExecution</key>
+    <true/>
+    <key>NSHumanReadableCopyright</key>
+    <string>Copyright © 2025 Kolosal Project. All rights reserved.</string>
+    <key>LSApplicationCategoryType</key>
+    <string>public.app-category.developer-tools</string>
+    <key>NSAppleScriptEnabled</key>
+    <true/>
+    <key>LSUIElement</key>
+    <false/>
+</dict>
+</plist>")
+    
+    # Create a LaunchAgent that automatically sets up symlinks when the user logs in
+    set(LAUNCH_AGENT_PLIST "${CMAKE_CURRENT_BINARY_DIR}/com.kolosal.cli.setup.plist")
+    file(WRITE ${LAUNCH_AGENT_PLIST}
+"<?xml version=\"1.0\" encoding=\"UTF-8\"?>
+<!DOCTYPE plist PUBLIC \"-//Apple//DTD PLIST 1.0//EN\" \"http://www.apple.com/DTDs/PropertyList-1.0.dtd\">
+<plist version=\"1.0\">
+<dict>
+    <key>Label</key>
+    <string>com.kolosal.cli.setup</string>
+    <key>ProgramArguments</key>
+    <array>
+        <string>/bin/bash</string>
+        <string>-c</string>
+        <string>
+        # Automatic Kolosal CLI setup
+        if [ -d \"/Applications/Kolosal CLI.app/Contents/MacOS\" ]; then
+            # Create symlinks if they don't exist
+            if [ ! -L \"/usr/local/bin/kolosal\" ]; then
+                mkdir -p /usr/local/bin 2>/dev/null || true
+                ln -sf \"/Applications/Kolosal CLI.app/Contents/MacOS/kolosal\" /usr/local/bin/kolosal 2>/dev/null || true
+                ln -sf \"/Applications/Kolosal CLI.app/Contents/MacOS/kolosal-server\" /usr/local/bin/kolosal-server 2>/dev/null || true
+            fi
+            
+            # Create user directories
+            mkdir -p \"\$HOME/Library/Application Support/Kolosal/models\" 2>/dev/null || true
+            mkdir -p \"\$HOME/Library/Logs/Kolosal\" 2>/dev/null || true
+            mkdir -p \"\$HOME/Library/Caches/Kolosal/models\" 2>/dev/null || true
+            
+            # Copy config if needed
+            if [ ! -f \"\$HOME/Library/Application Support/Kolosal/config.yaml\" ] && [ -f \"/Applications/Kolosal CLI.app/Contents/Resources/config.yaml\" ]; then
+                cp \"/Applications/Kolosal CLI.app/Contents/Resources/config.yaml\" \"\$HOME/Library/Application Support/Kolosal/config.yaml\" 2>/dev/null || true
+            fi
+        fi
+        </string>
+    </array>
+    <key>RunAtLoad</key>
+    <true/>
+    <key>KeepAlive</key>
+    <false/>
+    <key>LaunchOnlyOnce</key>
+    <true/>
+    <key>StandardOutPath</key>
+    <string>/tmp/kolosal-setup.log</string>
+    <key>StandardErrorPath</key>
+    <string>/tmp/kolosal-setup-error.log</string>
+</dict>
+</plist>")
     <key>CFBundleShortVersionString</key>
     <string>${PROJECT_VERSION}</string>
     <key>CFBundleInfoDictionaryVersion</key>
