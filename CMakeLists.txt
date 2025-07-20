@@ -733,7 +733,7 @@ elseif(APPLE)
             endif()
         endif()
         
-        # Automatically create symlinks to /usr/local/bin for immediate access
+        # Create symlinks to /usr/local/bin for immediate access during installation
         execute_process(
             COMMAND \${CMAKE_COMMAND} -E make_directory /usr/local/bin
             ERROR_QUIET
@@ -759,13 +759,27 @@ elseif(APPLE)
             )
         endif()
         
-        # Load the LaunchAgent for automatic future setup
-        if(EXISTS \"\$ENV{HOME}/Library/LaunchAgents/com.kolosal.cli.setup.plist\")
-            execute_process(
-                COMMAND launchctl load \"\$ENV{HOME}/Library/LaunchAgents/com.kolosal.cli.setup.plist\"
-                ERROR_QUIET
-            )
-        endif()
+        # Update shell profiles for PATH during installation
+        set(SHELL_PROFILES \"\$ENV{HOME}/.zshrc\" \"\$ENV{HOME}/.bash_profile\" \"\$ENV{HOME}/.bashrc\" \"\$ENV{HOME}/.profile\")
+        foreach(profile IN LISTS SHELL_PROFILES)
+            if(EXISTS \"\${profile}\")
+                # Check if PATH is already configured
+                execute_process(
+                    COMMAND grep -q \"/usr/local/bin\" \"\${profile}\"
+                    RESULT_VARIABLE GREP_RESULT
+                    ERROR_QUIET
+                )
+                execute_process(
+                    COMMAND grep -q \"\${CMAKE_INSTALL_PREFIX}/bin\" \"\${profile}\"
+                    RESULT_VARIABLE GREP_RESULT2
+                    ERROR_QUIET
+                )
+                if(NOT GREP_RESULT EQUAL 0 AND NOT GREP_RESULT2 EQUAL 0)
+                    # Add PATH configuration to shell profile
+                    file(APPEND \"\${profile}\" \"\\n# Added by Kolosal CLI installer\\nexport PATH=\\\"/usr/local/bin:\${CMAKE_INSTALL_PREFIX}/bin:\\\$PATH\\\"\\n\")
+                endif()
+            endif()
+        endforeach()
     ")
     
     # Create launchd plist for kolosal-server (macOS system service)
@@ -798,12 +812,6 @@ elseif(APPLE)
     
     install(FILES ${LAUNCHD_PLIST_FILE}
         DESTINATION LaunchDaemons
-        OPTIONAL
-    )
-    
-    # Install the LaunchAgent for automatic setup
-    install(FILES ${LAUNCH_AGENT_PLIST}
-        DESTINATION "$ENV{HOME}/Library/LaunchAgents"
         OPTIONAL
     )
     
@@ -1086,51 +1094,7 @@ elseif(APPLE)
     # Disable bundle icon since docs folder was removed
     # set(CPACK_BUNDLE_ICON "")
     
-    # Create automatic installer script that runs post-installation
-    set(DMG_POSTINSTALL_SCRIPT "${CMAKE_CURRENT_BINARY_DIR}/dmg_postinstall.sh")
-    file(WRITE ${DMG_POSTINSTALL_SCRIPT}
-"#!/bin/bash
-# Automatic post-installation script for Kolosal CLI DMG
-# This runs automatically when the app is copied to Applications
-
-echo \"Setting up Kolosal CLI command line access...\"
-
-# Create symlinks to /usr/local/bin for global access
-sudo mkdir -p /usr/local/bin 2>/dev/null || true
-
-# Create symlinks from Applications folder
-if [ -d \"/Applications/Kolosal CLI.app/Contents/MacOS\" ]; then
-    sudo ln -sf \"/Applications/Kolosal CLI.app/Contents/MacOS/kolosal\" /usr/local/bin/kolosal 2>/dev/null || true
-    sudo ln -sf \"/Applications/Kolosal CLI.app/Contents/MacOS/kolosal-server\" /usr/local/bin/kolosal-server 2>/dev/null || true
-    echo \"✓ Command line tools linked to /usr/local/bin\"
-fi
-
-# Create user directories
-mkdir -p \"\$HOME/Library/Application Support/Kolosal/models\" 2>/dev/null || true
-mkdir -p \"\$HOME/Library/Logs/Kolosal\" 2>/dev/null || true
-mkdir -p \"\$HOME/Library/Caches/Kolosal/models\" 2>/dev/null || true
-
-# Copy config file if it doesn't exist and is available
-if [ ! -f \"\$HOME/Library/Application Support/Kolosal/config.yaml\" ]; then
-    if [ -f \"/Applications/Kolosal CLI.app/Contents/Resources/config.yaml\" ]; then
-        cp \"/Applications/Kolosal CLI.app/Contents/Resources/config.yaml\" \"\$HOME/Library/Application Support/Kolosal/config.yaml\" 2>/dev/null || true
-        echo \"✓ Configuration file copied to user directory\"
-    fi
-fi
-
-echo \"✓ Kolosal CLI setup complete!\"
-echo \"The 'kolosal' command is now available from any terminal.\"
-
-exit 0
-")
-    
-    # Make the script executable
-    execute_process(COMMAND chmod +x ${DMG_POSTINSTALL_SCRIPT})
-    
-    # Use CPack's built-in post-install mechanism instead of startup command
-    set(CPACK_POSTFLIGHT_SCRIPT ${DMG_POSTINSTALL_SCRIPT})
-    
-    # Create Info.plist for macOS bundle with automatic setup
+    # Create Info.plist for macOS bundle with integrated setup
     file(WRITE "${CMAKE_CURRENT_BINARY_DIR}/Info.plist"
 "<?xml version=\"1.0\" encoding=\"UTF-8\"?>
 <!DOCTYPE plist PUBLIC \"-//Apple//DTD PLIST 1.0//EN\" \"http://www.apple.com/DTDs/PropertyList-1.0.dtd\">
@@ -1165,80 +1129,6 @@ exit 0
 </dict>
 </plist>")
     
-    # Create setup script for LaunchAgent
-    set(SETUP_SCRIPT "${CMAKE_CURRENT_BINARY_DIR}/kolosal-setup.sh")
-    file(WRITE ${SETUP_SCRIPT}
-"#!/bin/bash
-# Automatic Kolosal CLI setup script
-
-# Exit on any error
-set -e
-
-# Log all actions
-exec > /tmp/kolosal-setup.log 2>&1
-
-echo \"Starting Kolosal CLI setup at \$(date)\"
-
-# Check if the app exists
-if [ ! -d \"/Applications/Kolosal CLI.app/Contents/MacOS\" ]; then
-    echo \"Kolosal CLI.app not found in /Applications\"
-    exit 0
-fi
-
-echo \"Found Kolosal CLI.app in /Applications\"
-
-# Create user directories (these don't require sudo)
-mkdir -p \"\$HOME/Library/Application Support/Kolosal/models\" || true
-mkdir -p \"\$HOME/Library/Logs/Kolosal\" || true  
-mkdir -p \"\$HOME/Library/Caches/Kolosal/models\" || true
-echo \"Created user directories\"
-
-# Copy config if needed
-if [ ! -f \"\$HOME/Library/Application Support/Kolosal/config.yaml\" ] && [ -f \"/Applications/Kolosal CLI.app/Contents/Resources/config.yaml\" ]; then
-    cp \"/Applications/Kolosal CLI.app/Contents/Resources/config.yaml\" \"\$HOME/Library/Application Support/Kolosal/config.yaml\" || true
-    echo \"Copied config file to user directory\"
-fi
-
-# Try to create symlinks (may fail if no sudo access, that's OK)
-if [ ! -L \"/usr/local/bin/kolosal\" ]; then
-    mkdir -p /usr/local/bin 2>/dev/null || true
-    ln -sf \"/Applications/Kolosal CLI.app/Contents/MacOS/kolosal\" /usr/local/bin/kolosal 2>/dev/null || true
-    ln -sf \"/Applications/Kolosal CLI.app/Contents/MacOS/kolosal-server\" /usr/local/bin/kolosal-server 2>/dev/null || true
-    if [ -L \"/usr/local/bin/kolosal\" ]; then
-        echo \"Created symlinks in /usr/local/bin\"
-    else
-        echo \"Could not create symlinks in /usr/local/bin (no permissions)\"
-    fi
-fi
-
-echo \"Kolosal CLI setup completed at \$(date)\"
-")
-
-    # Make the script executable
-    execute_process(COMMAND chmod +x ${SETUP_SCRIPT})
-
-    # Create a LaunchAgent that runs the setup script
-    set(LAUNCH_AGENT_PLIST "${CMAKE_CURRENT_BINARY_DIR}/com.kolosal.cli.setup.plist")
-    file(WRITE ${LAUNCH_AGENT_PLIST}
-"<?xml version=\"1.0\" encoding=\"UTF-8\"?>
-<!DOCTYPE plist PUBLIC \"-//Apple//DTD PLIST 1.0//EN\" \"http://www.apple.com/DTDs/PropertyList-1.0.dtd\">
-<plist version=\"1.0\">
-<dict>
-    <key>Label</key>
-    <string>com.kolosal.cli.setup</string>
-    <key>Program</key>
-    <string>${SETUP_SCRIPT}</string>
-    <key>RunAtLoad</key>
-    <true/>
-    <key>LaunchOnlyOnce</key>
-    <true/>
-    <key>StandardOutPath</key>
-    <string>/tmp/kolosal-setup.log</string>
-    <key>StandardErrorPath</key>
-    <string>/tmp/kolosal-setup-error.log</string>
-</dict>
-</plist>")
-    
     # Add macOS-specific package information
     set(CPACK_PACKAGE_DESCRIPTION_FILE "${CMAKE_CURRENT_SOURCE_DIR}/README.md")
     
@@ -1250,94 +1140,6 @@ echo \"Kolosal CLI setup completed at \$(date)\"
         set(CPACK_SYSTEM_NAME "macos-x64")
         set(CPACK_PACKAGE_FILE_NAME "kolosal-${PROJECT_VERSION}-intel-mac")
     endif()
-    
-    # Create post-install script for macOS
-    set(MACOS_POSTINSTALL_SCRIPT "${CMAKE_CURRENT_BINARY_DIR}/postinstall_macos")
-    file(WRITE ${MACOS_POSTINSTALL_SCRIPT}
-"#!/bin/bash
-# Post-installation script for Kolosal CLI on macOS
-
-echo \"Setting up Kolosal CLI on macOS...\"
-
-# Create necessary directories
-mkdir -p \"$HOME/Library/Application Support/Kolosal/models\"
-mkdir -p \"$HOME/Library/Logs/Kolosal\"
-mkdir -p \"$HOME/Library/Caches/Kolosal/models\"
-
-# Copy configuration file if it doesn't exist
-if [ ! -f \"$HOME/Library/Application Support/Kolosal/config.yaml\" ]; then
-    if [ -f \"${CMAKE_INSTALL_PREFIX}/etc/kolosal/config.yaml\" ]; then
-        cp \"${CMAKE_INSTALL_PREFIX}/etc/kolosal/config.yaml\" \"$HOME/Library/Application Support/Kolosal/config.yaml\"
-        echo \"Configuration file copied to user directory\"
-    fi
-fi
-
-# Set proper permissions
-chmod 755 ${CMAKE_INSTALL_PREFIX}/bin/kolosal
-chmod 755 ${CMAKE_INSTALL_PREFIX}/bin/kolosal-server
-
-# Create symlinks to /usr/local/bin for global access (preferred method)
-echo \"Creating symlinks for global command line access...\"
-sudo mkdir -p /usr/local/bin
-sudo ln -sf \"${CMAKE_INSTALL_PREFIX}/bin/kolosal\" /usr/local/bin/kolosal
-sudo ln -sf \"${CMAKE_INSTALL_PREFIX}/bin/kolosal-server\" /usr/local/bin/kolosal-server
-
-# Also create symlinks from common installation paths
-if [ -d \"/Applications/Kolosal CLI.app/Contents/MacOS\" ]; then
-    sudo ln -sf \"/Applications/Kolosal CLI.app/Contents/MacOS/kolosal\" /usr/local/bin/kolosal
-    sudo ln -sf \"/Applications/Kolosal CLI.app/Contents/MacOS/kolosal-server\" /usr/local/bin/kolosal-server
-    echo \"Created symlinks from /Applications/Kolosal CLI.app\"
-fi
-
-# Update shell profiles for PATH (fallback method)
-for profile in ~/.zshrc ~/.bash_profile ~/.bashrc ~/.profile; do
-    if [ -f \"\$profile\" ] && ! grep -q \"/usr/local/bin\" \"\$profile\" && ! grep -q \"${CMAKE_INSTALL_PREFIX}/bin\" \"\$profile\"; then
-        echo \"\" >> \"\$profile\"
-        echo \"# Added by Kolosal CLI installer\" >> \"\$profile\"
-        echo \"export PATH=\\\"/usr/local/bin:${CMAKE_INSTALL_PREFIX}/bin:\\\$PATH\\\"\" >> \"\$profile\"
-        echo \"Updated \$profile with PATH configuration\"
-    fi
-done
-
-# Ensure /usr/local/bin is in the current session PATH
-export PATH=\"/usr/local/bin:\$PATH\"
-
-# Verify installation
-if command -v kolosal >/dev/null 2>&1; then
-    echo \"✓ kolosal command is now available globally\"
-    kolosal --version 2>/dev/null || echo \"kolosal executable found in PATH\"
-else
-    echo \"⚠ kolosal command not found in PATH. You may need to restart your terminal or run:\"
-    echo \"  export PATH=\\\"/usr/local/bin:\$PATH\\\"\"
-fi
-
-# Load launchd service (optional)
-if [ -f \"${CMAKE_INSTALL_PREFIX}/LaunchDaemons/com.kolosal.server.plist\" ]; then
-    echo \"Kolosal server service available. To start: sudo launchctl load ${CMAKE_INSTALL_PREFIX}/LaunchDaemons/com.kolosal.server.plist\"
-fi
-
-echo \"\"
-echo \"Kolosal CLI installation complete!\"
-echo \"\"
-echo \"Getting started:\"
-echo \"  kolosal --help\"
-echo \"  kolosal-server --help\"
-echo \"\"
-echo \"Configuration: $HOME/Library/Application Support/Kolosal/config.yaml\"
-echo \"Models: $HOME/Library/Application Support/Kolosal/models/\"
-echo \"Logs: $HOME/Library/Logs/Kolosal/\"
-echo \"\"
-echo \"The 'kolosal' command should now be available from any terminal.\"
-echo \"If not, try opening a new terminal window or running: export PATH=\\\"/usr/local/bin:\$PATH\\\"\"
-
-exit 0
-")
-    
-    # Make the script executable
-    execute_process(COMMAND chmod +x ${MACOS_POSTINSTALL_SCRIPT})
-    
-    # Set the post-install script
-    set(CPACK_POSTFLIGHT_SCRIPT ${MACOS_POSTINSTALL_SCRIPT})
     
 else()
     # DEB package specific settings (Linux)

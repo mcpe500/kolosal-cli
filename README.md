@@ -68,7 +68,3 @@ cd kolosal-cli
   ```powershell
   .\Release\kolosal-cli.exe
   ```
-
-## Documentation
-
-For detailed information on architecture, advanced configuration, and packaging, please see the [full README](https://github.com/KolosalAI/kolosal-cli/blob/main/README.md).
