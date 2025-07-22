@@ -970,8 +970,7 @@ elseif(APPLE)
     set(CPACK_BUNDLE_PLIST "${CMAKE_CURRENT_BINARY_DIR}/Info.plist")
     
     # Create a launcher script that sets up symlinks and handles terminal access
-    set(LAUNCHER_SCRIPT "${CMAKE_CURRENT_BINARY_DIR}/kolosal-launcher.sh")
-    file(WRITE ${LAUNCHER_SCRIPT}
+    set(LAUNCHER_SCRIPT_CONTENT
 "#!/bin/bash
 # Kolosal CLI Launcher Script
 # This script sets up command-line access and launches the terminal interface
@@ -1063,10 +1062,15 @@ echo \"If the commands are not found, please restart your terminal or add \$BIN_
 read -p \"Press Enter to continue...\"
 ")
     
-    # Make the launcher executable
-    file(COPY ${LAUNCHER_SCRIPT} 
-         DESTINATION "${CMAKE_CURRENT_BINARY_DIR}/kolosal-launcher"
-         FILE_PERMISSIONS OWNER_READ OWNER_WRITE OWNER_EXECUTE GROUP_READ GROUP_EXECUTE WORLD_READ WORLD_EXECUTE)
+    # Create the launcher executable directly
+    file(WRITE "${CMAKE_CURRENT_BINARY_DIR}/kolosal-launcher" "${LAUNCHER_SCRIPT_CONTENT}")
+    
+    # Use a custom command to set execute permissions at build time
+    add_custom_command(TARGET kolosal POST_BUILD
+        COMMAND chmod +x "${CMAKE_CURRENT_BINARY_DIR}/kolosal-launcher"
+        COMMENT "Setting execute permissions on launcher script"
+        VERBATIM
+    )
     
     # Create Info.plist for macOS bundle
     file(WRITE "${CMAKE_CURRENT_BINARY_DIR}/Info.plist"
