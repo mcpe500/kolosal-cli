@@ -325,6 +325,19 @@ elseif(APPLE)
             COMMENT "Copying ${INFERENCE_TARGET_NAME} library to lib directory"
             DEPENDS ${INFERENCE_TARGET_NAME}
         )
+        
+        # Copy Metal-specific files if using Metal inference
+        if(USE_METAL)
+            # Add a post-build command to find and copy Metal files
+            add_custom_command(TARGET kolosal POST_BUILD
+                COMMAND ${CMAKE_COMMAND} 
+                -DSOURCE_DIR="${CMAKE_BINARY_DIR}/kolosal-server"
+                -DDEST_DIR="${CMAKE_BINARY_DIR}/bin"
+                -P "${CMAKE_CURRENT_SOURCE_DIR}/cmake/CopyMetalFiles.cmake"
+                COMMENT "Copying Metal GPU files to output directory"
+                VERBATIM
+            )
+        endif()
     endif()
     
     # Set RPATH for runtime library search in the same directory and standard macOS paths
@@ -696,6 +709,32 @@ elseif(APPLE)
             PERMISSIONS OWNER_READ OWNER_WRITE OWNER_EXECUTE GROUP_READ GROUP_EXECUTE WORLD_READ WORLD_EXECUTE
             COMPONENT Runtime
         )
+        
+        # Install Metal-specific files if using Metal inference
+        if(USE_METAL)
+            # Install Metal files that were copied to bin directory during build
+            install(FILES 
+                "${CMAKE_BINARY_DIR}/bin/ggml-common.h"
+                "${CMAKE_BINARY_DIR}/bin/ggml-metal-impl.h"
+                "${CMAKE_BINARY_DIR}/bin/ggml-metal.metal"
+                DESTINATION bin
+                PERMISSIONS OWNER_READ OWNER_WRITE GROUP_READ WORLD_READ
+                COMPONENT Runtime
+                OPTIONAL
+            )
+            
+            # Install any additional Metal files found in the build
+            install(CODE "
+                file(GLOB METAL_BIN_FILES \"${CMAKE_BINARY_DIR}/bin/ggml*.h\" \"${CMAKE_BINARY_DIR}/bin/ggml*.metal\")
+                foreach(METAL_FILE \${METAL_BIN_FILES})
+                    get_filename_component(FILENAME \"\${METAL_FILE}\" NAME)
+                    if(EXISTS \"\${METAL_FILE}\")
+                        file(INSTALL \"\${METAL_FILE}\" DESTINATION \"\${CMAKE_INSTALL_PREFIX}/bin\")
+                        message(STATUS \"Installed Metal file: \${FILENAME}\")
+                    endif()
+                endforeach()
+            " COMPONENT Runtime)
+        endif()
     endif()
     
     # Install additional inference engine shared libraries if they exist (macOS .dylib files)
