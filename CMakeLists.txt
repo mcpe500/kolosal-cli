@@ -281,8 +281,18 @@ elseif(APPLE)
         COMMAND ${CMAKE_COMMAND} -E make_directory "${CMAKE_BINARY_DIR}/bin"
         COMMAND ${CMAKE_COMMAND} -E copy_if_different
         "$<TARGET_FILE:kolosal_server>"
-        "${CMAKE_BINARY_DIR}/bin/libkolosal_server.dylib"
-        COMMENT "Copying libkolosal_server.dylib to output directory"
+        "${CMAKE_BINARY_DIR}/bin/"
+        COMMENT "Copying kolosal_server library to output directory"
+        DEPENDS kolosal_server
+    )
+    
+    # Also copy to lib directory for standard library location
+    add_custom_command(TARGET kolosal POST_BUILD
+        COMMAND ${CMAKE_COMMAND} -E make_directory "${CMAKE_BINARY_DIR}/lib"
+        COMMAND ${CMAKE_COMMAND} -E copy_if_different
+        "$<TARGET_FILE:kolosal_server>"
+        "${CMAKE_BINARY_DIR}/lib/"
+        COMMENT "Copying kolosal_server library to lib directory"
         DEPENDS kolosal_server
     )
     
@@ -302,14 +312,30 @@ elseif(APPLE)
             COMMAND ${CMAKE_COMMAND} -E make_directory "${CMAKE_BINARY_DIR}/bin"
             COMMAND ${CMAKE_COMMAND} -E copy_if_different
             "$<TARGET_FILE:${INFERENCE_TARGET_NAME}>"
-            "${CMAKE_BINARY_DIR}/bin/lib${INFERENCE_TARGET_NAME}.dylib"
-            COMMENT "Copying lib${INFERENCE_TARGET_NAME}.dylib to output directory"
+            "${CMAKE_BINARY_DIR}/bin/"
+            COMMENT "Copying ${INFERENCE_TARGET_NAME} library to bin directory"
+            DEPENDS ${INFERENCE_TARGET_NAME}
+        )
+        
+        add_custom_command(TARGET kolosal POST_BUILD
+            COMMAND ${CMAKE_COMMAND} -E make_directory "${CMAKE_BINARY_DIR}/lib"
+            COMMAND ${CMAKE_COMMAND} -E copy_if_different
+            "$<TARGET_FILE:${INFERENCE_TARGET_NAME}>"
+            "${CMAKE_BINARY_DIR}/lib/"
+            COMMENT "Copying ${INFERENCE_TARGET_NAME} library to lib directory"
             DEPENDS ${INFERENCE_TARGET_NAME}
         )
     endif()
     
     # Set RPATH for runtime library search in the same directory and standard macOS paths
     set_target_properties(kolosal PROPERTIES
+        INSTALL_RPATH "@executable_path;@executable_path/../lib;/usr/local/lib;/opt/homebrew/lib"
+        BUILD_WITH_INSTALL_RPATH TRUE
+        INSTALL_RPATH_USE_LINK_PATH TRUE
+    )
+    
+    # Set RPATH for kolosal-server executable as well
+    set_target_properties(kolosal_server_exe PROPERTIES
         INSTALL_RPATH "@executable_path;@executable_path/../lib;/usr/local/lib;/opt/homebrew/lib"
         BUILD_WITH_INSTALL_RPATH TRUE
         INSTALL_RPATH_USE_LINK_PATH TRUE
@@ -649,11 +675,25 @@ elseif(APPLE)
         COMPONENT Runtime
     )
     
+    # Also install the kolosal_server library to bin directory for @executable_path RPATH
+    install(FILES "$<TARGET_FILE:kolosal_server>"
+        DESTINATION bin
+        PERMISSIONS OWNER_READ OWNER_WRITE OWNER_EXECUTE GROUP_READ GROUP_EXECUTE WORLD_READ WORLD_EXECUTE
+        COMPONENT Runtime
+    )
+    
     # Install the inference engine shared library
     if(BUILD_INFERENCE_ENGINE)
         install(TARGETS ${INFERENCE_TARGET_NAME}
             LIBRARY DESTINATION lib
             ARCHIVE DESTINATION lib
+            COMPONENT Runtime
+        )
+        
+        # Also install to bin directory for @executable_path RPATH
+        install(FILES "$<TARGET_FILE:${INFERENCE_TARGET_NAME}>"
+            DESTINATION bin
+            PERMISSIONS OWNER_READ OWNER_WRITE OWNER_EXECUTE GROUP_READ GROUP_EXECUTE WORLD_READ WORLD_EXECUTE
             COMPONENT Runtime
         )
     endif()
