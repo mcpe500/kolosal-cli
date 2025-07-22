@@ -965,6 +965,11 @@ elseif(APPLE)
     # Create symbolic link to Applications folder in DMG for easy installation
     set(CPACK_DMG_DISABLE_APPLICATIONS_SYMLINK OFF)
     
+    # Set DMG background image if it exists
+    if(EXISTS "${CMAKE_CURRENT_SOURCE_DIR}/assets/dmg_background.png")
+        set(CPACK_DMG_BACKGROUND_IMAGE "${CMAKE_CURRENT_SOURCE_DIR}/assets/dmg_background.png")
+    endif()
+    
     # Bundle configuration
     set(CPACK_BUNDLE_NAME "Kolosal CLI")
     set(CPACK_BUNDLE_PLIST "${CMAKE_CURRENT_BINARY_DIR}/Info.plist")
@@ -1112,31 +1117,10 @@ read -p \"Press Enter to continue...\"
     # Add macOS-specific package information
     set(CPACK_PACKAGE_DESCRIPTION_FILE "${CMAKE_CURRENT_SOURCE_DIR}/README.md")
     
-    # DMG customization
+    # DMG customization - simplified without AppleScript
     set(CPACK_DMG_VOLUME_NAME "Install Kolosal CLI")
-    set(CPACK_DMG_DS_STORE_SETUP_SCRIPT "${CMAKE_CURRENT_BINARY_DIR}/DMGSetup.scpt")
-    
-    # Create a simple AppleScript for DMG setup
-    file(WRITE "${CMAKE_CURRENT_BINARY_DIR}/DMGSetup.scpt"
-"tell application \"Finder\"
-    tell disk \"Install Kolosal CLI\"
-        open
-        set current view of container window to icon view
-        set toolbar visible of container window to false
-        set statusbar visible of container window to false
-        set the bounds of container window to {400, 100, 920, 440}
-        set viewOptions to the icon view options of container window
-        set arrangement of viewOptions to not arranged
-        set icon size of viewOptions to 72
-        make new alias file at container window to POSIX file \"/Applications\" with properties {name:\"Applications\"}
-        set position of item \"Kolosal CLI.app\" of container window to {160, 205}
-        set position of item \"Applications\" of container window to {360, 205}
-        close
-        open
-        update without registering applications
-        delay 2
-    end tell
-end tell")
+    # Remove AppleScript setup due to permission issues on some systems
+    # set(CPACK_DMG_DS_STORE_SETUP_SCRIPT "${CMAKE_CURRENT_BINARY_DIR}/DMGSetup.scpt")
     
     # Architecture detection for macOS
     if(CMAKE_SYSTEM_PROCESSOR MATCHES "arm64|aarch64")
