@@ -630,30 +630,30 @@ if(WIN32)
     )
     
 elseif(APPLE)
-    # macOS-specific installation - Bundle structure for .app
-    # Install executables to MacOS directory (bundle structure)
+    # macOS-specific installation - Standard directory structure for DragNDrop
+    # Install executables to bin directory
     install(TARGETS kolosal
-        RUNTIME DESTINATION MacOS
+        RUNTIME DESTINATION bin
         COMPONENT Runtime
     )
     
     install(TARGETS kolosal_server_exe
-        RUNTIME DESTINATION MacOS
+        RUNTIME DESTINATION bin
         COMPONENT Runtime
     )
     
-    # Install shared libraries to Frameworks directory (bundle structure)
+    # Install shared libraries to lib directory
     install(TARGETS kolosal_server
-        LIBRARY DESTINATION Frameworks
-        ARCHIVE DESTINATION Frameworks
+        LIBRARY DESTINATION lib
+        ARCHIVE DESTINATION lib
         COMPONENT Runtime
     )
     
     # Install the inference engine shared library
     if(BUILD_INFERENCE_ENGINE)
         install(TARGETS ${INFERENCE_TARGET_NAME}
-            LIBRARY DESTINATION Frameworks
-            ARCHIVE DESTINATION Frameworks
+            LIBRARY DESTINATION lib
+            ARCHIVE DESTINATION lib
             COMPONENT Runtime
         )
     endif()
@@ -676,23 +676,23 @@ elseif(APPLE)
     
     foreach(INFERENCE_DYLIB_PATH ${INFERENCE_DYLIB_CANDIDATES})
         install(FILES "${INFERENCE_DYLIB_PATH}"
-            DESTINATION Frameworks
+            DESTINATION lib
             PERMISSIONS OWNER_READ OWNER_WRITE OWNER_EXECUTE GROUP_READ GROUP_EXECUTE WORLD_READ WORLD_EXECUTE
             COMPONENT Runtime
             OPTIONAL
         )
     endforeach()
     
-    # Install configuration file to Resources directory (bundle structure)
+    # Install configuration file to etc directory
     install(FILES "${CMAKE_BINARY_DIR}/bin/config.yaml"
-        DESTINATION Resources
+        DESTINATION etc
         PERMISSIONS OWNER_READ OWNER_WRITE GROUP_READ WORLD_READ
         COMPONENT Runtime
     )
     
-    # Install the launcher script to MacOS directory
+    # Install the launcher script to bin directory
     install(FILES "${CMAKE_CURRENT_BINARY_DIR}/kolosal-launcher"
-        DESTINATION MacOS
+        DESTINATION bin
         PERMISSIONS OWNER_READ OWNER_WRITE OWNER_EXECUTE GROUP_READ GROUP_EXECUTE WORLD_READ WORLD_EXECUTE
         COMPONENT Runtime
     )
@@ -958,7 +958,7 @@ The installation will:
     endif()
 elseif(APPLE)
     # macOS-specific packaging settings for DMG distribution
-    set(CPACK_GENERATOR "Bundle")
+    set(CPACK_GENERATOR "DragNDrop")
     set(CPACK_DMG_VOLUME_NAME "Kolosal CLI")
     set(CPACK_DMG_FORMAT "UDBZ")  # Compressed DMG
     
@@ -970,22 +970,17 @@ elseif(APPLE)
         set(CPACK_DMG_BACKGROUND_IMAGE "${CMAKE_CURRENT_SOURCE_DIR}/assets/dmg_background.png")
     endif()
     
-    # Bundle configuration
-    set(CPACK_BUNDLE_NAME "Kolosal CLI")
-    set(CPACK_BUNDLE_PLIST "${CMAKE_CURRENT_BINARY_DIR}/Info.plist")
-    
-    # Set the bundle startup command to the launcher script
-    set(CPACK_BUNDLE_STARTUP_COMMAND "${CMAKE_CURRENT_BINARY_DIR}/kolosal-launcher")
-    
     # Create a launcher script that sets up symlinks and handles terminal access
     set(LAUNCHER_SCRIPT_CONTENT
 "#!/bin/bash
 # Kolosal CLI Launcher Script
 # This script sets up command-line access and launches the terminal interface
 
-APP_DIR=\"\$(dirname \"\$0\")\"
-BUNDLE_DIR=\"\$(dirname \"\$(dirname \"\$APP_DIR\")\")\"
-BIN_DIR=\"\$BUNDLE_DIR/Contents/MacOS\"
+SCRIPT_DIR=\"\$(dirname \"\$0\")\"
+INSTALL_DIR=\"\$(dirname \"\$SCRIPT_DIR\")\"
+BIN_DIR=\"\$INSTALL_DIR/bin\"
+LIB_DIR=\"\$INSTALL_DIR/lib\"
+ETC_DIR=\"\$INSTALL_DIR/etc\"
 
 # Function to create symlinks with user permission
 setup_symlinks() {
@@ -1052,8 +1047,8 @@ mkdir -p \"\$HOME/Library/Logs/Kolosal\"
 mkdir -p \"\$HOME/Library/Caches/Kolosal/models\"
 
 # Copy config file to user directory if it doesn't exist
-if [ ! -f \"\$HOME/Library/Application Support/Kolosal/config.yaml\" ] && [ -f \"\$BUNDLE_DIR/Contents/Resources/config.yaml\" ]; then
-    cp \"\$BUNDLE_DIR/Contents/Resources/config.yaml\" \"\$HOME/Library/Application Support/Kolosal/config.yaml\"
+if [ ! -f \"\$HOME/Library/Application Support/Kolosal/config.yaml\" ] && [ -f \"\$ETC_DIR/config.yaml\" ]; then
+    cp \"\$ETC_DIR/config.yaml\" \"\$HOME/Library/Application Support/Kolosal/config.yaml\"
     echo \"Configuration file copied to ~/Library/Application Support/Kolosal/config.yaml\"
 fi
 
@@ -1079,43 +1074,6 @@ read -p \"Press Enter to continue...\"
         COMMENT "Setting execute permissions on launcher script"
         VERBATIM
     )
-    
-    # Create Info.plist for macOS bundle
-    file(WRITE "${CMAKE_CURRENT_BINARY_DIR}/Info.plist"
-"<?xml version=\"1.0\" encoding=\"UTF-8\"?>
-<!DOCTYPE plist PUBLIC \"-//Apple//DTD PLIST 1.0//EN\" \"http://www.apple.com/DTDs/PropertyList-1.0.dtd\">
-<plist version=\"1.0\">
-<dict>
-    <key>CFBundleExecutable</key>
-    <string>kolosal-launcher</string>
-    <key>CFBundleIdentifier</key>
-    <string>com.kolosal.cli</string>
-    <key>CFBundleName</key>
-    <string>Kolosal CLI</string>
-    <key>CFBundleVersion</key>
-    <string>${PROJECT_VERSION}</string>
-    <key>CFBundleShortVersionString</key>
-    <string>${PROJECT_VERSION}</string>
-    <key>CFBundleInfoDictionaryVersion</key>
-    <string>6.0</string>
-    <key>CFBundlePackageType</key>
-    <string>APPL</string>
-    <key>LSMinimumSystemVersion</key>
-    <string>10.13</string>
-    <key>LSRequiresNativeExecution</key>
-    <true/>
-    <key>NSHumanReadableCopyright</key>
-    <string>Copyright © 2025 Kolosal Project. All rights reserved.</string>
-    <key>LSApplicationCategoryType</key>
-    <string>public.app-category.developer-tools</string>
-    <key>NSAppleScriptEnabled</key>
-    <true/>
-    <key>LSUIElement</key>
-    <false/>
-    <key>LSBackgroundOnly</key>
-    <false/>
-</dict>
-</plist>")
     
     # Add macOS-specific package information
     set(CPACK_PACKAGE_DESCRIPTION_FILE "${CMAKE_CURRENT_SOURCE_DIR}/README.md")
