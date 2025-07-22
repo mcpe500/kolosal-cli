@@ -29,7 +29,7 @@ bool CacheEntry::isValid(int ttlSeconds) const
 
 void CacheManager::initialize()
 {
-    // Set cache directory based on platform
+    // Set cache directory based on platform with multiple fallback options
 #ifdef _WIN32
     // Windows: Use %APPDATA%\kolosal-cli\cache
     char *appDataPath = nullptr;
@@ -44,14 +44,23 @@ void CacheManager::initialize()
         cacheDirectory = ".\\cache"; // Fallback to current directory
     }
 #elif defined(__APPLE__)
-    // macOS: Use ~/Library/Caches/Kolosal/kolosal-cli
+    // macOS: Try multiple cache directory options in order of preference
     const char *homeDir = getenv("HOME");
     if (!homeDir)
     {
         struct passwd *pw = getpwuid(getuid());
         homeDir = pw->pw_dir;
     }
-    cacheDirectory = std::string(homeDir) + "/Library/Caches/Kolosal/kolosal-cli";
+    
+    if (homeDir)
+    {
+        // Primary: ~/Library/Caches/Kolosal/kolosal-cli (standard macOS cache location)
+        cacheDirectory = std::string(homeDir) + "/Library/Caches/Kolosal/kolosal-cli";
+    }
+    else
+    {
+        cacheDirectory = "./cache"; // Fallback to current directory
+    }
 #else
     // Unix/Linux: Use ~/.cache/kolosal-cli
     const char *homeDir = getenv("HOME");
@@ -60,7 +69,15 @@ void CacheManager::initialize()
         struct passwd *pw = getpwuid(getuid());
         homeDir = pw->pw_dir;
     }
-    cacheDirectory = std::string(homeDir) + "/.cache/kolosal-cli";
+    
+    if (homeDir)
+    {
+        cacheDirectory = std::string(homeDir) + "/.cache/kolosal-cli";
+    }
+    else
+    {
+        cacheDirectory = "./cache"; // Fallback to current directory
+    }
 #endif
 
     ensureCacheDirectory();
@@ -75,28 +92,155 @@ void CacheManager::cleanup()
 
 void CacheManager::ensureCacheDirectory()
 {
+    std::vector<std::string> fallbackPaths;
+    
+    // Add the primary cache directory
+    fallbackPaths.push_back(cacheDirectory);
+    
+    // Get executable directory for portable cache option
+    std::string executableDir;
     try
     {
-        std::filesystem::create_directories(cacheDirectory);
+#ifdef _WIN32
+        char buffer[MAX_PATH];
+        if (GetModuleFileName(NULL, buffer, MAX_PATH) != 0)
+        {
+            std::string execPath(buffer);
+            size_t lastSlash = execPath.find_last_of('\\');
+            if (lastSlash != std::string::npos)
+            {
+                executableDir = execPath.substr(0, lastSlash);
+            }
+        }
+#else
+        char buffer[1024];
+        ssize_t len = readlink("/proc/self/exe", buffer, sizeof(buffer) - 1);
+        if (len != -1)
+        {
+            buffer[len] = '\0';
+            std::string execPath(buffer);
+            size_t lastSlash = execPath.find_last_of('/');
+            if (lastSlash != std::string::npos)
+            {
+                executableDir = execPath.substr(0, lastSlash);
+            }
+        }
+#endif
     }
-    catch (const std::filesystem::filesystem_error &e)
+    catch (...)
     {
-        std::cerr << "Failed to create cache directory: " << e.what() << std::endl;
-        // Fallback to current directory
-        cacheDirectory = "./cache";
+        // Ignore errors in getting executable directory
+    }
+    
+    // Add platform-specific fallback directories
+#ifdef _WIN32
+    // Try executable directory first (portable option)
+    if (!executableDir.empty())
+    {
+        fallbackPaths.push_back(executableDir + "\\cache");
+    }
+    fallbackPaths.push_back(".\\cache");
+    fallbackPaths.push_back("C:\\temp\\kolosal-cli-cache");
+#elif defined(__APPLE__)
+    // Get home directory for fallbacks
+    const char *homeDir = getenv("HOME");
+    if (!homeDir)
+    {
+        struct passwd *pw = getpwuid(getuid());
+        if (pw) homeDir = pw->pw_dir;
+    }
+    
+    if (homeDir)
+    {
+        // Try ~/.kolosal-cli/cache as first fallback
+        fallbackPaths.push_back(std::string(homeDir) + "/.kolosal-cli/cache");
+        // Try ~/.cache/kolosal-cli as second fallback (more standard on Linux-like systems)
+        fallbackPaths.push_back(std::string(homeDir) + "/.cache/kolosal-cli");
+    }
+    
+    // Try executable directory (portable option)
+    if (!executableDir.empty())
+    {
+        fallbackPaths.push_back(executableDir + "/cache");
+    }
+    
+    // Local directory fallbacks
+    fallbackPaths.push_back("./cache");
+    fallbackPaths.push_back("/tmp/kolosal-cli-cache");
+#else
+    // Linux/Unix fallbacks
+    const char *homeDir = getenv("HOME");
+    if (!homeDir)
+    {
+        struct passwd *pw = getpwuid(getuid());
+        if (pw) homeDir = pw->pw_dir;
+    }
+    
+    if (homeDir)
+    {
+        // Try ~/.kolosal-cli/cache as fallback
+        fallbackPaths.push_back(std::string(homeDir) + "/.kolosal-cli/cache");
+    }
+    
+    // Try executable directory (portable option)
+    if (!executableDir.empty())
+    {
+        fallbackPaths.push_back(executableDir + "/cache");
+    }
+    
+    // Local directory fallbacks
+    fallbackPaths.push_back("./cache");
+    fallbackPaths.push_back("/tmp/kolosal-cli-cache");
+#endif
+    
+    // Try each path until one succeeds
+    for (const auto& path : fallbackPaths)
+    {
         try
         {
-            std::filesystem::create_directories(cacheDirectory);
+            std::filesystem::create_directories(path);
+            
+            // Test if we can actually write to this directory
+            std::string testFile = path + "/test_write.tmp";
+            std::ofstream test(testFile);
+            if (test.is_open())
+            {
+                test << "test";
+                test.close();
+                std::filesystem::remove(testFile);
+                
+                // Success! Use this directory
+                cacheDirectory = path;
+                if (path != fallbackPaths[0])
+                {
+                    std::cout << "Using cache directory: " << path << std::endl;
+                }
+                return;
+            }
         }
-        catch (const std::filesystem::filesystem_error &fallbackError)
+        catch (const std::filesystem::filesystem_error &e)
         {
-            std::cerr << "Failed to create fallback cache directory: " << fallbackError.what() << std::endl;
+            // Continue to next fallback
+            if (path == fallbackPaths[0])
+            {
+                std::cerr << "Failed to create primary cache directory (" << path << "): " << e.what() << std::endl;
+            }
         }
     }
+    
+    // If all fallbacks failed, disable disk caching
+    std::cerr << "Warning: Could not create any cache directory. Disk caching disabled." << std::endl;
+    cacheDirectory = ""; // Empty string indicates no disk caching
 }
 
 std::string CacheManager::getCacheFilePath(const std::string &key)
 {
+    // If cache directory is empty, disk caching is disabled
+    if (cacheDirectory.empty())
+    {
+        return "";
+    }
+    
     // Replace invalid filename characters
     std::string safeKey = key;
     for (char &c : safeKey)
@@ -113,6 +257,12 @@ CacheEntry CacheManager::loadFromDisk(const std::string &key)
 {
     CacheEntry entry;
     std::string filePath = getCacheFilePath(key);
+    
+    // If disk caching is disabled, return empty entry
+    if (filePath.empty())
+    {
+        return entry;
+    }
 
     std::ifstream file(filePath);
     if (!file.is_open())
@@ -146,6 +296,12 @@ CacheEntry CacheManager::loadFromDisk(const std::string &key)
 void CacheManager::saveToDisk(const std::string &key, const CacheEntry &entry)
 {
     std::string filePath = getCacheFilePath(key);
+    
+    // If disk caching is disabled, skip saving
+    if (filePath.empty())
+    {
+        return;
+    }
 
     try
     {
@@ -264,22 +420,29 @@ void CacheManager::clearCache()
     // Clear memory cache
     memoryCache.clear();
 
-    // Clear disk cache
-    try
+    // Clear disk cache if enabled
+    if (!cacheDirectory.empty())
     {
-        for (const auto &entry : std::filesystem::directory_iterator(cacheDirectory))
+        try
         {
-            if (entry.is_regular_file() && entry.path().extension() == ".cache")
+            for (const auto &entry : std::filesystem::directory_iterator(cacheDirectory))
             {
-                std::filesystem::remove(entry.path());
+                if (entry.is_regular_file() && entry.path().extension() == ".cache")
+                {
+                    std::filesystem::remove(entry.path());
+                }
             }
+            // Clear cache silently
+            std::cout << "Cache cleared\n";
         }
-        // Clear cache silently
-        std::cout << "Cache cleared\n";
+        catch (const std::filesystem::filesystem_error &e)
+        {
+            std::cerr << "Failed to clear disk cache: " << e.what() << std::endl;
+        }
     }
-    catch (const std::filesystem::filesystem_error &e)
+    else
     {
-        std::cerr << "Failed to clear disk cache: " << e.what() << std::endl;
+        std::cout << "Memory cache cleared (disk caching disabled)\n";
     }
 }
 
@@ -338,6 +501,18 @@ std::vector<ModelFile> CacheManager::getCachedModelFilesOffline(const std::strin
 
 bool CacheManager::hasAnyCachedData()
 {
+    // Check memory cache first
+    if (!memoryCache.empty())
+    {
+        return true;
+    }
+    
+    // Check disk cache if enabled
+    if (cacheDirectory.empty())
+    {
+        return false; // Disk caching disabled
+    }
+    
     try
     {
         for (const auto &entry : std::filesystem::directory_iterator(cacheDirectory))
