@@ -958,7 +958,7 @@ The installation will:
     endif()
 elseif(APPLE)
     # macOS-specific packaging settings for DMG distribution
-    set(CPACK_GENERATOR "DragNDrop")
+    set(CPACK_GENERATOR "Bundle")
     set(CPACK_DMG_VOLUME_NAME "Kolosal CLI")
     set(CPACK_DMG_FORMAT "UDBZ")  # Compressed DMG
     
@@ -973,6 +973,9 @@ elseif(APPLE)
     # Bundle configuration
     set(CPACK_BUNDLE_NAME "Kolosal CLI")
     set(CPACK_BUNDLE_PLIST "${CMAKE_CURRENT_BINARY_DIR}/Info.plist")
+    
+    # Set the bundle startup command to the launcher script
+    set(CPACK_BUNDLE_STARTUP_COMMAND "${CMAKE_CURRENT_BINARY_DIR}/kolosal-launcher")
     
     # Create a launcher script that sets up symlinks and handles terminal access
     set(LAUNCHER_SCRIPT_CONTENT
