@@ -23,6 +23,8 @@
 #include <cstdlib>
 #include <cerrno>
 #include <mach-o/dyld.h>
+#include <libproc.h>
+#include <sys/sysctl.h>
 #else
 #include <unistd.h>
 #include <sys/wait.h>
@@ -114,6 +116,26 @@ ProcessId findServerProcess() {
 
     CloseHandle(hSnapshot);
     return serverPid;
+#elif defined(__APPLE__)
+    // On macOS, use proc_listpids and proc_pidpath to find the process
+    pid_t pids[1024];
+    int numberOfPids = proc_listpids(PROC_ALL_PIDS, 0, pids, sizeof(pids));
+    numberOfPids = numberOfPids / sizeof(pid_t);
+    
+    for (int i = 0; i < numberOfPids; ++i) {
+        if (pids[i] == 0) continue;
+        
+        char pathBuffer[PROC_PIDPATHINFO_MAXSIZE];
+        int ret = proc_pidpath(pids[i], pathBuffer, sizeof(pathBuffer));
+        if (ret > 0) {
+            std::string processPath(pathBuffer);
+            // Check if this process is kolosal-server
+            if (processPath.find("kolosal-server") != std::string::npos) {
+                return pids[i];
+            }
+        }
+    }
+    return 0;
 #else
     // On Linux, search through /proc for the process
     DIR* procDir = opendir("/proc");
