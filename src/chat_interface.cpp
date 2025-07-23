@@ -20,6 +20,7 @@
 #include <unistd.h>
 #include <fcntl.h>
 #include <sys/ioctl.h>
+#include <errno.h>
 #endif
 
 ChatInterface::ChatInterface(std::shared_ptr<KolosalServerClient> serverClient, 
@@ -162,11 +163,8 @@ bool ChatInterface::startChatInterface(const std::string& engineId) {
         int terminalWidth = 80; // Default width, will be updated
         int terminalHeight = 24; // Default height, will be updated
         
-        // Check if we're on macOS and disable complex ANSI sequences
+        // Enable full functionality on all platforms including macOS
         bool useSimpleMode = false;
-#ifdef __APPLE__
-        useSimpleMode = true;  // Use simplified output for macOS
-#endif
 
 #ifdef _WIN32
         // Get actual terminal dimensions on Windows
@@ -318,70 +316,90 @@ bool ChatInterface::startChatInterface(const std::string& engineId) {
                         }
                     }
 #else
-                    // On Linux, query cursor position similar to Windows approach
+                    // On Linux/macOS, query cursor position with improved error handling
                     // Save current terminal mode
                     struct termios oldTermios, newTermios;
-                    tcgetattr(STDIN_FILENO, &oldTermios);
-                    newTermios = oldTermios;
-                    newTermios.c_lflag &= ~(ICANON | ECHO);
-                    tcsetattr(STDIN_FILENO, TCSANOW, &newTermios);
-                    
-                    // Flush output and query cursor position
-                    std::cout.flush();
-                    fflush(stdout);
-                    
-                    // Send cursor position query
-                    std::cout << "\033[6n" << std::flush;
-                    
-                    // Read response: \033[row;colR
-                    char response[32];
-                    int responseIndex = 0;
-                    int currentRow = 0;
-                    
-                    // Set non-blocking mode temporarily
-                    int flags = fcntl(STDIN_FILENO, F_GETFL, 0);
-                    fcntl(STDIN_FILENO, F_SETFL, flags | O_NONBLOCK);
-                    
-                    // Read response with timeout
-                    auto startTime = std::chrono::steady_clock::now();
-                    bool gotResponse = false;
-                    
-                    while (!gotResponse && 
-                           std::chrono::duration_cast<std::chrono::milliseconds>(
-                               std::chrono::steady_clock::now() - startTime).count() < 50) {
-                        char c = getchar();
-                        if (c != EOF && responseIndex < 31) {
-                            response[responseIndex++] = c;
-                            if (c == 'R') {
-                                response[responseIndex] = '\0';
-                                gotResponse = true;
-                            }
-                        }
-                        if (!gotResponse) {
-                            std::this_thread::sleep_for(std::chrono::milliseconds(1));
-                        }
-                    }
-                    
-                    // Restore blocking mode and terminal settings
-                    fcntl(STDIN_FILENO, F_SETFL, flags);
-                    tcsetattr(STDIN_FILENO, TCSANOW, &oldTermios);
-                    
-                    // Parse cursor position if we got a valid response
-                    if (gotResponse && responseIndex > 4 && response[0] == '\033' && response[1] == '[') {
-                        char* semiColon = strchr(response + 2, ';');
-                        if (semiColon) {
-                            *semiColon = '\0';
-                            currentRow = atoi(response + 2);
-                        }
-                    }
-                    
-                    // Check if we're near the bottom of the terminal (same logic as Windows)
-                    if (currentRow > 0 && currentRow >= terminalHeight - 1) {
-                        canShowMetricsBelow = false;
-                    } else if (terminalHeight > 10) {
+                    if (tcgetattr(STDIN_FILENO, &oldTermios) != 0) {
+                        // If we can't get terminal attributes, assume we can show metrics
                         canShowMetricsBelow = true;
                     } else {
-                        canShowMetricsBelow = false;
+                        newTermios = oldTermios;
+                        newTermios.c_lflag &= ~(ICANON | ECHO);
+                        
+                        if (tcsetattr(STDIN_FILENO, TCSANOW, &newTermios) != 0) {
+                            // If we can't set terminal mode, restore and assume safe
+                            canShowMetricsBelow = true;
+                        } else {
+                            // Flush output and query cursor position
+                            std::cout.flush();
+                            fflush(stdout);
+                            
+                            // Send cursor position query
+                            std::cout << "\033[6n" << std::flush;
+                            
+                            // Read response: \033[row;colR
+                            char response[32];
+                            int responseIndex = 0;
+                            int currentRow = 0;
+                            
+                            // Set non-blocking mode temporarily
+                            int flags = fcntl(STDIN_FILENO, F_GETFL, 0);
+                            if (flags >= 0) {
+                                fcntl(STDIN_FILENO, F_SETFL, flags | O_NONBLOCK);
+                                
+                                // Read response with timeout and better error handling
+                                auto startTime = std::chrono::steady_clock::now();
+                                bool gotResponse = false;
+                                
+                                while (!gotResponse && 
+                                       std::chrono::duration_cast<std::chrono::milliseconds>(
+                                           std::chrono::steady_clock::now() - startTime).count() < 100) {
+                                    
+                                    // Use read() instead of getchar() for better control on macOS
+                                    char c;
+                                    ssize_t bytesRead = read(STDIN_FILENO, &c, 1);
+                                    
+                                    if (bytesRead == 1 && responseIndex < 31) {
+                                        response[responseIndex++] = c;
+                                        if (c == 'R') {
+                                            response[responseIndex] = '\0';
+                                            gotResponse = true;
+                                        }
+                                    } else if (bytesRead < 0 && errno != EAGAIN && errno != EWOULDBLOCK) {
+                                        // Error occurred, break out
+                                        break;
+                                    }
+                                    
+                                    if (!gotResponse) {
+                                        std::this_thread::sleep_for(std::chrono::milliseconds(2));
+                                    }
+                                }
+                                
+                                // Restore blocking mode
+                                fcntl(STDIN_FILENO, F_SETFL, flags);
+                                
+                                // Parse cursor position if we got a valid response
+                                if (gotResponse && responseIndex > 4 && response[0] == '\033' && response[1] == '[') {
+                                    char* semiColon = strchr(response + 2, ';');
+                                    if (semiColon) {
+                                        *semiColon = '\0';
+                                        currentRow = atoi(response + 2);
+                                    }
+                                }
+                            }
+                            
+                            // Restore terminal settings
+                            tcsetattr(STDIN_FILENO, TCSANOW, &oldTermios);
+                            
+                            // Check if we're near the bottom of the terminal (same logic as Windows)
+                            if (currentRow > 0 && currentRow >= terminalHeight - 1) {
+                                canShowMetricsBelow = false;
+                            } else if (terminalHeight > 10) {
+                                canShowMetricsBelow = true;
+                            } else {
+                                canShowMetricsBelow = false;
+                            }
+                        }
                     }
 #endif
                     
