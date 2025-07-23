@@ -95,6 +95,8 @@ inference_engines:
     description: "Apple Metal GPU acceleration engine for GGUF models (macOS native)"
     load_on_startup: true               # Load automatically - Metal is the default on macOS
 
+default_inference_engine: "llama-metal"  # Set Metal as the default engine for macOS
+
 # =============================================================================
 # Model Configuration (macOS paths)
 # =============================================================================
@@ -149,21 +151,3 @@ models:
   #     n_gpu_layers: -1                            # Auto-optimize for Metal
   #     n_batch: 512                                # Optimized for Apple Silicon
   #     n_ubatch: 128
-
-# =============================================================================
-# macOS-Specific Settings
-# =============================================================================
-macos:
-  # Use macOS unified memory efficiently
-  unified_memory_optimization: true     # Enable Apple Silicon unified memory optimizations
-  
-  # Metal Performance Shaders integration
-  metal_performance_shaders: true       # Use MPS for additional acceleration when available
-  
-  # macOS-specific paths
-  model_cache_dir: "~/Library/Caches/Kolosal/models"
-  temp_dir: "/tmp/kolosal"
-  
-  # Security settings for macOS
-  sandbox_compatible: true              # Ensure compatibility with macOS sandboxing
-  keychain_integration: false           # Use macOS Keychain for API key storage (future feature)

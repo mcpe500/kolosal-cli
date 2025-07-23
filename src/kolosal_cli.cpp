@@ -32,6 +32,13 @@
 #ifdef _WIN32
 #include <conio.h>
 #include <windows.h>
+#elif defined(__APPLE__)
+#include <termios.h>
+#include <unistd.h>
+#include <sys/ioctl.h>
+#include <fcntl.h>
+#include <mach-o/dyld.h>
+#include <libgen.h>
 #else
 #include <termios.h>
 #include <unistd.h>
@@ -1453,6 +1460,14 @@ std::string KolosalCLI::getExecutableDirectory()
         return fullPath.substr(0, lastSlash);
     }
     return "";
+#elif defined(__APPLE__)
+    char exePath[1024];
+    uint32_t size = sizeof(exePath);
+    if (_NSGetExecutablePath(exePath, &size) == 0) {
+        char* dirPath = dirname(exePath);
+        return std::string(dirPath);
+    }
+    return "";
 #else
     char exePath[1024];
     ssize_t len = readlink("/proc/self/exe", exePath, sizeof(exePath) - 1);
@@ -1481,23 +1496,20 @@ bool KolosalCLI::downloadEngineFile(const std::string& engineName, const std::st
         return false;
     }
     
-    // Construct the target file path
-#ifdef _WIN32
-    std::string targetPath = executableDir + "\\" + filename;
-#else
-    std::string targetPath = executableDir + "/" + filename;
-#endif
+    // Construct the target file path using std::filesystem for cross-platform compatibility
+    std::filesystem::path targetPath = std::filesystem::path(executableDir) / filename;
+    std::string targetPathStr = targetPath.string();
     
     // Construct the download URL
     std::string downloadUrl = "https://huggingface.co/kolosal/engines/resolve/main/" + filename;
     
     // Check if file already exists locally and get its size
-    bool fileExists = std::filesystem::exists(targetPath);
+    bool fileExists = std::filesystem::exists(targetPathStr);
     long long localFileSize = 0;
     if (fileExists)
     {
         try {
-            localFileSize = static_cast<long long>(std::filesystem::file_size(targetPath));
+            localFileSize = static_cast<long long>(std::filesystem::file_size(targetPathStr));
         } catch (const std::exception& e) {
             std::cerr << "Warning: Could not get local file size: " << e.what() << std::endl;
             localFileSize = 0;
@@ -1521,7 +1533,7 @@ bool KolosalCLI::downloadEngineFile(const std::string& engineName, const std::st
             if (localFileSize >= remoteFileSize)
             {
                 // Just register the existing file with the server
-                if (m_serverClient && m_serverClient->addInferenceEngine(engineName, targetPath, true))
+                if (m_serverClient && m_serverClient->addInferenceEngine(engineName, targetPathStr, true))
                 {
                     std::cout << "Engine '" << engineName << "' is now available for use." << std::endl;
                     
@@ -1555,7 +1567,7 @@ bool KolosalCLI::downloadEngineFile(const std::string& engineName, const std::st
     
     // Perform the download with progress bar
     std::cout << "Downloading " << filename << "..." << std::endl;
-    bool success = HttpClient::downloadFile(downloadUrl, targetPath, 
+    bool success = HttpClient::downloadFile(downloadUrl, targetPathStr, 
         [](size_t downloaded, size_t total, double percentage) {
             if (total > 0) {
                 std::cout << "\r";
@@ -1585,10 +1597,10 @@ bool KolosalCLI::downloadEngineFile(const std::string& engineName, const std::st
         std::cout << "\n✗ Download failed!" << std::endl;
         
         // Clean up any partial download
-        if (std::filesystem::exists(targetPath))
+        if (std::filesystem::exists(targetPathStr))
         {
             try {
-                std::filesystem::remove(targetPath);
+                std::filesystem::remove(targetPathStr);
             } catch (const std::exception& e) {
                 std::cerr << "Error cleaning up partial download: " << e.what() << std::endl;
             }
@@ -1597,7 +1609,7 @@ bool KolosalCLI::downloadEngineFile(const std::string& engineName, const std::st
         return false;
     }
     
-    if (m_serverClient && m_serverClient->addInferenceEngine(engineName, targetPath, true))
+    if (m_serverClient && m_serverClient->addInferenceEngine(engineName, targetPathStr, true))
     {
         std::cout << "Engine '" << engineName << "' is now available for use." << std::endl;
         
@@ -1616,7 +1628,7 @@ bool KolosalCLI::downloadEngineFile(const std::string& engineName, const std::st
     else
     {
         std::cout << "⚠ Warning: Engine downloaded but failed to register with server." << std::endl;
-        std::cout << "The engine file is available at: " << targetPath << std::endl;
+        std::cout << "The engine file is available at: " << targetPathStr << std::endl;
         std::cout << "You may need to restart the server or manually add the engine." << std::endl;
     }
     
@@ -1630,6 +1642,7 @@ std::string KolosalCLI::normalizeEngineName(const std::string& filename)
     // Examples:
     // - Windows: "llama-cpu.dll" -> "llama-cpu"
     // - Linux: "libllama-cpu.so" -> "llama-cpu" (removes both lib prefix and .so extension)
+    // - macOS: "libllama-cpu.dylib" -> "llama-cpu" (removes both lib prefix and .dylib extension)
     std::string engineName = filename;
     size_t lastSlash = engineName.find_last_of('/');
     if (lastSlash != std::string::npos)
@@ -1643,7 +1656,7 @@ std::string KolosalCLI::normalizeEngineName(const std::string& filename)
     }
 
     // Normalize engine name for cross-platform compatibility
-    // On Linux, remove 'lib' prefix to match Windows naming convention
+    // On Unix-like systems (Linux and macOS), remove 'lib' prefix to match Windows naming convention
 #ifndef _WIN32
     if (engineName.find("lib") == 0 && engineName.length() > 3)
     {
