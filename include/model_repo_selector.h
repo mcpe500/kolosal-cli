@@ -33,6 +33,14 @@ public:
     std::string selectModel(const std::vector<std::string>& availableModels);
     
     /**
+     * @brief Show model selection menu with config models and fallback for offline mode
+     * @param configModels Vector of model IDs available in config
+     * @param downloadedModels Vector of model IDs downloaded on the server (used for fallback only)
+     * @return Selected model ID, or empty string if cancelled
+     */
+    std::string selectModel(const std::vector<std::string>& configModels, const std::vector<std::string>& downloadedModels);
+    
+    /**
      * @brief Parse Hugging Face repository URL or ID to extract model ID
      * @param input URL or ID from command line
      * @return Normalized model ID (e.g., "owner/model-name") or empty string if invalid

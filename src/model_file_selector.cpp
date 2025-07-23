@@ -48,6 +48,40 @@ ModelFile ModelFileSelector::selectModelFile(const std::string& modelId, const s
     return ModelFile{}; // Return empty ModelFile if cancelled or back selected
 }
 
+ModelFile ModelFileSelector::selectModelFile(const std::string& modelId, const std::string& headerInfo, const std::vector<ModelFile>& serverFallbackModels) {
+    std::cout << "Selected model: " << modelId << std::endl;
+
+    // Fetch .gguf files for the selected model
+    std::vector<ModelFile> modelFiles = HuggingFaceClient::fetchModelFiles(modelId);
+    if (modelFiles.empty()) {
+        // Check if we have server fallback models
+        if (!serverFallbackModels.empty()) {
+            std::cout << "No .gguf files found online. Showing models available on server...\n\n";
+            modelFiles = serverFallbackModels;
+        } else {
+            std::cout << "No .gguf files found. Showing sample files...\n\n";
+            // Fallback to sample files with quantization info
+            modelFiles = generateSampleFiles(modelId);
+        }
+    }
+    std::cout << "Found " << modelFiles.size() << " .gguf file(s)!\n\n";
+
+    // Show model files with real-time async memory updates and cache after completion
+    int fileResult = ModelFileUtils::displayAsyncModelFileList(modelFiles, "Select a .gguf file:", headerInfo);
+
+    // Cache the files with completed memory information (runs in background)
+    std::thread cacheThread([modelId, modelFiles]() mutable {
+        ModelFileUtils::cacheModelFilesWithMemory(modelId, modelFiles);
+    });
+    cacheThread.detach();
+
+    if (fileResult >= 0 && fileResult < static_cast<int>(modelFiles.size())) {
+        return modelFiles[fileResult];
+    }
+
+    return ModelFile{}; // Return empty ModelFile if cancelled or back selected
+}
+
 ModelFile ModelFileSelector::handleDirectGGUFUrl(const std::string& url) {
     std::cout << "Processing direct GGUF file URL...\n\n";
 

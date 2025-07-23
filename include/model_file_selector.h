@@ -36,6 +36,15 @@ public:
     ModelFile selectModelFile(const std::string& modelId, const std::string& headerInfo);
     
     /**
+     * @brief Show file selection menu with fallback to server models
+     * @param modelId The model ID to fetch files for
+     * @param headerInfo Additional header information to display
+     * @param serverFallbackModels Server models to use as fallback when HF fails
+     * @return Selected ModelFile, or empty ModelFile if cancelled
+     */
+    ModelFile selectModelFile(const std::string& modelId, const std::string& headerInfo, const std::vector<ModelFile>& serverFallbackModels);
+    
+    /**
      * @brief Handle direct GGUF file URL input
      * @param url Direct URL to a GGUF file
      * @return ModelFile object with URL and metadata

@@ -26,6 +26,7 @@
 #include <cstdlib>
 #include <cctype>
 #include <chrono>
+#include <set>
 #include <yaml-cpp/yaml.h>
 
 #ifdef _WIN32
@@ -257,6 +258,19 @@ bool KolosalCLI::processModelDownload(const std::string &modelId, const ModelFil
     {
         std::cerr << "Unable to connect to Kolosal server. Download cancelled." << std::endl;
         return false;
+    }
+
+    // Check if this is a server model (empty or missing downloadUrl indicates server model)
+    if (!modelFile.downloadUrl.has_value() || modelFile.downloadUrl->empty())
+    {
+        // This is a server model - extract engine ID and start chat interface
+        std::string modelName = modelId.substr(modelId.find('/') + 1);
+        std::string quantType = modelFile.quant.type;
+        std::string engineId = modelName + ":" + quantType;
+        
+        std::cout << "Using existing model from server: " << engineId << std::endl;
+        startChatInterface(engineId);
+        return true;
     }
 
     // Generate download URL
@@ -624,8 +638,11 @@ int KolosalCLI::run(const std::string &repoId)
                 engineHeaderInfo = "Current Inference Engine: " + defaultEngine;
             }
             
-            // Use file selector to get the model file
-            ModelFile selectedFile = m_fileSelector->selectModelFile(modelId, engineHeaderInfo);
+            // Get server models for this repo as fallback
+            std::vector<ModelFile> serverModels = getServerModelsForRepo(modelId);
+            
+            // Use file selector to get the model file (with server fallback)
+            ModelFile selectedFile = m_fileSelector->selectModelFile(modelId, engineHeaderInfo, serverModels);
 
             if (selectedFile.filename.empty())
             {
@@ -645,9 +662,12 @@ int KolosalCLI::run(const std::string &repoId)
     while (true)
     {
         // Get available model IDs from config
-        std::vector<std::string> availableModels = getAvailableModelIds();
+        std::vector<std::string> configModels = getAvailableModelIds();
+        
+        // Get downloaded models from server (for fallback purposes only, not displayed)
+        std::vector<std::string> downloadedModels = getDownloadedModelsFromServer();
 
-        std::string selectedModel = m_repoSelector->selectModel(availableModels);
+        std::string selectedModel = m_repoSelector->selectModel(configModels, downloadedModels);
 
         if (selectedModel.empty())
         {
@@ -907,7 +927,10 @@ int KolosalCLI::run(const std::string &repoId)
             engineHeaderInfo = "Current Inference Engine: " + defaultEngine;
         }
         
-        ModelFile selectedFile = m_fileSelector->selectModelFile(selectedModel, engineHeaderInfo);
+        // Get server models for this repo as fallback
+        std::vector<ModelFile> serverModels = getServerModelsForRepo(selectedModel);
+        
+        ModelFile selectedFile = m_fileSelector->selectModelFile(selectedModel, engineHeaderInfo, serverModels);
 
         if (selectedFile.filename.empty())
         {
@@ -1039,6 +1062,95 @@ std::vector<std::string> KolosalCLI::getAvailableModelIds()
     return modelIds;
 }
 
+std::vector<std::string> KolosalCLI::getDownloadedModelsFromServer()
+{
+    std::vector<std::string> downloadedModels;
+    
+    // Ensure server connection
+    if (!ensureServerConnection())
+    {
+        return downloadedModels; // Return empty vector if server is not available
+    }
+    
+    try
+    {
+        // Get list of engines from server - these represent downloaded models
+        std::vector<std::string> engines;
+        if (m_serverClient && m_serverClient->getEngines(engines))
+        {
+            downloadedModels = engines;
+        }
+    }
+    catch (const std::exception &e)
+    {
+        std::cerr << "Error getting downloaded models from server: " << e.what() << std::endl;
+    }
+    
+    return downloadedModels;
+}
+
+std::vector<ModelFile> KolosalCLI::getServerModelsForRepo(const std::string& modelId)
+{
+    std::vector<ModelFile> serverModels;
+    
+    // Ensure server connection
+    if (!ensureServerConnection())
+    {
+        return serverModels; // Return empty vector if server is not available
+    }
+    
+    try
+    {
+        // Extract model name from the full repository ID (e.g., "microsoft/DialoGPT-medium" -> "DialoGPT-medium")
+        std::string modelName = modelId;
+        size_t slashPos = modelName.find('/');
+        if (slashPos != std::string::npos)
+        {
+            modelName = modelName.substr(slashPos + 1);
+        }
+        
+        // Get list of engines from server
+        std::vector<std::string> engines;
+        if (m_serverClient && m_serverClient->getEngines(engines))
+        {
+            // Filter engines that match the model pattern (engineId format: "modelName:quantType")
+            for (const std::string& engineId : engines)
+            {
+                size_t colonPos = engineId.find(':');
+                if (colonPos != std::string::npos)
+                {
+                    std::string engineModelName = engineId.substr(0, colonPos);
+                    std::string quantType = engineId.substr(colonPos + 1);
+                    
+                    // Check if this engine matches our target model
+                    if (engineModelName == modelName)
+                    {
+                        // Create a ModelFile object for this server model
+                        ModelFile serverModel;
+                        serverModel.filename = engineModelName + "-" + quantType + ".gguf";
+                        serverModel.modelId = modelId;
+                        serverModel.quant.type = quantType;
+                        serverModel.quant.description = "Available on server";
+                        serverModel.downloadUrl = std::nullopt; // No download URL for server models
+                        
+                        // Set memory usage as "Server Model" since we can't easily determine it
+                        serverModel.memoryUsage.hasEstimate = true;
+                        serverModel.memoryUsage.displayString = "Server Model";
+                        
+                        serverModels.push_back(serverModel);
+                    }
+                }
+            }
+        }
+    }
+    catch (const std::exception &e)
+    {
+        std::cerr << "Error getting server models for repo: " << e.what() << std::endl;
+    }
+    
+    return serverModels;
+}
+
 bool KolosalCLI::showServerLogs()
 {
     showWelcome();
@@ -1154,6 +1266,10 @@ bool KolosalCLI::showInferenceEngines()
     // Fetch available engine files from Hugging Face
     std::cout << "Fetching engine files from kolosal/engines repository...\n";
     std::vector<std::string> availableEngineFiles = HuggingFaceClient::fetchEngineFiles();
+    
+    if (availableEngineFiles.empty()) {
+        std::cout << "Note: Could not fetch engine files from Hugging Face. Showing server-based engines only.\n";
+    }
 
     // Create a map of server engines by name for easier lookup
     std::map<std::string, std::tuple<std::string, std::string, std::string, std::string, bool>> serverEngineMap;
@@ -1204,9 +1320,26 @@ bool KolosalCLI::showInferenceEngines()
         }
     }
 
-    if (combinedEngines.empty())
+    // If we have no engines from HuggingFace but have server engines, ensure we show all server engines
+    if (availableEngineFiles.empty() && !serverEngines.empty() && combinedEngines.empty())
     {
-        std::cout << "No inference engines available\n";
+        // Add all server engines to the combined list when HF fetch fails
+        for (const auto &serverEngine : serverEngines)
+        {
+            const std::string &name = std::get<0>(serverEngine);
+            bool isLoaded = std::get<4>(serverEngine);
+            combinedEngines.emplace_back(name, "", true, isLoaded); // All server engines are "registered"
+        }
+    }
+
+    if (combinedEngines.empty() && serverEngines.empty())
+    {
+        std::cout << "No inference engines available. The server may not be running or properly configured.\n";
+        return true;
+    }
+    else if (combinedEngines.empty())
+    {
+        std::cout << "No engines found in the combined list, but server has engines. This is unexpected.\n";
         return true;
     }
 

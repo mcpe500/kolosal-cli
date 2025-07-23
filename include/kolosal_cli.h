@@ -174,6 +174,19 @@ private:
     std::vector<std::string> getAvailableModelIds();
     
     /**
+     * @brief Get list of downloaded models from the server
+     * @return Vector of model IDs that are available on the server
+     */
+    std::vector<std::string> getDownloadedModelsFromServer();
+    
+    /**
+     * @brief Get server models that match a specific model pattern
+     * @param modelId The model ID to match against (e.g., "microsoft/DialoGPT-medium")
+     * @return Vector of ModelFile objects representing models available on the server
+     */
+    std::vector<ModelFile> getServerModelsForRepo(const std::string& modelId);
+    
+    /**
      * @brief Ensure console encoding is set to UTF-8
      */
     void ensureConsoleEncoding();
