@@ -661,75 +661,85 @@ if(WIN32)
     )
     
 elseif(APPLE)
-    # macOS-specific installation - PKG installer paths
-    # Default installation prefix for PKG
-    set(CMAKE_INSTALL_PREFIX "/Applications/Kolosal" CACHE PATH "Install path prefix" FORCE)
+    # macOS-specific installation - Create app bundle structure for DMG
     
-    # Install executables to bin directory
+    # Install actual kolosal executable first
     install(TARGETS kolosal
-        RUNTIME DESTINATION bin
+        RUNTIME DESTINATION "Kolosal CLI.app/Contents/MacOS"
         COMPONENT Runtime
     )
     
+    # Then rename it to kolosal-cli and install launcher as kolosal
+    install(CODE "
+        execute_process(COMMAND \${CMAKE_COMMAND} -E rename 
+            \"\${CMAKE_INSTALL_PREFIX}/Kolosal CLI.app/Contents/MacOS/kolosal\"
+            \"\${CMAKE_INSTALL_PREFIX}/Kolosal CLI.app/Contents/MacOS/kolosal-cli\"
+        )
+    " COMPONENT Runtime)
+    
+    # Install the launcher script as the main executable
+    install(PROGRAMS "${CMAKE_CURRENT_SOURCE_DIR}/resources/kolosal-launcher.sh"
+        DESTINATION "Kolosal CLI.app/Contents/MacOS"
+        RENAME kolosal
+        COMPONENT Runtime
+    )
+    
+    # Install kolosal-server executable
     install(TARGETS kolosal_server_exe
-        RUNTIME DESTINATION bin
+        RUNTIME DESTINATION "Kolosal CLI.app/Contents/MacOS"
         COMPONENT Runtime
+        OPTIONAL
     )
     
-    # Install shared libraries to lib directory
-    install(TARGETS kolosal_server
-        LIBRARY DESTINATION lib
-        ARCHIVE DESTINATION lib
-        COMPONENT Runtime
-    )
-    
-    # Also install the kolosal_server library to bin directory for @executable_path RPATH
-    install(FILES "$<TARGET_FILE:kolosal_server>"
-        DESTINATION bin
+    # Fallback: Install kolosal-server executable by file path if target install fails
+    install(FILES "${CMAKE_CURRENT_BINARY_DIR}/bin/kolosal-server"
+        DESTINATION "Kolosal CLI.app/Contents/MacOS"
         PERMISSIONS OWNER_READ OWNER_WRITE OWNER_EXECUTE GROUP_READ GROUP_EXECUTE WORLD_READ WORLD_EXECUTE
         COMPONENT Runtime
+        OPTIONAL
     )
+    
+    # Install app bundle Info.plist
+    install(FILES "${CMAKE_CURRENT_SOURCE_DIR}/resources/Info.plist"
+        DESTINATION "Kolosal CLI.app/Contents"
+        COMPONENT Runtime
+    )
+    
+    # Install app bundle icon
+    install(FILES "${CMAKE_CURRENT_SOURCE_DIR}/resources/kolosal.icns"
+        DESTINATION "Kolosal CLI.app/Contents/Resources"
+        COMPONENT Runtime
+    )
+    
+    # Install shared libraries to Frameworks directory (standard app bundle structure)
+    # Try to install the kolosal_server target if it exists
+    install(TARGETS kolosal_server
+        LIBRARY DESTINATION "Kolosal CLI.app/Contents/Frameworks"
+        ARCHIVE DESTINATION "Kolosal CLI.app/Contents/Frameworks"
+        COMPONENT Runtime
+        OPTIONAL
+    )
+    
+    # Manual installation of kolosal_server library using install(CODE)
+    install(CODE "
+        set(LIB_SRC \"${CMAKE_CURRENT_BINARY_DIR}/lib/libkolosal_server.dylib\")
+        set(LIB_DST \"\${CMAKE_INSTALL_PREFIX}/Kolosal CLI.app/Contents/Frameworks/libkolosal_server.dylib\")
+        if(EXISTS \"\${LIB_SRC}\")
+            message(STATUS \"Installing kolosal_server library: \${LIB_SRC} -> \${LIB_DST}\")
+            file(COPY \"\${LIB_SRC}\" DESTINATION \"\${CMAKE_INSTALL_PREFIX}/Kolosal CLI.app/Contents/Frameworks\")
+            execute_process(COMMAND chmod +x \"\${LIB_DST}\")
+        else()
+            message(WARNING \"kolosal_server library not found at: \${LIB_SRC}\")
+        endif()
+    " COMPONENT Runtime)
     
     # Install the inference engine shared library
     if(BUILD_INFERENCE_ENGINE)
         install(TARGETS ${INFERENCE_TARGET_NAME}
-            LIBRARY DESTINATION lib
-            ARCHIVE DESTINATION lib
+            LIBRARY DESTINATION "Kolosal CLI.app/Contents/Frameworks"
+            ARCHIVE DESTINATION "Kolosal CLI.app/Contents/Frameworks"
             COMPONENT Runtime
         )
-        
-        # Also install to bin directory for @executable_path RPATH
-        install(FILES "$<TARGET_FILE:${INFERENCE_TARGET_NAME}>"
-            DESTINATION bin
-            PERMISSIONS OWNER_READ OWNER_WRITE OWNER_EXECUTE GROUP_READ GROUP_EXECUTE WORLD_READ WORLD_EXECUTE
-            COMPONENT Runtime
-        )
-        
-        # Install Metal-specific files if using Metal inference
-        if(USE_METAL)
-            # Install Metal files that were copied to bin directory during build
-            install(FILES 
-                "${CMAKE_BINARY_DIR}/bin/ggml-common.h"
-                "${CMAKE_BINARY_DIR}/bin/ggml-metal-impl.h"
-                "${CMAKE_BINARY_DIR}/bin/ggml-metal.metal"
-                DESTINATION bin
-                PERMISSIONS OWNER_READ OWNER_WRITE GROUP_READ WORLD_READ
-                COMPONENT Runtime
-                OPTIONAL
-            )
-            
-            # Install any additional Metal files found in the build
-            install(CODE "
-                file(GLOB METAL_BIN_FILES \"${CMAKE_BINARY_DIR}/bin/ggml*.h\" \"${CMAKE_BINARY_DIR}/bin/ggml*.metal\")
-                foreach(METAL_FILE \${METAL_BIN_FILES})
-                    get_filename_component(FILENAME \"\${METAL_FILE}\" NAME)
-                    if(EXISTS \"\${METAL_FILE}\")
-                        file(INSTALL \"\${METAL_FILE}\" DESTINATION \"\${CMAKE_INSTALL_PREFIX}/bin\")
-                        message(STATUS \"Installed Metal file: \${FILENAME}\")
-                    endif()
-                endforeach()
-            " COMPONENT Runtime)
-        endif()
     endif()
     
     # Install additional inference engine shared libraries if they exist (macOS .dylib files)
@@ -746,203 +756,93 @@ elseif(APPLE)
         "${CMAKE_BINARY_DIR}/kolosal-server/lib/libllama-vulkan.dylib"
         "${CMAKE_BINARY_DIR}/kolosal-server/lib/libllama-cuda.dylib"
         "${CMAKE_BINARY_DIR}/kolosal-server/lib/libllama-cpu.dylib"
+        "${CMAKE_BINARY_DIR}/kolosal-server/build/lib/libllama-metal.dylib"
+        "${CMAKE_BINARY_DIR}/kolosal-server/build/lib/libllama-vulkan.dylib"
+        "${CMAKE_BINARY_DIR}/kolosal-server/build/lib/libllama-cuda.dylib"
+        "${CMAKE_BINARY_DIR}/kolosal-server/build/lib/libllama-cpu.dylib"
     )
     
     foreach(INFERENCE_DYLIB_PATH ${INFERENCE_DYLIB_CANDIDATES})
         install(FILES "${INFERENCE_DYLIB_PATH}"
-            DESTINATION lib
+            DESTINATION "Kolosal CLI.app/Contents/Frameworks"
             PERMISSIONS OWNER_READ OWNER_WRITE OWNER_EXECUTE GROUP_READ GROUP_EXECUTE WORLD_READ WORLD_EXECUTE
             COMPONENT Runtime
             OPTIONAL
         )
     endforeach()
     
-    # Install configuration file template
-    install(FILES "${CMAKE_BINARY_DIR}/bin/config.yaml"
-        DESTINATION Resources
-        PERMISSIONS OWNER_READ OWNER_WRITE GROUP_READ WORLD_READ
-        COMPONENT Runtime
-    )
-    
-    # Install man page if it exists
-    if(EXISTS "${CMAKE_CURRENT_SOURCE_DIR}/docs/kolosal.1")
-        install(FILES docs/kolosal.1
-            DESTINATION Resources/man/man1
+    # Install Metal-specific files if using Metal inference
+    if(USE_METAL)
+        # Install Metal files to Resources directory
+        install(FILES 
+            "${CMAKE_BINARY_DIR}/bin/ggml-common.h"
+            "${CMAKE_BINARY_DIR}/bin/ggml-metal-impl.h"
+            "${CMAKE_BINARY_DIR}/bin/ggml-metal.metal"
+            "${CMAKE_BINARY_DIR}/kolosal-server/build/bin/ggml-common.h"
+            "${CMAKE_BINARY_DIR}/kolosal-server/build/bin/ggml-metal-impl.h"
+            "${CMAKE_BINARY_DIR}/kolosal-server/build/bin/ggml-metal.metal"
+            DESTINATION "Kolosal CLI.app/Contents/Resources"
+            PERMISSIONS OWNER_READ OWNER_WRITE GROUP_READ WORLD_READ
             COMPONENT Runtime
             OPTIONAL
         )
     endif()
     
-    # Create post-install script for PKG installer
-    set(POSTINSTALL_SCRIPT "${CMAKE_CURRENT_BINARY_DIR}/scripts/postinstall")
-    file(MAKE_DIRECTORY "${CMAKE_CURRENT_BINARY_DIR}/scripts")
-    file(WRITE ${POSTINSTALL_SCRIPT}
-"#!/bin/bash
-# Post-installation script for Kolosal CLI PKG installer
-
-# Installation directory
-INSTALL_DIR=\"/Applications/Kolosal\"
-
-# Create symlinks in /usr/local/bin for command-line access
-echo \"Setting up command-line access...\"
-mkdir -p /usr/local/bin
-
-# Remove old symlinks if they exist
-rm -f /usr/local/bin/kolosal
-rm -f /usr/local/bin/kolosal-server
-
-# Create new symlinks
-ln -sf \"\$INSTALL_DIR/bin/kolosal\" /usr/local/bin/kolosal
-ln -sf \"\$INSTALL_DIR/bin/kolosal-server\" /usr/local/bin/kolosal-server
-
-# Ensure /usr/local/bin is in default PATH
-if ! grep -q '/usr/local/bin' /etc/paths; then
-    echo '/usr/local/bin' >> /etc/paths
-fi
-
-# Create user-specific directories and configuration
-USER_HOME=\"\$HOME\"
-if [ -z \"\$USER_HOME\" ]; then
-    # Try to determine the actual user's home directory
-    if [ -n \"\$SUDO_USER\" ]; then
-        USER_HOME=\$(eval echo ~\$SUDO_USER)
-    elif [ -n \"\$USER\" ]; then
-        USER_HOME=\$(eval echo ~\$USER)
-    fi
-fi
-
-# Function to setup user directories
-setup_user_directories() {
-    local user_home=\"\$1\"
-    local user_name=\"\$2\"
+    # Install configuration file to Resources directory
+    install(FILES "${CMAKE_BINARY_DIR}/bin/config.yaml"
+        DESTINATION "Kolosal CLI.app/Contents/Resources"
+        PERMISSIONS OWNER_READ OWNER_WRITE GROUP_READ WORLD_READ
+        COMPONENT Runtime
+    )
     
-    if [ -n \"\$user_home\" ] && [ -d \"\$user_home\" ]; then
-        # Create Application Support directory
-        local app_support=\"\$user_home/Library/Application Support/Kolosal\"
-        mkdir -p \"\$app_support\"
-        mkdir -p \"\$app_support/models\"
-        
-        # Create Logs directory
-        mkdir -p \"\$user_home/Library/Logs/Kolosal\"
-        
-        # Create Caches directory
-        mkdir -p \"\$user_home/Library/Caches/Kolosal/models\"
-        
-        # Copy config file if it doesn't exist
-        if [ ! -f \"\$app_support/config.yaml\" ]; then
-            cp \"\$INSTALL_DIR/Resources/config.yaml\" \"\$app_support/config.yaml\"
-        fi
-        
-        # Set proper ownership if we know the user
-        if [ -n \"\$user_name\" ]; then
-            chown -R \"\$user_name\" \"\$app_support\"
-            chown -R \"\$user_name\" \"\$user_home/Library/Logs/Kolosal\"
-            chown -R \"\$user_name\" \"\$user_home/Library/Caches/Kolosal\"
-        fi
-        
-        echo \"User directories created for \$user_home\"
-    fi
-}
-
-# Setup for the current user
-if [ -n \"\$USER_HOME\" ]; then
-    setup_user_directories \"\$USER_HOME\" \"\$SUDO_USER\"
-fi
-
-# Create a LaunchAgent to set up user directories on first login for all users
-cat > /Library/LaunchAgents/com.kolosal.setup.plist << 'EOF'
-<?xml version=\"1.0\" encoding=\"UTF-8\"?>
-<!DOCTYPE plist PUBLIC \"-//Apple//DTD PLIST 1.0//EN\" \"http://www.apple.com/DTDs/PropertyList-1.0.dtd\">
-<plist version=\"1.0\">
-<dict>
-    <key>Label</key>
-    <string>com.kolosal.setup</string>
-    <key>ProgramArguments</key>
-    <array>
-        <string>/bin/bash</string>
-        <string>-c</string>
-        <string>
-if [ ! -d \"\$HOME/Library/Application Support/Kolosal\" ]; then
-    mkdir -p \"\$HOME/Library/Application Support/Kolosal/models\"
-    mkdir -p \"\$HOME/Library/Logs/Kolosal\"
-    mkdir -p \"\$HOME/Library/Caches/Kolosal/models\"
-    if [ ! -f \"\$HOME/Library/Application Support/Kolosal/config.yaml\" ]; then
-        cp \"/Applications/Kolosal/Resources/config.yaml\" \"\$HOME/Library/Application Support/Kolosal/config.yaml\"
-    fi
-fi
-        </string>
-    </array>
-    <key>RunAtLoad</key>
-    <true/>
-    <key>StandardErrorPath</key>
-    <string>/tmp/com.kolosal.setup.err</string>
-    <key>StandardOutPath</key>
-    <string>/tmp/com.kolosal.setup.out</string>
-</dict>
-</plist>
-EOF
-
-# Ensure the LaunchAgent has correct permissions
-chmod 644 /Library/LaunchAgents/com.kolosal.setup.plist
-
-# Fix permissions on the installation directory
-chmod -R 755 \"\$INSTALL_DIR\"
-chmod +x \"\$INSTALL_DIR/bin/kolosal\"
-chmod +x \"\$INSTALL_DIR/bin/kolosal-server\"
-
-# Update shell configuration for common shells
-# This creates a file that will be sourced by shells to ensure PATH is set
-mkdir -p /etc/paths.d
-echo \"/usr/local/bin\" > /etc/paths.d/kolosal
-
-echo \"Kolosal CLI installation completed successfully!\"
-echo \"\"
-echo \"The 'kolosal' and 'kolosal-server' commands are now available.\"
-echo \"You may need to restart your terminal or run 'source ~/.zshrc' to use them.\"
-echo \"\"
-echo \"Configuration will be stored in:\"
-echo \"  ~/Library/Application Support/Kolosal/config.yaml\"
-echo \"\"
-echo \"To get started, run: kolosal --help\"
-
-exit 0
-")
+    # Install README and LICENSE to Resources
+    if(EXISTS "${CMAKE_CURRENT_SOURCE_DIR}/README.md")
+        install(FILES "${CMAKE_CURRENT_SOURCE_DIR}/README.md"
+            DESTINATION "Kolosal CLI.app/Contents/Resources"
+            COMPONENT Runtime
+        )
+    endif()
     
-    # Make the script executable
-    execute_process(COMMAND chmod +x ${POSTINSTALL_SCRIPT})
+    if(EXISTS "${CMAKE_CURRENT_SOURCE_DIR}/LICENSE")
+        install(FILES "${CMAKE_CURRENT_SOURCE_DIR}/LICENSE"
+            DESTINATION "Kolosal CLI.app/Contents/Resources"
+            COMPONENT Runtime
+        )
+    endif()
     
-    # Create pre-install script to handle upgrades
-    set(PREINSTALL_SCRIPT "${CMAKE_CURRENT_BINARY_DIR}/scripts/preinstall")
-    file(WRITE ${PREINSTALL_SCRIPT}
-"#!/bin/bash
-# Pre-installation script for Kolosal CLI PKG installer
-
-# Stop any running kolosal-server processes
-if pgrep -x \"kolosal-server\" > /dev/null; then
-    echo \"Stopping running kolosal-server processes...\"
-    pkill -x \"kolosal-server\"
-    sleep 2
-fi
-
-# Remove old installation if it exists (but preserve user data)
-if [ -d \"/Applications/Kolosal\" ]; then
-    echo \"Removing previous installation...\"
-    # Preserve Resources that might contain user modifications
-    if [ -d \"/Applications/Kolosal/Resources\" ]; then
-        mv \"/Applications/Kolosal/Resources\" \"/tmp/kolosal-resources-backup\"
-    fi
-    rm -rf \"/Applications/Kolosal\"
-fi
-
-exit 0
-")
+    # Install post-install script to fix RPATH and bundle dependencies
+    install(CODE "
+        # Determine the actual install destination (handles DESTDIR)
+        if(DEFINED ENV{DESTDIR})
+            set(ACTUAL_INSTALL_PREFIX \"\$ENV{DESTDIR}\${CMAKE_INSTALL_PREFIX}\")
+        else()
+            set(ACTUAL_INSTALL_PREFIX \"\${CMAKE_INSTALL_PREFIX}\")
+        endif()
+        
+        # Fix RPATH for executables to find libraries in relative Frameworks directory
+        if(EXISTS \"\${ACTUAL_INSTALL_PREFIX}/Kolosal CLI.app/Contents/MacOS/kolosal-cli\")
+            execute_process(COMMAND install_name_tool -add_rpath @executable_path/../Frameworks \"\${ACTUAL_INSTALL_PREFIX}/Kolosal CLI.app/Contents/MacOS/kolosal-cli\")
+        endif()
+        if(EXISTS \"\${ACTUAL_INSTALL_PREFIX}/Kolosal CLI.app/Contents/MacOS/kolosal-server\")
+            execute_process(COMMAND install_name_tool -add_rpath @executable_path/../Frameworks \"\${ACTUAL_INSTALL_PREFIX}/Kolosal CLI.app/Contents/MacOS/kolosal-server\")
+        endif()
+        
+        # Fix RPATH for the kolosal_server library
+        if(EXISTS \"\${ACTUAL_INSTALL_PREFIX}/Frameworks/libkolosal_server.dylib\")
+            execute_process(COMMAND install_name_tool -id @rpath/libkolosal_server.dylib \"\${ACTUAL_INSTALL_PREFIX}/Frameworks/libkolosal_server.dylib\")
+        endif()
+        
+        # Fix RPATH for inference libraries
+        file(GLOB INFERENCE_LIBS \"\${ACTUAL_INSTALL_PREFIX}/Frameworks/libllama-*.dylib\")
+        foreach(INFERENCE_LIB \${INFERENCE_LIBS})
+            get_filename_component(LIB_NAME \"\${INFERENCE_LIB}\" NAME)
+            execute_process(COMMAND install_name_tool -id @rpath/\${LIB_NAME} \"\${INFERENCE_LIB}\")
+        endforeach()
+        
+        message(STATUS \"Fixed RPATH for all installed libraries in \${ACTUAL_INSTALL_PREFIX}\")
+    " COMPONENT Runtime)
     
-    # Make the script executable
-    execute_process(COMMAND chmod +x ${PREINSTALL_SCRIPT})
-    
-    # Set the scripts for CPack
-    set(CPACK_PREFLIGHT_RUNTIME_SCRIPT ${PREINSTALL_SCRIPT})
-    set(CPACK_POSTFLIGHT_RUNTIME_SCRIPT ${POSTINSTALL_SCRIPT})
+
     
 elseif(UNIX)
     # Linux-specific installation
@@ -1042,7 +942,8 @@ endif()
 if(WIN32)
     set(CPACK_GENERATOR "NSIS")
 elseif(APPLE)
-    set(CPACK_GENERATOR "productbuild")
+    # Use DragNDrop for DMG creation on macOS, but we'll customize it
+    set(CPACK_GENERATOR "DragNDrop")
 else()
     set(CPACK_GENERATOR "DEB")
 endif()
@@ -1195,65 +1096,21 @@ The installation will:
         set(CPACK_SYSTEM_NAME "win32")
     endif()
 elseif(APPLE)
-    # macOS-specific packaging settings for PKG distribution
-    set(CPACK_PRODUCTBUILD_IDENTIFIER "com.kolosal.cli")
+    # macOS-specific packaging settings for DMG distribution
+    set(CPACK_DMG_VOLUME_NAME "Kolosal CLI ${PROJECT_VERSION}")
     
-    # If you have a Developer ID Installer certificate, you can sign the package
-    # set(CPACK_PRODUCTBUILD_SIGN_IDENTITY "Developer ID Installer: Your Name (XXXXXXXXXX)")
+    # Use DragNDrop generator but override with our custom DMG creation
+    set(CPACK_GENERATOR "DragNDrop")
     
-    # Package resources
-    set(CPACK_RESOURCE_FILE_README "${CMAKE_CURRENT_SOURCE_DIR}/README.md")
-    if(EXISTS "${CMAKE_CURRENT_SOURCE_DIR}/LICENSE")
-        set(CPACK_RESOURCE_FILE_LICENSE "${CMAKE_CURRENT_SOURCE_DIR}/LICENSE")
-    endif()
+    # Basic DMG settings (our script will override these)
+    set(CPACK_DMG_FORMAT "UDBZ")  # Compressed DMG format
     
-    # Welcome and conclusion files for the installer
-    set(WELCOME_FILE "${CMAKE_CURRENT_BINARY_DIR}/Welcome.txt")
-    file(WRITE ${WELCOME_FILE}
-"Welcome to the Kolosal CLI Installer
-
-This installer will guide you through the installation of Kolosal CLI, a powerful command-line interface for managing Large Language Models (LLMs) locally.
-
-What will be installed:
-• Kolosal CLI executable and server components
-• Required libraries and dependencies
-• Command-line tools accessible from Terminal
-
-After installation, you can use:
-• kolosal --help
-• kolosal-server --help
-
-The installer will automatically set up your PATH so these commands are available in any Terminal window.
-
-Click Continue to proceed with the installation.")
+    # Package metadata
+    set(CPACK_PACKAGE_NAME "Kolosal CLI")
+    set(CPACK_PACKAGE_FILE_NAME "kolosal-${PROJECT_VERSION}-macos")
     
-    set(CONCLUSION_FILE "${CMAKE_CURRENT_BINARY_DIR}/Conclusion.txt")
-    file(WRITE ${CONCLUSION_FILE}
-"Installation Successful!
-
-Kolosal CLI has been successfully installed on your Mac.
-
-The following commands are now available in your Terminal:
-• kolosal - Main CLI interface
-• kolosal-server - Server management
-
-Your configuration file is located at:
-~/Library/Application Support/Kolosal/config.yaml
-
-To get started, open Terminal and run:
-kolosal --help
-
-Thank you for installing Kolosal CLI!")
-    
-    set(CPACK_RESOURCE_FILE_WELCOME ${WELCOME_FILE})
-    # Note: CPACK_RESOURCE_FILE_CONCLUSION is not directly supported by productbuild
-    # but we keep it for potential future use
-    
-    # Components for macOS packaging
-    set(CPACK_COMPONENTS_ALL Runtime)
-    set(CPACK_COMPONENT_RUNTIME_DISPLAY_NAME "Kolosal CLI")
-    set(CPACK_COMPONENT_RUNTIME_DESCRIPTION "Main executable, server components, and all dependencies")
-    set(CPACK_COMPONENT_RUNTIME_REQUIRED TRUE)
+    # Set install prefix for DMG contents - create app bundle structure
+    set(CMAKE_INSTALL_PREFIX "/tmp/kolosal-dmg-staging" CACHE PATH "Install path prefix for DMG" FORCE)
     
     # Architecture detection for macOS
     if(CMAKE_SYSTEM_PROCESSOR MATCHES "arm64|aarch64")
@@ -1264,36 +1121,15 @@ Thank you for installing Kolosal CLI!")
         set(CPACK_PACKAGE_FILE_NAME "kolosal-${PROJECT_VERSION}-intel-mac")
     endif()
     
-    # Set package name to ensure proper identification
-    set(CPACK_PACKAGE_NAME "Kolosal CLI")
+    # Components for macOS packaging
+    set(CPACK_COMPONENTS_ALL Runtime)
+    set(CPACK_COMPONENT_RUNTIME_DISPLAY_NAME "Kolosal CLI")
+    set(CPACK_COMPONENT_RUNTIME_DESCRIPTION "Main executable, server components, and all dependencies")
+    set(CPACK_COMPONENT_RUNTIME_REQUIRED TRUE)
     
-    # Create a custom distribution.xml for more control over the installer
-    set(DISTRIBUTION_XML "${CMAKE_CURRENT_BINARY_DIR}/distribution.xml")
-    file(WRITE ${DISTRIBUTION_XML}
-"<?xml version=\"1.0\" encoding=\"utf-8\"?>
-<installer-gui-script minSpecVersion=\"2.0\">
-    <title>Kolosal CLI ${PROJECT_VERSION}</title>
-    <organization>com.kolosal</organization>
-    <domains enable_localSystem=\"false\" enable_anywhere=\"false\" enable_currentUserHome=\"false\"/>
-    <options customize=\"never\" require-scripts=\"true\" rootVolumeOnly=\"true\" hostArchitectures=\"${CPACK_SYSTEM_NAME}\"/>
-    <welcome file=\"Welcome.txt\"/>
-    <license file=\"LICENSE\"/>
-    <conclusion file=\"Conclusion.txt\"/>
-    <pkg-ref id=\"com.kolosal.cli.pkg\"/>
-    <options-spec>
-        <os-version min=\"10.14\"/>
-    </options-spec>
-    <choices-outline>
-        <line choice=\"default\">
-            <line choice=\"com.kolosal.cli.pkg\"/>
-        </line>
-    </choices-outline>
-    <choice id=\"default\"/>
-    <choice id=\"com.kolosal.cli.pkg\" visible=\"false\">
-        <pkg-ref id=\"com.kolosal.cli.pkg\"/>
-    </choice>
-    <pkg-ref id=\"com.kolosal.cli.pkg\" version=\"${PROJECT_VERSION}\" onConclusion=\"none\">kolosal-cli.pkg</pkg-ref>
-</installer-gui-script>")
+    # Add message about packaging
+    message(STATUS "macOS DMG packaging configured.")
+    message(STATUS "• Use 'make package' for standard DMG creation")
     
 else()
     # DEB package specific settings (Linux)
