@@ -298,7 +298,7 @@ bool KolosalCLI::processModelDownload(const std::string &modelId, const ModelFil
         return true;
     }
 
-    // Send engine creation request to server
+    // Send engine creation request to server (server handles download location)
     if (!m_serverClient->addEngine(engineId, downloadUrl, "./models/" + modelFile.filename))
     {
         std::cerr << "Failed to send download request." << std::endl;
@@ -1491,6 +1491,18 @@ std::string KolosalCLI::getExecutableDirectory()
     }
     return "";
 #endif
+}
+
+std::string KolosalCLI::getExecutableModelsDirectory()
+{
+    std::string executableDir = getExecutableDirectory();
+    if (executableDir.empty())
+    {
+        return "models"; // fallback to relative path
+    }
+    
+    std::filesystem::path modelsPath = std::filesystem::path(executableDir) / "models";
+    return std::filesystem::absolute(modelsPath).string();
 }
 
 bool KolosalCLI::downloadEngineFile(const std::string& engineName, const std::string& filename)

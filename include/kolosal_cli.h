@@ -65,6 +65,12 @@ public:
     std::string getExecutableDirectory();
 
     /**
+     * @brief Get the models directory relative to the executable location
+     * @return Path to the models directory
+     */
+    std::string getExecutableModelsDirectory();
+
+    /**
      * @brief Normalize engine name for cross-platform compatibility
      * @param filename The original filename from Hugging Face repository
      * @return Normalized engine name (removes lib prefix on Linux, removes extension and path)
