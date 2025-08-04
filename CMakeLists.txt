@@ -661,39 +661,22 @@ if(WIN32)
     )
     
 elseif(APPLE)
-    # macOS-specific installation - Create app bundle structure for DMG
-    
-    # Install actual kolosal executable first
+    # Install kolosal executable directly (no renaming needed)
     install(TARGETS kolosal
-        RUNTIME DESTINATION "Kolosal CLI.app/Contents/MacOS"
-        COMPONENT Runtime
-    )
-    
-    # Then rename it to kolosal-cli and install launcher as kolosal
-    install(CODE "
-        execute_process(COMMAND \${CMAKE_COMMAND} -E rename 
-            \"\${CMAKE_INSTALL_PREFIX}/Kolosal CLI.app/Contents/MacOS/kolosal\"
-            \"\${CMAKE_INSTALL_PREFIX}/Kolosal CLI.app/Contents/MacOS/kolosal-cli\"
-        )
-    " COMPONENT Runtime)
-    
-    # Install the launcher script as the main executable
-    install(PROGRAMS "${CMAKE_CURRENT_SOURCE_DIR}/resources/kolosal-launcher.sh"
-        DESTINATION "Kolosal CLI.app/Contents/MacOS"
-        RENAME kolosal
+        RUNTIME DESTINATION "Kolosal.app/Contents/MacOS"
         COMPONENT Runtime
     )
     
     # Install kolosal-server executable
     install(TARGETS kolosal_server_exe
-        RUNTIME DESTINATION "Kolosal CLI.app/Contents/MacOS"
+        RUNTIME DESTINATION "Kolosal.app/Contents/MacOS"
         COMPONENT Runtime
         OPTIONAL
     )
     
     # Fallback: Install kolosal-server executable by file path if target install fails
     install(FILES "${CMAKE_CURRENT_BINARY_DIR}/bin/kolosal-server"
-        DESTINATION "Kolosal CLI.app/Contents/MacOS"
+        DESTINATION "Kolosal.app/Contents/MacOS"
         PERMISSIONS OWNER_READ OWNER_WRITE OWNER_EXECUTE GROUP_READ GROUP_EXECUTE WORLD_READ WORLD_EXECUTE
         COMPONENT Runtime
         OPTIONAL
@@ -701,21 +684,21 @@ elseif(APPLE)
     
     # Install app bundle Info.plist
     install(FILES "${CMAKE_CURRENT_SOURCE_DIR}/resources/Info.plist"
-        DESTINATION "Kolosal CLI.app/Contents"
+        DESTINATION "Kolosal.app/Contents"
         COMPONENT Runtime
     )
     
     # Install app bundle icon
     install(FILES "${CMAKE_CURRENT_SOURCE_DIR}/resources/kolosal.icns"
-        DESTINATION "Kolosal CLI.app/Contents/Resources"
+        DESTINATION "Kolosal.app/Contents/Resources"
         COMPONENT Runtime
     )
     
     # Install shared libraries to Frameworks directory (standard app bundle structure)
     # Try to install the kolosal_server target if it exists
     install(TARGETS kolosal_server
-        LIBRARY DESTINATION "Kolosal CLI.app/Contents/Frameworks"
-        ARCHIVE DESTINATION "Kolosal CLI.app/Contents/Frameworks"
+        LIBRARY DESTINATION "Kolosal.app/Contents/Frameworks"
+        ARCHIVE DESTINATION "Kolosal.app/Contents/Frameworks"
         COMPONENT Runtime
         OPTIONAL
     )
@@ -723,10 +706,10 @@ elseif(APPLE)
     # Manual installation of kolosal_server library using install(CODE)
     install(CODE "
         set(LIB_SRC \"${CMAKE_CURRENT_BINARY_DIR}/lib/libkolosal_server.dylib\")
-        set(LIB_DST \"\${CMAKE_INSTALL_PREFIX}/Kolosal CLI.app/Contents/Frameworks/libkolosal_server.dylib\")
+        set(LIB_DST \"\${CMAKE_INSTALL_PREFIX}/Kolosal.app/Contents/Frameworks/libkolosal_server.dylib\")
         if(EXISTS \"\${LIB_SRC}\")
             message(STATUS \"Installing kolosal_server library: \${LIB_SRC} -> \${LIB_DST}\")
-            file(COPY \"\${LIB_SRC}\" DESTINATION \"\${CMAKE_INSTALL_PREFIX}/Kolosal CLI.app/Contents/Frameworks\")
+            file(COPY \"\${LIB_SRC}\" DESTINATION \"\${CMAKE_INSTALL_PREFIX}/Kolosal.app/Contents/Frameworks\")
             execute_process(COMMAND chmod +x \"\${LIB_DST}\")
         else()
             message(WARNING \"kolosal_server library not found at: \${LIB_SRC}\")
@@ -736,8 +719,8 @@ elseif(APPLE)
     # Install the inference engine shared library
     if(BUILD_INFERENCE_ENGINE)
         install(TARGETS ${INFERENCE_TARGET_NAME}
-            LIBRARY DESTINATION "Kolosal CLI.app/Contents/Frameworks"
-            ARCHIVE DESTINATION "Kolosal CLI.app/Contents/Frameworks"
+            LIBRARY DESTINATION "Kolosal.app/Contents/Frameworks"
+            ARCHIVE DESTINATION "Kolosal.app/Contents/Frameworks"
             COMPONENT Runtime
         )
     endif()
@@ -764,7 +747,7 @@ elseif(APPLE)
     
     foreach(INFERENCE_DYLIB_PATH ${INFERENCE_DYLIB_CANDIDATES})
         install(FILES "${INFERENCE_DYLIB_PATH}"
-            DESTINATION "Kolosal CLI.app/Contents/Frameworks"
+            DESTINATION "Kolosal.app/Contents/Frameworks"
             PERMISSIONS OWNER_READ OWNER_WRITE OWNER_EXECUTE GROUP_READ GROUP_EXECUTE WORLD_READ WORLD_EXECUTE
             COMPONENT Runtime
             OPTIONAL
@@ -781,7 +764,7 @@ elseif(APPLE)
             "${CMAKE_BINARY_DIR}/kolosal-server/build/bin/ggml-common.h"
             "${CMAKE_BINARY_DIR}/kolosal-server/build/bin/ggml-metal-impl.h"
             "${CMAKE_BINARY_DIR}/kolosal-server/build/bin/ggml-metal.metal"
-            DESTINATION "Kolosal CLI.app/Contents/Resources"
+            DESTINATION "Kolosal.app/Contents/Resources"
             PERMISSIONS OWNER_READ OWNER_WRITE GROUP_READ WORLD_READ
             COMPONENT Runtime
             OPTIONAL
@@ -790,7 +773,7 @@ elseif(APPLE)
     
     # Install configuration file to Resources directory
     install(FILES "${CMAKE_BINARY_DIR}/bin/config.yaml"
-        DESTINATION "Kolosal CLI.app/Contents/Resources"
+        DESTINATION "Kolosal.app/Contents/Resources"
         PERMISSIONS OWNER_READ OWNER_WRITE GROUP_READ WORLD_READ
         COMPONENT Runtime
     )
@@ -798,14 +781,14 @@ elseif(APPLE)
     # Install README and LICENSE to Resources
     if(EXISTS "${CMAKE_CURRENT_SOURCE_DIR}/README.md")
         install(FILES "${CMAKE_CURRENT_SOURCE_DIR}/README.md"
-            DESTINATION "Kolosal CLI.app/Contents/Resources"
+            DESTINATION "Kolosal.app/Contents/Resources"
             COMPONENT Runtime
         )
     endif()
     
     if(EXISTS "${CMAKE_CURRENT_SOURCE_DIR}/LICENSE")
         install(FILES "${CMAKE_CURRENT_SOURCE_DIR}/LICENSE"
-            DESTINATION "Kolosal CLI.app/Contents/Resources"
+            DESTINATION "Kolosal.app/Contents/Resources"
             COMPONENT Runtime
         )
     endif()
@@ -820,11 +803,11 @@ elseif(APPLE)
         endif()
         
         # Fix RPATH for executables to find libraries in relative Frameworks directory
-        if(EXISTS \"\${ACTUAL_INSTALL_PREFIX}/Kolosal CLI.app/Contents/MacOS/kolosal-cli\")
-            execute_process(COMMAND install_name_tool -add_rpath @executable_path/../Frameworks \"\${ACTUAL_INSTALL_PREFIX}/Kolosal CLI.app/Contents/MacOS/kolosal-cli\")
+        if(EXISTS \"\${ACTUAL_INSTALL_PREFIX}/Kolosal.app/Contents/MacOS/kolosal\")
+            execute_process(COMMAND install_name_tool -add_rpath @executable_path/../Frameworks \"\${ACTUAL_INSTALL_PREFIX}/Kolosal.app/Contents/MacOS/kolosal\")
         endif()
-        if(EXISTS \"\${ACTUAL_INSTALL_PREFIX}/Kolosal CLI.app/Contents/MacOS/kolosal-server\")
-            execute_process(COMMAND install_name_tool -add_rpath @executable_path/../Frameworks \"\${ACTUAL_INSTALL_PREFIX}/Kolosal CLI.app/Contents/MacOS/kolosal-server\")
+        if(EXISTS \"\${ACTUAL_INSTALL_PREFIX}/Kolosal.app/Contents/MacOS/kolosal-server\")
+            execute_process(COMMAND install_name_tool -add_rpath @executable_path/../Frameworks \"\${ACTUAL_INSTALL_PREFIX}/Kolosal.app/Contents/MacOS/kolosal-server\")
         endif()
         
         # Fix RPATH for the kolosal_server library
@@ -841,9 +824,7 @@ elseif(APPLE)
         
         message(STATUS \"Fixed RPATH for all installed libraries in \${ACTUAL_INSTALL_PREFIX}\")
     " COMPONENT Runtime)
-    
 
-    
 elseif(UNIX)
     # Linux-specific installation
     # Install the main executable (now named kolosal)
@@ -1097,7 +1078,7 @@ The installation will:
     endif()
 elseif(APPLE)
     # macOS-specific packaging settings for DMG distribution
-    set(CPACK_DMG_VOLUME_NAME "Kolosal CLI ${PROJECT_VERSION}")
+    set(CPACK_DMG_VOLUME_NAME "Kolosal ${PROJECT_VERSION}")
     
     # Use DragNDrop generator but override with our custom DMG creation
     set(CPACK_GENERATOR "DragNDrop")
@@ -1106,7 +1087,7 @@ elseif(APPLE)
     set(CPACK_DMG_FORMAT "UDBZ")  # Compressed DMG format
     
     # Package metadata
-    set(CPACK_PACKAGE_NAME "Kolosal CLI")
+    set(CPACK_PACKAGE_NAME "Kolosal")
     set(CPACK_PACKAGE_FILE_NAME "kolosal-${PROJECT_VERSION}-macos")
     
     # Set install prefix for DMG contents - create app bundle structure
@@ -1123,7 +1104,7 @@ elseif(APPLE)
     
     # Components for macOS packaging
     set(CPACK_COMPONENTS_ALL Runtime)
-    set(CPACK_COMPONENT_RUNTIME_DISPLAY_NAME "Kolosal CLI")
+    set(CPACK_COMPONENT_RUNTIME_DISPLAY_NAME "Kolosal")
     set(CPACK_COMPONENT_RUNTIME_DESCRIPTION "Main executable, server components, and all dependencies")
     set(CPACK_COMPONENT_RUNTIME_REQUIRED TRUE)
     
