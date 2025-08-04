@@ -661,7 +661,7 @@ if(WIN32)
     )
     
 elseif(APPLE)
-    # Install kolosal executable directly (no renaming needed)
+    # Install kolosal executable directly
     install(TARGETS kolosal
         RUNTIME DESTINATION "Kolosal.app/Contents/MacOS"
         COMPONENT Runtime
@@ -1083,8 +1083,18 @@ elseif(APPLE)
     # Use DragNDrop generator but override with our custom DMG creation
     set(CPACK_GENERATOR "DragNDrop")
     
-    # Basic DMG settings (our script will override these)
+    # Basic DMG settings 
     set(CPACK_DMG_FORMAT "UDBZ")  # Compressed DMG format
+    
+    # DMG background image
+    set(CPACK_DMG_BACKGROUND_IMAGE "${CMAKE_CURRENT_SOURCE_DIR}/resources/dmg_background.png")
+    
+    # DMG window and icon configuration
+    set(CPACK_DMG_WINDOW_X 100)
+    set(CPACK_DMG_WINDOW_Y 100) 
+    set(CPACK_DMG_WINDOW_WIDTH 640)
+    set(CPACK_DMG_WINDOW_HEIGHT 480)
+    set(CPACK_DMG_ICON_SIZE 128)
     
     # Package metadata
     set(CPACK_PACKAGE_NAME "Kolosal")
@@ -1108,9 +1118,24 @@ elseif(APPLE)
     set(CPACK_COMPONENT_RUNTIME_DESCRIPTION "Main executable, server components, and all dependencies")
     set(CPACK_COMPONENT_RUNTIME_REQUIRED TRUE)
     
+    # Add a custom target for creating DMG with background image
+    add_custom_target(dmg
+        DEPENDS kolosal kolosal_server kolosal_server_exe
+        COMMAND ${CMAKE_COMMAND} --build ${CMAKE_BINARY_DIR} --target install --config $<CONFIG>
+        COMMAND "${CMAKE_CURRENT_SOURCE_DIR}/cmake/create_dmg.sh" 
+                "${CMAKE_INSTALL_PREFIX}" 
+                "${CMAKE_BINARY_DIR}/${CPACK_PACKAGE_FILE_NAME}.dmg"
+                "Kolosal ${PROJECT_VERSION}"
+                "${CMAKE_CURRENT_SOURCE_DIR}/resources/dmg_background.png"
+        WORKING_DIRECTORY ${CMAKE_BINARY_DIR}
+        COMMENT "Creating DMG with custom background image"
+        VERBATIM
+    )
+    
     # Add message about packaging
     message(STATUS "macOS DMG packaging configured.")
     message(STATUS "• Use 'make package' for standard DMG creation")
+    message(STATUS "• Use 'make dmg' for DMG with custom background image")
     
 else()
     # DEB package specific settings (Linux)
