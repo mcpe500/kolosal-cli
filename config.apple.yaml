@@ -90,7 +90,7 @@ features:
 inference_engines:
   # Apple Metal inference engine (preferred on macOS)
   - name: "llama-metal"
-    library_path: "./libllama-metal.dylib"  # macOS dynamic library extension
+    library_path: "../Frameworks/libllama-metal.dylib"  # App bundle Frameworks directory
     version: "1.0.0"
     description: "Apple Metal GPU acceleration engine for GGUF models (macOS native)"
     load_on_startup: true               # Load automatically - Metal is the default on macOS

@@ -1464,8 +1464,15 @@ std::string KolosalCLI::getExecutableDirectory()
     char exePath[1024];
     uint32_t size = sizeof(exePath);
     if (_NSGetExecutablePath(exePath, &size) == 0) {
-        char* dirPath = dirname(exePath);
-        return std::string(dirPath);
+        // On macOS, resolve any symlinks
+        char realPath[1024];
+        if (realpath(exePath, realPath) != NULL) {
+            char* dirPath = dirname(realPath);
+            return std::string(dirPath);
+        } else {
+            char* dirPath = dirname(exePath);
+            return std::string(dirPath);
+        }
     }
     return "";
 #else
@@ -1496,8 +1503,41 @@ bool KolosalCLI::downloadEngineFile(const std::string& engineName, const std::st
         return false;
     }
     
+    // Determine the target directory based on app bundle structure
+    std::filesystem::path targetDir;
+    
+#ifdef __APPLE__
+    // Check if running from an app bundle
+    std::filesystem::path execPath(executableDir);
+    if (execPath.filename() == "MacOS" && 
+        execPath.parent_path().filename() == "Contents")
+    {
+        // Running from app bundle - place engines in Frameworks directory
+        targetDir = execPath.parent_path() / "Frameworks";
+        
+        // Create Frameworks directory if it doesn't exist
+        if (!std::filesystem::exists(targetDir))
+        {
+            try {
+                std::filesystem::create_directories(targetDir);
+            } catch (const std::exception& e) {
+                std::cerr << "Error: Could not create Frameworks directory: " << e.what() << std::endl;
+                return false;
+            }
+        }
+    }
+    else
+    {
+        // Running standalone - use executable directory
+        targetDir = executableDir;
+    }
+#else
+    // Non-macOS platforms - use executable directory
+    targetDir = executableDir;
+#endif
+    
     // Construct the target file path using std::filesystem for cross-platform compatibility
-    std::filesystem::path targetPath = std::filesystem::path(executableDir) / filename;
+    std::filesystem::path targetPath = targetDir / filename;
     std::string targetPathStr = targetPath.string();
     
     // Construct the download URL
