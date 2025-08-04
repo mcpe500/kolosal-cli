@@ -17,6 +17,16 @@ A cross-platform command-line interface for discovering, downloading, and runnin
 
 The easiest way to get started is to download a pre-built binary for your operating system from the [**Releases**](https://github.com/KolosalAI/kolosal-cli/releases) page.
 
+### macOS App Bundle
+
+On macOS, Kolosal is distributed as a `.dmg` file containing a `Kolosal.app` bundle. When you double-click the app:
+
+1. **First Launch**: The app will offer to set up command line access by creating symlinks in `/usr/local/bin`
+2. **Subsequent Launches**: If already set up, it will show status and optionally open Terminal
+3. **Manual Setup**: If you decline automatic setup, the app provides instructions for manual PATH configuration
+
+This allows you to use `kolosal` and `kolosal-server` commands from any Terminal window after setup.
+
 ### Quick Start
 
 Once installed, you can run the application from your terminal:

@@ -1,48 +1,65 @@
 # macOS Packaging Guide for Kolosal CLI
 
 ## Overview
-The macOS packaging creates a DMG installer that contains all the necessary executables and libraries. Users can extract the contents and run an installation script for easy terminal access.
+The macOS packaging creates a DMG installer that contains a macOS app bundle (`Kolosal.app`). When users double-click the app, it offers to set up command line access automatically.
 
 ## New Structure
 
 ### DMG Contents
 ```
-Install Kolosal CLI (DMG Volume)/
-├── bin/
-│   ├── kolosal                          # CLI executable
-│   ├── kolosal-server                   # Server executable
-│   └── kolosal-launcher                 # Installation script
-├── lib/
-│   ├── libkolosal_server.dylib          # Server library
-│   ├── libllama-metal.dylib             # Metal inference engine
-│   ├── libllama-vulkan.dylib            # Vulkan inference engine
-│   ├── libllama-cuda.dylib              # CUDA inference engine
-│   └── libllama-cpu.dylib               # CPU inference engine
-├── etc/
-│   └── config.yaml                      # Default configuration
+Kolosal [VERSION] (DMG Volume)/
+├── Kolosal.app/                         # macOS App Bundle
+│   ├── Contents/
+│   │   ├── Info.plist                   # Bundle metadata
+│   │   ├── MacOS/
+│   │   │   ├── kolosal                  # CLI executable
+│   │   │   ├── kolosal-server           # Server executable
+│   │   │   └── kolosal-launcher.sh      # Setup launcher script
+│   │   ├── Frameworks/                  # Shared libraries
+│   │   │   ├── libkolosal_server.dylib
+│   │   │   ├── libllama-metal.dylib
+│   │   │   ├── libllama-vulkan.dylib
+│   │   │   ├── libllama-cuda.dylib
+│   │   │   └── libllama-cpu.dylib
+│   │   └── Resources/                   # App resources
+│   │       ├── config.yaml              # Default configuration
+│   │       ├── kolosal.icns             # App icon
+│   │       ├── README.md                # Documentation
+│   │       └── LICENSE                  # License file
 └── Applications -> /Applications        # Symlink for easy access
 ```
 
 ### Installation Process
 
 1. **User downloads DMG file** (e.g., `kolosal-1.0.0-apple-silicon.dmg`)
-2. **User opens DMG** - Mounts the disk image showing the contents
-3. **User runs installation** - Either:
-   - Run the automated installation script: `./bin/kolosal-launcher`
-   - Or manually copy files and set up paths (see manual installation below)
+2. **User opens DMG** - Mounts the disk image showing `Kolosal.app`
+3. **User drags app to Applications** - Standard macOS app installation
+4. **User double-clicks Kolosal.app** - Triggers command line setup
 
-### Automatic Installation
+### Automatic Command Line Setup
 
-The `kolosal-launcher` script handles:
-- Creates symlinks in `/usr/local/bin/` for `kolosal` and `kolosal-server`
-- Updates shell profiles (`.zshrc`, `.bash_profile`, etc.) to include `/usr/local/bin` in PATH
-- Creates user directories in `~/Library/Application Support/Kolosal/`
-- Copies config file to user directory
-- Shows completion message with usage instructions
+When the user double-clicks `Kolosal.app`, the `kolosal-launcher.sh` script:
+
+1. **Checks current setup** - Verifies if symlinks already exist
+2. **Shows setup dialog** - Asks user if they want command line access
+3. **Creates symlinks** - Places `kolosal` and `kolosal-server` in `/usr/local/bin/`
+4. **Shows completion** - Offers to open Terminal to test commands
+
+### User Experience
+
+#### First Launch
+- User sees dialog: "Welcome to Kolosal CLI! To use Kolosal commands from Terminal..."
+- Options: "Skip" or "Set Up Command Line Access"
+- If setup chosen: Prompts for admin password, creates symlinks
+- Shows success dialog with option to open Terminal
+
+#### Subsequent Launches
+- If already set up: Shows "Commands are ready!" with option to open Terminal
+- If setup incomplete: Re-offers setup process
 
 ### Terminal Access
 
-After installation, users can immediately use:
+After setup, users can use from any Terminal:
 ```bash
 kolosal --help
 kolosal-server --help

@@ -1,7 +1,7 @@
 cmake_minimum_required(VERSION 3.14)
 
 project(kolosal-cli
-  LANGUAGES CXX
+  LANGUAGES C CXX
   VERSION 1.0.0
   DESCRIPTION "Kolosal CLI - A Command Line Interface to use, deploy, and manage LLMs locally"
 )
@@ -112,6 +112,14 @@ file(GLOB_RECURSE HEADERS
 
 # Add executable
 add_executable(kolosal ${SOURCES} ${HEADERS})
+
+# Add macOS launcher executable (small C program that launches the shell script)
+if(APPLE)
+    add_executable(kolosal-launcher src/kolosal_launcher.c)
+    set_target_properties(kolosal-launcher PROPERTIES
+        RUNTIME_OUTPUT_DIRECTORY "${CMAKE_BINARY_DIR}/bin"
+    )
+endif()
 
 # Make kolosal depend on the server targets to ensure proper build order
 add_dependencies(kolosal kolosal_server_exe kolosal_server)
@@ -667,6 +675,19 @@ elseif(APPLE)
         COMPONENT Runtime
     )
     
+    # Install the launcher executable that handles PATH setup
+    install(TARGETS kolosal-launcher
+        RUNTIME DESTINATION "Kolosal.app/Contents/MacOS"
+        COMPONENT Runtime
+    )
+    
+    # Install the launcher script that the C launcher will execute
+    install(FILES "${CMAKE_CURRENT_SOURCE_DIR}/resources/kolosal-launcher.sh"
+        DESTINATION "Kolosal.app/Contents/MacOS"
+        PERMISSIONS OWNER_READ OWNER_WRITE OWNER_EXECUTE GROUP_READ GROUP_EXECUTE WORLD_READ WORLD_EXECUTE
+        COMPONENT Runtime
+    )
+    
     # Install kolosal-server executable
     install(TARGETS kolosal_server_exe
         RUNTIME DESTINATION "Kolosal.app/Contents/MacOS"
@@ -823,6 +844,16 @@ elseif(APPLE)
         endforeach()
         
         message(STATUS \"Fixed RPATH for all installed libraries in \${ACTUAL_INSTALL_PREFIX}\")
+        
+        # Ensure the launcher executable and script have executable permissions
+        if(EXISTS \"\${ACTUAL_INSTALL_PREFIX}/Kolosal.app/Contents/MacOS/kolosal-launcher\")
+            execute_process(COMMAND chmod +x \"\${ACTUAL_INSTALL_PREFIX}/Kolosal.app/Contents/MacOS/kolosal-launcher\")
+            message(STATUS \"Set executable permissions for kolosal-launcher\")
+        endif()
+        if(EXISTS \"\${ACTUAL_INSTALL_PREFIX}/Kolosal.app/Contents/MacOS/kolosal-launcher.sh\")
+            execute_process(COMMAND chmod +x \"\${ACTUAL_INSTALL_PREFIX}/Kolosal.app/Contents/MacOS/kolosal-launcher.sh\")
+            message(STATUS \"Set executable permissions for kolosal-launcher.sh\")
+        endif()
     " COMPONENT Runtime)
 
 elseif(UNIX)
@@ -1136,6 +1167,7 @@ elseif(APPLE)
     message(STATUS "macOS DMG packaging configured.")
     message(STATUS "• Use 'make package' for standard DMG creation")
     message(STATUS "• Use 'make dmg' for DMG with custom background image")
+    message(STATUS "• Double-clicking Kolosal.app will offer to add kolosal/kolosal-server to PATH")
     
 else()
     # DEB package specific settings (Linux)
