@@ -51,3 +51,5 @@ kolosal-server
 install/
 
 .DS_Store
+
+*.dmg
