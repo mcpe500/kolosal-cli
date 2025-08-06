@@ -258,6 +258,126 @@ bool KolosalCLI::initializeServer()
     return true;
 }
 
+bool KolosalCLI::processModelDownloadServe(const std::string &modelId, const ModelFile &modelFile)
+{
+    // Ensure server is running and can be connected to
+    if (!ensureServerConnection())
+    {
+        std::cerr << "Unable to connect to Kolosal server. Download cancelled." << std::endl;
+        return false;
+    }
+
+    // Check if this is a server model (empty or missing downloadUrl indicates server model)
+    if (!modelFile.downloadUrl.has_value() || modelFile.downloadUrl->empty())
+    {
+        // This is a server model - extract engine ID
+        std::string modelName = modelId.substr(modelId.find('/') + 1);
+        std::string quantType = modelFile.quant.type;
+        std::string engineId = modelName + ":" + quantType;
+        
+        std::cout << "Model '" << engineId << "' is already available on the server." << std::endl;
+        return true;
+    }
+
+    // Generate download URL
+    std::string downloadUrl = "https://huggingface.co/" + modelId + "/resolve/main/" + modelFile.filename;
+    std::string modelName = modelId.substr(modelId.find('/') + 1);
+    std::string quantType = modelFile.quant.type;
+
+    std::string engineId = modelName + ":" + quantType;
+
+    // Check if engine already exists before attempting download
+    if (m_serverClient->engineExists(engineId))
+    {
+        std::cout << "Engine '" << engineId << "' already exists on the server." << std::endl;
+        std::cout << "Model is ready for use!" << std::endl;
+        return true;
+    }
+
+    // Send engine creation request to server (server handles download location)
+    if (!m_serverClient->addEngine(engineId, downloadUrl, "./models/" + modelFile.filename))
+    {
+        std::cerr << "Failed to send download request." << std::endl;
+        return false;
+    }
+
+    // Track this download
+    m_activeDownloads.push_back(engineId);
+
+    // Monitor download progress
+    bool downloadSuccess = m_serverClient->monitorDownloadProgress(
+        engineId,
+        [this](double percentage, const std::string &status, long long downloadedBytes, long long totalBytes)
+        {
+            // Progress callback - update display
+            ensureConsoleEncoding(); // Ensure proper encoding before each update
+
+            // Handle special case where no download was needed
+            if (status == "not_found")
+            {
+                std::cout << "Model file already exists locally. Registering engine..." << std::endl;
+                return;
+            }
+
+            // Only show progress for actual downloads
+            if (status == "downloading" && totalBytes > 0)
+            {
+                std::cout << "\r";
+                // Create progress bar
+                int barWidth = 40;
+                int pos = static_cast<int>(barWidth * percentage / 100.0);
+
+                std::cout << "[";
+                for (int i = 0; i < barWidth; ++i)
+                {
+                    if (i < pos)
+                        std::cout << "█";
+                    else
+                        std::cout << "-";
+                }
+                std::cout << "] " << std::fixed << std::setprecision(1) << percentage << "%";
+
+                // Show file sizes
+                std::cout << " (" << formatFileSize(downloadedBytes) << "/" << formatFileSize(totalBytes) << ")";
+                std::cout.flush();
+            }
+            else if (status == "creating_engine")
+            {
+                std::cout << "\rDownload complete. Registering engine...                                      " << std::endl;
+            }
+            else if (status == "engine_created")
+            {
+                std::cout << "Engine registered successfully." << std::endl;
+            }
+            else if (status == "completed")
+            {
+                std::cout << "Process completed." << std::endl;
+            }
+        },
+        1000 // Check every 1 second
+    );
+
+    // Remove from active downloads list
+    auto it = std::find(m_activeDownloads.begin(), m_activeDownloads.end(), engineId);
+    if (it != m_activeDownloads.end())
+    {
+        m_activeDownloads.erase(it);
+    }
+
+    std::cout << std::endl; // New line after progress bar
+    if (downloadSuccess)
+    {
+        std::cout << "✅ Model '" << engineId << "' has been successfully added to the server." << std::endl;
+        std::cout << "The model is now available for inference." << std::endl;
+    }
+    else
+    {
+        std::cout << "❌ Failed to add model to server." << std::endl;
+    }
+
+    return downloadSuccess;
+}
+
 bool KolosalCLI::processModelDownload(const std::string &modelId, const ModelFile &modelFile)
 {
     // Ensure server is running and can be connected to
@@ -428,6 +548,68 @@ bool KolosalCLI::isLocalGGUFPath(const std::string &input)
     return false;
 }
 
+bool KolosalCLI::handleDirectGGUFUrlServe(const std::string &url)
+{
+    // Use file selector to handle the GGUF URL processing and get model info
+    ModelFile modelFile = m_fileSelector->handleDirectGGUFUrl(url);
+
+    if (modelFile.filename.empty())
+    {
+        std::cout << "Failed to process GGUF file." << std::endl;
+        return false;
+    }
+
+    // Ask for confirmation
+    std::cout << "Add this model to the server? (y/n): ";
+    char choice;
+    std::cin >> choice;
+
+    if (choice == 'y' || choice == 'Y')
+    {
+        // Ensure server is running and can be connected to
+        if (!ensureServerConnection())
+        {
+            std::cerr << "Unable to connect to Kolosal server. Download cancelled." << std::endl;
+            return false;
+        }
+
+        // Generate simplified engine ID from filename
+        std::string engineId = modelFile.filename;
+        size_t dotPos = engineId.find_last_of('.');
+        if (dotPos != std::string::npos)
+        {
+            engineId = engineId.substr(0, dotPos);
+        }
+
+        // Check if engine already exists before attempting download
+        if (m_serverClient->engineExists(engineId))
+        {
+            std::cout << "✅ Engine '" << engineId << "' already exists on the server." << std::endl;
+            std::cout << "Model is ready for use!" << std::endl;
+            return true;
+        }
+
+        // Process download through server
+        if (!m_serverClient->addEngine(engineId, url, "./models/" + modelFile.filename))
+        {
+            std::cerr << "❌ Failed to start download." << std::endl;
+            return false;
+        }
+
+        m_activeDownloads.push_back(engineId);
+
+        std::cout << "✅ Model '" << engineId << "' has been successfully added to the server." << std::endl;
+        std::cout << "The model is now available for inference." << std::endl;
+
+        return true;
+    }
+    else
+    {
+        std::cout << "Download cancelled." << std::endl;
+        return false;
+    }
+}
+
 bool KolosalCLI::handleDirectGGUFUrl(const std::string &url)
 {
     // Use file selector to handle the GGUF URL processing and get model info
@@ -490,6 +672,102 @@ bool KolosalCLI::handleDirectGGUFUrl(const std::string &url)
         std::cout << "Download cancelled." << std::endl;
         return false;
     }
+}
+
+bool KolosalCLI::handleLocalGGUFPathServe(const std::string &path)
+{
+    // Normalize path separators for cross-platform compatibility
+    std::string normalizedPath = path;
+    std::replace(normalizedPath.begin(), normalizedPath.end(), '\\', '/');
+
+    // Create filesystem path object for proper handling
+    std::filesystem::path filePath(normalizedPath);
+
+    // Check if the file exists
+    if (!std::filesystem::exists(filePath))
+    {
+        std::cout << "Error: File not found: " << normalizedPath << std::endl;
+        return false;
+    }
+
+    // Check if it's actually a file (not a directory)
+    if (!std::filesystem::is_regular_file(filePath))
+    {
+        std::cout << "Error: Path is not a regular file: " << normalizedPath << std::endl;
+        return false;
+    }
+
+    // Check if it has .gguf extension
+    if (filePath.extension() != ".gguf")
+    {
+        std::cout << "Error: File does not have .gguf extension: " << normalizedPath << std::endl;
+        return false;
+    }
+
+    // Get absolute path and escape it properly
+    std::string absolutePath;
+    std::string escapedPath;
+    try
+    {
+        absolutePath = std::filesystem::absolute(filePath).string();
+        // Normalize path separators for the absolute path too
+        std::replace(absolutePath.begin(), absolutePath.end(), '\\', '/');
+        escapedPath = escapeFilePath(absolutePath);
+    }
+    catch (const std::exception &e)
+    {
+        std::cout << "Error: Failed to get absolute path for: " << normalizedPath << " - " << e.what() << std::endl;
+        return false;
+    }
+
+    // Extract filename for engine ID
+    std::string filename = filePath.filename().string();
+    std::string engineId = filename;
+    size_t dotPos = engineId.find_last_of('.');
+    if (dotPos != std::string::npos)
+    {
+        engineId = engineId.substr(0, dotPos);
+    }
+
+    std::cout << "\nLocal GGUF file detected: " << filename << std::endl;
+
+    // Ask for confirmation
+    std::cout << "\nAdd this model to the server? (y/n): ";
+    char choice;
+    std::cin >> choice;
+
+    if (choice != 'y' && choice != 'Y')
+    {
+        std::cout << "Model loading cancelled." << std::endl;
+        return false;
+    }
+
+    // Ensure server is running and can be connected to
+    if (!ensureServerConnection())
+    {
+        std::cerr << "Unable to connect to Kolosal server. Model loading cancelled." << std::endl;
+        return false;
+    }
+
+    // Check if engine already exists
+    if (m_serverClient->engineExists(engineId))
+    {
+        std::cout << "✅ Engine '" << engineId << "' already exists on the server." << std::endl;
+        std::cout << "Model is ready for use!" << std::endl;
+        return true;
+    }
+
+    // Add engine to server with the local file path (use absolute path for server)
+    if (!m_serverClient->addEngine(engineId, absolutePath, absolutePath))
+    {
+        std::cerr << "❌ Failed to register model with server." << std::endl;
+        return false;
+    }
+
+    std::cout << "✅ Model '" << engineId << "' has been successfully added to the server." << std::endl;
+    std::cout << "The model is now available for inference." << std::endl;
+
+    return true;
 }
 
 bool KolosalCLI::handleLocalGGUFPath(const std::string &path)
@@ -947,6 +1225,347 @@ int KolosalCLI::run(const std::string &repoId)
 
         // Process download through server
         bool success = processModelDownload(selectedModel, selectedFile);
+        return success ? 0 : 1;
+    }
+}
+
+int KolosalCLI::runServe(const std::string &repoId)
+{
+    showWelcome();
+    std::cout << "Running in serve mode - models will be added to server without starting chat interface." << std::endl;
+    
+    // Initialize Kolosal server first
+    if (!initializeServer())
+    {
+        std::cerr << "Failed to initialize Kolosal server. Exiting." << std::endl;
+        return 1;
+    }
+
+    // If a repository ID is provided, go directly to file selection
+    if (!repoId.empty())
+    {
+        // Check if it's a local GGUF file path first
+        if (isLocalGGUFPath(repoId))
+        {
+            // Handle local GGUF file path (serve mode)
+            bool success = handleLocalGGUFPathServe(repoId);
+            return success ? 0 : 1;
+        }
+
+        std::string modelId = m_repoSelector->parseRepositoryInput(repoId);
+        if (modelId.empty())
+        {
+            std::cout << "Invalid repository URL or ID format.\n\n";
+            std::cout << "Valid formats:\n";
+            std::cout << "  • owner/model-name (e.g., microsoft/DialoGPT-medium)\n";
+            std::cout << "  • https://huggingface.co/owner/model-name\n";
+            std::cout << "  • Direct GGUF file URL (e.g., https://huggingface.co/owner/model/resolve/main/model.gguf)\n";
+            std::cout << "  • Local GGUF file path (e.g., /path/to/model.gguf)\n";
+            return 1; // Exit with error code
+        }
+        else if (modelId == "DIRECT_URL")
+        {
+            // Handle direct GGUF file URL (serve mode)
+            bool success = handleDirectGGUFUrlServe(repoId);
+            return success ? 0 : 1;
+        }
+        else
+        {
+            // Get default engine info for display
+            std::string defaultEngine;
+            std::string engineHeaderInfo = "";
+            if (m_serverClient && m_serverClient->getDefaultInferenceEngine(defaultEngine) && !defaultEngine.empty())
+            {
+                engineHeaderInfo = "Current Inference Engine: " + defaultEngine;
+            }
+            
+            // Get server models for this repo as fallback
+            std::vector<ModelFile> serverModels = getServerModelsForRepo(modelId);
+            
+            // Use file selector to get the model file (with server fallback)
+            ModelFile selectedFile = m_fileSelector->selectModelFile(modelId, engineHeaderInfo, serverModels);
+
+            if (selectedFile.filename.empty())
+            {
+                std::cout << "Selection cancelled." << std::endl;
+                return 0;
+            }
+            else
+            {
+                // Process download through server (serve mode)
+                bool success = processModelDownloadServe(modelId, selectedFile);
+                return success ? 0 : 1;
+            }
+        }
+    }
+
+    // Standard flow: browse kolosal models
+    while (true)
+    {
+        // Get available model IDs from config
+        std::vector<std::string> configModels = getAvailableModelIds();
+        
+        // Get downloaded models from server (for fallback purposes only, not displayed)
+        std::vector<std::string> downloadedModels = getDownloadedModelsFromServer();
+
+        std::string selectedModel = m_repoSelector->selectModel(configModels, downloadedModels);
+
+        if (selectedModel.empty())
+        {
+            std::cout << "Model selection cancelled." << std::endl;
+            return 0;
+        }
+
+        // Check if it's a local model from config
+        if (selectedModel.find("LOCAL:") == 0)
+        {
+            std::string modelId = selectedModel.substr(6); // Remove "LOCAL:" prefix
+
+            // Ensure server connection
+            if (!ensureServerConnection())
+            {
+                std::cerr << "Unable to connect to Kolosal server." << std::endl;
+                return 1;
+            }
+
+            // Check if engine already exists
+            if (m_serverClient->engineExists(modelId))
+            {
+                std::cout << "✅ Model '" << modelId << "' is already available on the server." << std::endl;
+                return 0;
+            }
+
+            // Check if model is currently downloading
+            long long downloadedBytes, totalBytes;
+            double percentage;
+            std::string status;
+
+            if (m_serverClient->getDownloadProgress(modelId, downloadedBytes, totalBytes, percentage, status))
+            {
+                if (status == "downloading" || status == "creating_engine" || status == "pending")
+                {
+                    std::cout << "Model '" << modelId << "' is currently downloading..." << std::endl;
+
+                    // Track this download
+                    m_activeDownloads.push_back(modelId);
+
+                    // Monitor the existing download progress
+                    bool downloadSuccess = m_serverClient->monitorDownloadProgress(
+                        modelId,
+                        [this](double percentage, const std::string &status, long long downloadedBytes, long long totalBytes)
+                        {
+                            // Progress callback - update display
+                            ensureConsoleEncoding(); // Ensure proper encoding before each update
+
+                            // Handle special case where no download was needed
+                            if (status == "not_found")
+                            {
+                                std::cout << "Model file already exists locally. Registering engine..." << std::endl;
+                                return;
+                            }
+
+                            // Only show progress for actual downloads
+                            if (status == "downloading" && totalBytes > 0)
+                            {
+                                std::cout << "\r";
+                                // Create progress bar
+                                int barWidth = 40;
+                                int pos = static_cast<int>(barWidth * percentage / 100.0);
+
+                                std::cout << "[";
+                                for (int i = 0; i < barWidth; ++i)
+                                {
+                                    if (i < pos)
+                                        std::cout << "█";
+                                    else
+                                        std::cout << "-";
+                                }
+                                std::cout << "] " << std::fixed << std::setprecision(1) << percentage << "%";
+
+                                // Show file sizes
+                                std::cout << " (" << formatFileSize(downloadedBytes) << "/" << formatFileSize(totalBytes) << ")";
+                                std::cout.flush();
+                            }
+                            else if (status == "creating_engine")
+                            {
+                                std::cout << "\rDownload complete. Registering engine...                                      " << std::endl;
+                            }
+                            else if (status == "engine_created")
+                            {
+                                std::cout << "Engine registered successfully." << std::endl;
+                            }
+                            else if (status == "completed")
+                            {
+                                std::cout << "Process completed." << std::endl;
+                            }
+                        },
+                        1000 // Check every 1 second
+                    );
+
+                    // Remove from active downloads list
+                    auto it = std::find(m_activeDownloads.begin(), m_activeDownloads.end(), modelId);
+                    if (it != m_activeDownloads.end())
+                    {
+                        m_activeDownloads.erase(it);
+                    }
+
+                    std::cout << std::endl; // New line after progress bar
+                    if (downloadSuccess)
+                    {
+                        std::cout << "✅ Model '" << modelId << "' has been successfully added to the server." << std::endl;
+                        return 0;
+                    }
+                    else
+                    {
+                        std::cout << "❌ Failed to add model to server." << std::endl;
+                        return 1;
+                    }
+                }
+            }
+
+            // If we get here, the model is not downloading and doesn't exist on server
+            // This could be due to a cancelled download or failed load - try to re-add it
+            std::cout << "Model '" << modelId << "' is in config but not loaded on server." << std::endl;
+            std::cout << "Attempting to restart model loading..." << std::endl;
+
+            // Get model information from config to attempt re-adding
+            try
+            {
+                std::string configPath = "config.yaml";
+                if (std::filesystem::exists(configPath))
+                {
+                    YAML::Node config = YAML::LoadFile(configPath);
+                    if (config["models"] && config["models"].IsSequence())
+                    {
+                        for (const auto &model : config["models"])
+                        {
+                            if (model["id"] && model["id"].as<std::string>() == modelId)
+                            {
+                                std::string modelPath = model["path"].as<std::string>();
+
+                                std::cout << "Re-adding model from: " << modelPath << std::endl;
+
+                                // Attempt to re-add the model
+                                if (m_serverClient->addEngine(modelId, modelPath, modelPath))
+                                {
+                                    std::cout << "Model re-added successfully!" << std::endl;
+
+                                    // If it's a URL, monitor the download progress
+                                    if (modelPath.find("http://") == 0 || modelPath.find("https://") == 0)
+                                    {
+                                        std::cout << "Starting download monitoring..." << std::endl;
+
+                                        // Track this download
+                                        m_activeDownloads.push_back(modelId);
+
+                                        // Monitor download progress
+                                        bool downloadSuccess = m_serverClient->monitorDownloadProgress(
+                                            modelId,
+                                            [this](double percentage, const std::string &status, long long downloadedBytes, long long totalBytes)
+                                            {
+                                                ensureConsoleEncoding();
+
+                                                if (status == "downloading" && totalBytes > 0)
+                                                {
+                                                    std::cout << "\r";
+                                                    int barWidth = 40;
+                                                    int pos = static_cast<int>(barWidth * percentage / 100.0);
+
+                                                    std::cout << "[";
+                                                    for (int i = 0; i < barWidth; ++i)
+                                                    {
+                                                        if (i < pos)
+                                                            std::cout << "█";
+                                                        else
+                                                            std::cout << "-";
+                                                    }
+                                                    std::cout << "] " << std::fixed << std::setprecision(1) << percentage << "%";
+                                                    std::cout << " (" << formatFileSize(downloadedBytes) << "/" << formatFileSize(totalBytes) << ")";
+                                                    std::cout.flush();
+                                                }
+                                                else if (status == "completing")
+                                                {
+                                                    std::cout << "\rDownload 100% complete. Processing...                                      " << std::endl;
+                                                }
+                                                else if (status == "processing")
+                                                {
+                                                    std::cout << "\rProcessing download. This may take a few moments...                        " << std::endl;
+                                                }
+                                                else if (status == "creating_engine")
+                                                {
+                                                    std::cout << "\rDownload complete. Registering engine...                                      " << std::endl;
+                                                }
+                                            },
+                                            1000);
+
+                                        // Remove from active downloads list
+                                        auto it = std::find(m_activeDownloads.begin(), m_activeDownloads.end(), modelId);
+                                        if (it != m_activeDownloads.end())
+                                        {
+                                            m_activeDownloads.erase(it);
+                                        }
+
+                                        std::cout << std::endl;
+                                        if (downloadSuccess)
+                                        {
+                                            std::cout << "✅ Model '" << modelId << "' has been successfully added to the server." << std::endl;
+                                            return 0;
+                                        }
+                                        else
+                                        {
+                                            std::cout << "❌ Failed to add model to server." << std::endl;
+                                            return 1;
+                                        }
+                                    }
+                                    else
+                                    {
+                                        // Local file, should be ready immediately
+                                        std::cout << "✅ Model '" << modelId << "' has been successfully added to the server." << std::endl;
+                                        return 0;
+                                    }
+                                }
+                                else
+                                {
+                                    std::cout << "❌ Failed to re-add model. Please check server logs for details." << std::endl;
+                                    return 1;
+                                }
+                                break;
+                            }
+                        }
+                    }
+                }
+            }
+            catch (const std::exception &e)
+            {
+                std::cout << "Error reading config: " << e.what() << std::endl;
+            }
+
+            std::cout << "Could not find model configuration or re-add failed." << std::endl;
+            std::cout << "Please restart the server or manually load the model." << std::endl;
+            return 1;
+        }
+
+        // Get default engine info for display
+        std::string defaultEngine;
+        std::string engineHeaderInfo = "";
+        if (m_serverClient && m_serverClient->getDefaultInferenceEngine(defaultEngine) && !defaultEngine.empty())
+        {
+            engineHeaderInfo = "Current Inference Engine: " + defaultEngine;
+        }
+        
+        // Get server models for this repo as fallback
+        std::vector<ModelFile> serverModels = getServerModelsForRepo(selectedModel);
+        
+        ModelFile selectedFile = m_fileSelector->selectModelFile(selectedModel, engineHeaderInfo, serverModels);
+
+        if (selectedFile.filename.empty())
+        {
+            // User selected "Back to Model Selection" - continue the loop
+            continue;
+        }
+
+        // Process download through server (serve mode)
+        bool success = processModelDownloadServe(selectedModel, selectedFile);
         return success ? 0 : 1;
     }
 }

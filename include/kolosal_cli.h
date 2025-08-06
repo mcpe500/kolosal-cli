@@ -28,6 +28,13 @@ public:
     int run(const std::string& repoId = "");
     
     /**
+     * @brief Run the serve mode - add models to server without starting chat
+     * @param repoId Optional Hugging Face repository URL or ID
+     * @return Exit code (0 for success, non-zero for error)
+     */
+    int runServe(const std::string& repoId = "");
+    
+    /**
      * @brief Cleanup resources before exit
      */
     void cleanup();
@@ -105,11 +112,25 @@ private:
     bool isLocalGGUFPath(const std::string& input);
     
     /**
+     * @brief Handle direct GGUF file URL input (serve mode)
+     * @param url Direct URL to a GGUF file
+     * @return True if download completed successfully, false otherwise
+     */
+    bool handleDirectGGUFUrlServe(const std::string& url);
+    
+    /**
      * @brief Handle direct GGUF file URL input
      * @param url Direct URL to a GGUF file
      * @return True if download completed successfully, false otherwise
      */
     bool handleDirectGGUFUrl(const std::string& url);
+    
+    /**
+     * @brief Handle local GGUF file path input (serve mode)
+     * @param path Local path to a GGUF file
+     * @return True if model was loaded successfully, false otherwise
+     */
+    bool handleLocalGGUFPathServe(const std::string& path);
     
     /**
      * @brief Handle local GGUF file path input
@@ -121,10 +142,11 @@ private:
     /**
      * @brief Display welcome message and initialize HTTP client
      */
-    void showWelcome();    /**
-     * @brief Generate fallback sample files when API fails
-     * @param modelId The model ID to generate sample files for
-     * @return Vector of sample ModelFile objects
+    /**
+     * @brief Display welcome message and initialize HTTP client
+     */
+    void showWelcome();
+    
     /**
      * @brief Generate fallback sample files when API fails
      * @param modelId The model ID to generate sample files for
@@ -152,6 +174,14 @@ private:
      * @return True if server is ready, false otherwise
      */
     bool ensureServerConnection();
+    
+    /**
+     * @brief Process model selection and send to server for download (serve mode)
+     * @param modelId The selected model ID
+     * @param modelFile The selected model file
+     * @return True if download completed successfully, false otherwise
+     */
+    bool processModelDownloadServe(const std::string& modelId, const ModelFile& modelFile);
     
     /**
      * @brief Process model selection and send to server for download

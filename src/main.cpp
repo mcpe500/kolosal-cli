@@ -13,6 +13,7 @@ void printUsage(const char* programName) {
     std::cout << "Usage: " << programName << " [command] [repository_url_or_id_or_file_path]\n\n";
     std::cout << "Commands:\n";
     std::cout << "  help              Show this help message\n";
+    std::cout << "  serve             Add model to server without starting chat (same as main command)\n";
     std::cout << "  stop              Stop the background Kolosal server\n";
     std::cout << "  logs              Display server logs\n";
     std::cout << "  engines           Display available inference engines\n\n";
@@ -22,6 +23,8 @@ void printUsage(const char* programName) {
     std::cout << "  " << programName << " https://huggingface.co/microsoft/DialoGPT-medium\n";
     std::cout << "  " << programName << " /path/to/model.gguf                # Load local GGUF file\n";
     std::cout << "  " << programName << " ./models/my-model.gguf             # Load local GGUF file (relative path)\n";
+    std::cout << "  " << programName << " serve                              # Browse models and add to server only\n";
+    std::cout << "  " << programName << " serve microsoft/DialoGPT-medium    # Add specific model to server\n";
     std::cout << "  " << programName << " stop                               # Stop the background server\n";
     std::cout << "  " << programName << " logs                               # Display server logs\n";
     std::cout << "  " << programName << " engines                            # Display available inference engines\n";
@@ -36,6 +39,7 @@ int main(int argc, char* argv[]) {
     bool shouldStopServer = false;
     bool shouldShowLogs = false;
     bool shouldShowEngines = false;
+    bool shouldServeOnly = false;
     
     // Parse command line arguments
     if (argc > 1) {
@@ -48,6 +52,12 @@ int main(int argc, char* argv[]) {
             shouldShowLogs = true;
         } else if (std::string(argv[1]) == "engines") {
             shouldShowEngines = true;
+        } else if (std::string(argv[1]) == "serve") {
+            shouldServeOnly = true;
+            // If there's a second argument, it's the model to serve
+            if (argc > 2) {
+                repoId = argv[2];
+            }
         } else {
             repoId = argv[1];
         }
@@ -78,7 +88,14 @@ int main(int argc, char* argv[]) {
     }
     
     app.initialize();
-    int result = app.run(repoId);
+    
+    int result;
+    if (shouldServeOnly) {
+        result = app.runServe(repoId);
+    } else {
+        result = app.run(repoId);
+    }
+    
     app.cleanup();
     
     return result;
