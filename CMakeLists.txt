@@ -775,6 +775,87 @@ elseif(APPLE)
         )
     endforeach()
     
+    # Install external libraries from Homebrew that are required dependencies
+    # These libraries are dynamically linked and need to be bundled with the app
+    set(EXTERNAL_DYLIB_CANDIDATES
+        # OpenSSL libraries
+        "/opt/homebrew/opt/openssl@3/lib/libssl.3.dylib"
+        "/opt/homebrew/opt/openssl@3/lib/libcrypto.3.dylib"
+        "/opt/homebrew/lib/libssl.3.dylib"
+        "/opt/homebrew/lib/libcrypto.3.dylib"
+        "/usr/local/opt/openssl@3/lib/libssl.3.dylib"
+        "/usr/local/opt/openssl@3/lib/libcrypto.3.dylib"
+        "/usr/local/lib/libssl.3.dylib"
+        "/usr/local/lib/libcrypto.3.dylib"
+        
+        # FontConfig library
+        "/opt/homebrew/opt/fontconfig/lib/libfontconfig.1.dylib"
+        "/opt/homebrew/lib/libfontconfig.1.dylib"
+        "/usr/local/opt/fontconfig/lib/libfontconfig.1.dylib"
+        "/usr/local/lib/libfontconfig.1.dylib"
+        
+        # FreeType library
+        "/opt/homebrew/opt/freetype/lib/libfreetype.6.dylib"
+        "/opt/homebrew/lib/libfreetype.6.dylib"
+        "/usr/local/opt/freetype/lib/libfreetype.6.dylib"
+        "/usr/local/lib/libfreetype.6.dylib"
+        
+        # LibPNG library
+        "/opt/homebrew/opt/libpng/lib/libpng16.16.dylib"
+        "/opt/homebrew/lib/libpng16.16.dylib"
+        "/usr/local/opt/libpng/lib/libpng16.16.dylib"
+        "/usr/local/lib/libpng16.16.dylib"
+        
+        # LibTIFF library and its dependencies
+        "/opt/homebrew/opt/libtiff/lib/libtiff.6.dylib"
+        "/opt/homebrew/lib/libtiff.6.dylib"
+        "/usr/local/opt/libtiff/lib/libtiff.6.dylib"
+        "/usr/local/lib/libtiff.6.dylib"
+        "/opt/homebrew/opt/zstd/lib/libzstd.1.dylib"
+        "/opt/homebrew/lib/libzstd.1.dylib"
+        "/usr/local/opt/zstd/lib/libzstd.1.dylib"
+        "/usr/local/lib/libzstd.1.dylib"
+        "/opt/homebrew/opt/xz/lib/liblzma.5.dylib"
+        "/opt/homebrew/lib/liblzma.5.dylib"
+        "/usr/local/opt/xz/lib/liblzma.5.dylib"
+        "/usr/local/lib/liblzma.5.dylib"
+        
+        # JPEG library
+        "/opt/homebrew/opt/jpeg-turbo/lib/libjpeg.8.dylib"
+        "/opt/homebrew/lib/libjpeg.8.dylib"
+        "/usr/local/opt/jpeg-turbo/lib/libjpeg.8.dylib"
+        "/usr/local/lib/libjpeg.8.dylib"
+        "/opt/homebrew/opt/jpeg/lib/libjpeg.9.dylib"
+        "/opt/homebrew/lib/libjpeg.9.dylib"
+        "/usr/local/opt/jpeg/lib/libjpeg.9.dylib"
+        "/usr/local/lib/libjpeg.9.dylib"
+    )
+    
+    foreach(EXTERNAL_DYLIB_PATH ${EXTERNAL_DYLIB_CANDIDATES})
+        install(CODE "
+            if(EXISTS \"${EXTERNAL_DYLIB_PATH}\")
+                # Resolve symlinks to get the actual file
+                get_filename_component(RESOLVED_PATH \"${EXTERNAL_DYLIB_PATH}\" REALPATH)
+                get_filename_component(LIB_NAME \"${EXTERNAL_DYLIB_PATH}\" NAME)
+                
+                # Copy the actual file (not symlink) to the destination
+                file(COPY \"\${RESOLVED_PATH}\"
+                     DESTINATION \"\${CMAKE_INSTALL_PREFIX}/Kolosal.app/Contents/Frameworks\"
+                     FILE_PERMISSIONS OWNER_READ OWNER_WRITE OWNER_EXECUTE GROUP_READ GROUP_EXECUTE WORLD_READ WORLD_EXECUTE)
+                
+                # Rename the copied file to the expected name (in case the resolved name is different)
+                get_filename_component(RESOLVED_NAME \"\${RESOLVED_PATH}\" NAME)
+                if(NOT \"\${RESOLVED_NAME}\" STREQUAL \"\${LIB_NAME}\")
+                    file(RENAME 
+                        \"\${CMAKE_INSTALL_PREFIX}/Kolosal.app/Contents/Frameworks/\${RESOLVED_NAME}\"
+                        \"\${CMAKE_INSTALL_PREFIX}/Kolosal.app/Contents/Frameworks/\${LIB_NAME}\")
+                endif()
+                
+                message(STATUS \"Copied external library: \${LIB_NAME} (resolved from \${RESOLVED_PATH})\")
+            endif()
+        " COMPONENT Runtime)
+    endforeach()
+    
     # Install Metal-specific files if using Metal inference
     if(USE_METAL)
         # Install Metal files to Resources directory
@@ -832,15 +913,214 @@ elseif(APPLE)
         endif()
         
         # Fix RPATH for the kolosal_server library
-        if(EXISTS \"\${ACTUAL_INSTALL_PREFIX}/Frameworks/libkolosal_server.dylib\")
-            execute_process(COMMAND install_name_tool -id @rpath/libkolosal_server.dylib \"\${ACTUAL_INSTALL_PREFIX}/Frameworks/libkolosal_server.dylib\")
+        if(EXISTS \"\${ACTUAL_INSTALL_PREFIX}/Kolosal.app/Contents/Frameworks/libkolosal_server.dylib\")
+            execute_process(COMMAND install_name_tool -id @rpath/libkolosal_server.dylib \"\${ACTUAL_INSTALL_PREFIX}/Kolosal.app/Contents/Frameworks/libkolosal_server.dylib\")
         endif()
         
         # Fix RPATH for inference libraries
-        file(GLOB INFERENCE_LIBS \"\${ACTUAL_INSTALL_PREFIX}/Frameworks/libllama-*.dylib\")
+        file(GLOB INFERENCE_LIBS \"\${ACTUAL_INSTALL_PREFIX}/Kolosal.app/Contents/Frameworks/libllama-*.dylib\")
         foreach(INFERENCE_LIB \${INFERENCE_LIBS})
             get_filename_component(LIB_NAME \"\${INFERENCE_LIB}\" NAME)
             execute_process(COMMAND install_name_tool -id @rpath/\${LIB_NAME} \"\${INFERENCE_LIB}\")
+        endforeach()
+        
+        # Fix RPATH and dependencies for external libraries
+        set(EXTERNAL_LIBS_TO_FIX
+            \"libssl.3.dylib\"
+            \"libcrypto.3.dylib\"
+            \"libfontconfig.1.dylib\"
+            \"libfreetype.6.dylib\"
+            \"libpng16.16.dylib\"
+            \"libtiff.6.dylib\"
+            \"libjpeg.8.dylib\"
+            \"libjpeg.9.dylib\"
+            \"libzstd.1.dylib\"
+            \"liblzma.5.dylib\"
+        )
+        
+        foreach(LIB_NAME \${EXTERNAL_LIBS_TO_FIX})
+            set(LIB_PATH \"\${ACTUAL_INSTALL_PREFIX}/Kolosal.app/Contents/Frameworks/\${LIB_NAME}\")
+            if(EXISTS \"\${LIB_PATH}\")
+                # Fix the library's install name to use @rpath
+                execute_process(COMMAND install_name_tool -id @rpath/\${LIB_NAME} \"\${LIB_PATH}\")
+                
+                # Fix dependencies pointing to Homebrew paths
+                execute_process(COMMAND otool -L \"\${LIB_PATH}\" OUTPUT_VARIABLE OTOOL_OUTPUT)
+                
+                # Update OpenSSL dependencies
+                if(\"\${OTOOL_OUTPUT}\" MATCHES \"/opt/homebrew/opt/openssl@3/lib/libssl\\.3\\.dylib\")
+                    execute_process(COMMAND install_name_tool -change /opt/homebrew/opt/openssl@3/lib/libssl.3.dylib @rpath/libssl.3.dylib \"\${LIB_PATH}\")
+                endif()
+                if(\"\${OTOOL_OUTPUT}\" MATCHES \"/opt/homebrew/opt/openssl@3/lib/libcrypto\\.3\\.dylib\")
+                    execute_process(COMMAND install_name_tool -change /opt/homebrew/opt/openssl@3/lib/libcrypto.3.dylib @rpath/libcrypto.3.dylib \"\${LIB_PATH}\")
+                endif()
+                if(\"\${OTOOL_OUTPUT}\" MATCHES \"/usr/local/opt/openssl@3/lib/libssl\\.3\\.dylib\")
+                    execute_process(COMMAND install_name_tool -change /usr/local/opt/openssl@3/lib/libssl.3.dylib @rpath/libssl.3.dylib \"\${LIB_PATH}\")
+                endif()
+                if(\"\${OTOOL_OUTPUT}\" MATCHES \"/usr/local/opt/openssl@3/lib/libcrypto\\.3\\.dylib\")
+                    execute_process(COMMAND install_name_tool -change /usr/local/opt/openssl@3/lib/libcrypto.3.dylib @rpath/libcrypto.3.dylib \"\${LIB_PATH}\")
+                endif()
+                
+                # Update FreeType dependencies
+                if(\"\${OTOOL_OUTPUT}\" MATCHES \"/opt/homebrew/opt/freetype/lib/libfreetype\\.6\\.dylib\")
+                    execute_process(COMMAND install_name_tool -change /opt/homebrew/opt/freetype/lib/libfreetype.6.dylib @rpath/libfreetype.6.dylib \"\${LIB_PATH}\")
+                endif()
+                if(\"\${OTOOL_OUTPUT}\" MATCHES \"/usr/local/opt/freetype/lib/libfreetype\\.6\\.dylib\")
+                    execute_process(COMMAND install_name_tool -change /usr/local/opt/freetype/lib/libfreetype.6.dylib @rpath/libfreetype.6.dylib \"\${LIB_PATH}\")
+                endif()
+                
+                # Update LibPNG dependencies
+                if(\"\${OTOOL_OUTPUT}\" MATCHES \"/opt/homebrew/opt/libpng/lib/libpng16\\.16\\.dylib\")
+                    execute_process(COMMAND install_name_tool -change /opt/homebrew/opt/libpng/lib/libpng16.16.dylib @rpath/libpng16.16.dylib \"\${LIB_PATH}\")
+                endif()
+                if(\"\${OTOOL_OUTPUT}\" MATCHES \"/usr/local/opt/libpng/lib/libpng16\\.16\\.dylib\")
+                    execute_process(COMMAND install_name_tool -change /usr/local/opt/libpng/lib/libpng16.16.dylib @rpath/libpng16.16.dylib \"\${LIB_PATH}\")
+                endif()
+                
+                # Update LibTIFF dependencies
+                if(\"\${OTOOL_OUTPUT}\" MATCHES \"/opt/homebrew/opt/libtiff/lib/libtiff\\.6\\.dylib\")
+                    execute_process(COMMAND install_name_tool -change /opt/homebrew/opt/libtiff/lib/libtiff.6.dylib @rpath/libtiff.6.dylib \"\${LIB_PATH}\")
+                endif()
+                if(\"\${OTOOL_OUTPUT}\" MATCHES \"/usr/local/opt/libtiff/lib/libtiff\\.6\\.dylib\")
+                    execute_process(COMMAND install_name_tool -change /usr/local/opt/libtiff/lib/libtiff.6.dylib @rpath/libtiff.6.dylib \"\${LIB_PATH}\")
+                endif()
+                
+                # Update JPEG dependencies
+                if(\"\${OTOOL_OUTPUT}\" MATCHES \"/opt/homebrew/opt/jpeg-turbo/lib/libjpeg\\.8\\.dylib\")
+                    execute_process(COMMAND install_name_tool -change /opt/homebrew/opt/jpeg-turbo/lib/libjpeg.8.dylib @rpath/libjpeg.8.dylib \"\${LIB_PATH}\")
+                endif()
+                if(\"\${OTOOL_OUTPUT}\" MATCHES \"/usr/local/opt/jpeg-turbo/lib/libjpeg\\.8\\.dylib\")
+                    execute_process(COMMAND install_name_tool -change /usr/local/opt/jpeg-turbo/lib/libjpeg.8.dylib @rpath/libjpeg.8.dylib \"\${LIB_PATH}\")
+                endif()
+                if(\"\${OTOOL_OUTPUT}\" MATCHES \"/opt/homebrew/opt/jpeg/lib/libjpeg\\.9\\.dylib\")
+                    execute_process(COMMAND install_name_tool -change /opt/homebrew/opt/jpeg/lib/libjpeg.9.dylib @rpath/libjpeg.9.dylib \"\${LIB_PATH}\")
+                endif()
+                if(\"\${OTOOL_OUTPUT}\" MATCHES \"/usr/local/opt/jpeg/lib/libjpeg\\.9\\.dylib\")
+                    execute_process(COMMAND install_name_tool -change /usr/local/opt/jpeg/lib/libjpeg.9.dylib @rpath/libjpeg.9.dylib \"\${LIB_PATH}\")
+                endif()
+                
+                # Update FontConfig dependencies
+                if(\"\${OTOOL_OUTPUT}\" MATCHES \"/opt/homebrew/opt/fontconfig/lib/libfontconfig\\.1\\.dylib\")
+                    execute_process(COMMAND install_name_tool -change /opt/homebrew/opt/fontconfig/lib/libfontconfig.1.dylib @rpath/libfontconfig.1.dylib \"\${LIB_PATH}\")
+                endif()
+                if(\"\${OTOOL_OUTPUT}\" MATCHES \"/usr/local/opt/fontconfig/lib/libfontconfig\\.1\\.dylib\")
+                    execute_process(COMMAND install_name_tool -change /usr/local/opt/fontconfig/lib/libfontconfig.1.dylib @rpath/libfontconfig.1.dylib \"\${LIB_PATH}\")
+                endif()
+                
+                # Update zstd dependencies (for LibTIFF)
+                if(\"\${OTOOL_OUTPUT}\" MATCHES \"/opt/homebrew/opt/zstd/lib/libzstd\\.1\\.dylib\")
+                    execute_process(COMMAND install_name_tool -change /opt/homebrew/opt/zstd/lib/libzstd.1.dylib @rpath/libzstd.1.dylib \"\${LIB_PATH}\")
+                endif()
+                if(\"\${OTOOL_OUTPUT}\" MATCHES \"/usr/local/opt/zstd/lib/libzstd\\.1\\.dylib\")
+                    execute_process(COMMAND install_name_tool -change /usr/local/opt/zstd/lib/libzstd.1.dylib @rpath/libzstd.1.dylib \"\${LIB_PATH}\")
+                endif()
+                
+                # Update liblzma/xz dependencies (for LibTIFF)
+                if(\"\${OTOOL_OUTPUT}\" MATCHES \"/opt/homebrew/opt/xz/lib/liblzma\\.5\\.dylib\")
+                    execute_process(COMMAND install_name_tool -change /opt/homebrew/opt/xz/lib/liblzma.5.dylib @rpath/liblzma.5.dylib \"\${LIB_PATH}\")
+                endif()
+                if(\"\${OTOOL_OUTPUT}\" MATCHES \"/usr/local/opt/xz/lib/liblzma\\.5\\.dylib\")
+                    execute_process(COMMAND install_name_tool -change /usr/local/opt/xz/lib/liblzma.5.dylib @rpath/liblzma.5.dylib \"\${LIB_PATH}\")
+                endif()
+                
+                message(STATUS \"Fixed RPATH and dependencies for \${LIB_NAME}\")
+            endif()
+        endforeach()
+        
+        # Fix main executables and libraries to use @rpath for external dependencies
+        set(MAIN_BINARIES_TO_FIX
+            \"\${ACTUAL_INSTALL_PREFIX}/Kolosal.app/Contents/MacOS/kolosal\"
+            \"\${ACTUAL_INSTALL_PREFIX}/Kolosal.app/Contents/MacOS/kolosal-server\"
+            \"\${ACTUAL_INSTALL_PREFIX}/Kolosal.app/Contents/Frameworks/libkolosal_server.dylib\"
+        )
+        
+        # Also fix inference libraries
+        file(GLOB INFERENCE_LIBS_TO_FIX \"\${ACTUAL_INSTALL_PREFIX}/Kolosal.app/Contents/Frameworks/libllama-*.dylib\")
+        list(APPEND MAIN_BINARIES_TO_FIX \${INFERENCE_LIBS_TO_FIX})
+        
+        foreach(BINARY_PATH \${MAIN_BINARIES_TO_FIX})
+            if(EXISTS \"\${BINARY_PATH}\")
+                execute_process(COMMAND otool -L \"\${BINARY_PATH}\" OUTPUT_VARIABLE OTOOL_OUTPUT)
+                
+                # Update OpenSSL dependencies
+                if(\"\${OTOOL_OUTPUT}\" MATCHES \"/opt/homebrew/opt/openssl@3/lib/libssl\\.3\\.dylib\")
+                    execute_process(COMMAND install_name_tool -change /opt/homebrew/opt/openssl@3/lib/libssl.3.dylib @rpath/libssl.3.dylib \"\${BINARY_PATH}\")
+                endif()
+                if(\"\${OTOOL_OUTPUT}\" MATCHES \"/opt/homebrew/opt/openssl@3/lib/libcrypto\\.3\\.dylib\")
+                    execute_process(COMMAND install_name_tool -change /opt/homebrew/opt/openssl@3/lib/libcrypto.3.dylib @rpath/libcrypto.3.dylib \"\${BINARY_PATH}\")
+                endif()
+                if(\"\${OTOOL_OUTPUT}\" MATCHES \"/usr/local/opt/openssl@3/lib/libssl\\.3\\.dylib\")
+                    execute_process(COMMAND install_name_tool -change /usr/local/opt/openssl@3/lib/libssl.3.dylib @rpath/libssl.3.dylib \"\${BINARY_PATH}\")
+                endif()
+                if(\"\${OTOOL_OUTPUT}\" MATCHES \"/usr/local/opt/openssl@3/lib/libcrypto\\.3\\.dylib\")
+                    execute_process(COMMAND install_name_tool -change /usr/local/opt/openssl@3/lib/libcrypto.3.dylib @rpath/libcrypto.3.dylib \"\${BINARY_PATH}\")
+                endif()
+                
+                # Update FreeType dependencies
+                if(\"\${OTOOL_OUTPUT}\" MATCHES \"/opt/homebrew/opt/freetype/lib/libfreetype\\.6\\.dylib\")
+                    execute_process(COMMAND install_name_tool -change /opt/homebrew/opt/freetype/lib/libfreetype.6.dylib @rpath/libfreetype.6.dylib \"\${BINARY_PATH}\")
+                endif()
+                if(\"\${OTOOL_OUTPUT}\" MATCHES \"/usr/local/opt/freetype/lib/libfreetype\\.6\\.dylib\")
+                    execute_process(COMMAND install_name_tool -change /usr/local/opt/freetype/lib/libfreetype.6.dylib @rpath/libfreetype.6.dylib \"\${BINARY_PATH}\")
+                endif()
+                
+                # Update LibPNG dependencies
+                if(\"\${OTOOL_OUTPUT}\" MATCHES \"/opt/homebrew/opt/libpng/lib/libpng16\\.16\\.dylib\")
+                    execute_process(COMMAND install_name_tool -change /opt/homebrew/opt/libpng/lib/libpng16.16.dylib @rpath/libpng16.16.dylib \"\${BINARY_PATH}\")
+                endif()
+                if(\"\${OTOOL_OUTPUT}\" MATCHES \"/usr/local/opt/libpng/lib/libpng16\\.16\\.dylib\")
+                    execute_process(COMMAND install_name_tool -change /usr/local/opt/libpng/lib/libpng16.16.dylib @rpath/libpng16.16.dylib \"\${BINARY_PATH}\")
+                endif()
+                
+                # Update LibTIFF dependencies
+                if(\"\${OTOOL_OUTPUT}\" MATCHES \"/opt/homebrew/opt/libtiff/lib/libtiff\\.6\\.dylib\")
+                    execute_process(COMMAND install_name_tool -change /opt/homebrew/opt/libtiff/lib/libtiff.6.dylib @rpath/libtiff.6.dylib \"\${BINARY_PATH}\")
+                endif()
+                if(\"\${OTOOL_OUTPUT}\" MATCHES \"/usr/local/opt/libtiff/lib/libtiff\\.6\\.dylib\")
+                    execute_process(COMMAND install_name_tool -change /usr/local/opt/libtiff/lib/libtiff.6.dylib @rpath/libtiff.6.dylib \"\${BINARY_PATH}\")
+                endif()
+                
+                # Update JPEG dependencies
+                if(\"\${OTOOL_OUTPUT}\" MATCHES \"/opt/homebrew/opt/jpeg-turbo/lib/libjpeg\\.8\\.dylib\")
+                    execute_process(COMMAND install_name_tool -change /opt/homebrew/opt/jpeg-turbo/lib/libjpeg.8.dylib @rpath/libjpeg.8.dylib \"\${BINARY_PATH}\")
+                endif()
+                if(\"\${OTOOL_OUTPUT}\" MATCHES \"/usr/local/opt/jpeg-turbo/lib/libjpeg\\.8\\.dylib\")
+                    execute_process(COMMAND install_name_tool -change /usr/local/opt/jpeg-turbo/lib/libjpeg.8.dylib @rpath/libjpeg.8.dylib \"\${BINARY_PATH}\")
+                endif()
+                if(\"\${OTOOL_OUTPUT}\" MATCHES \"/opt/homebrew/opt/jpeg/lib/libjpeg\\.9\\.dylib\")
+                    execute_process(COMMAND install_name_tool -change /opt/homebrew/opt/jpeg/lib/libjpeg.9.dylib @rpath/libjpeg.9.dylib \"\${BINARY_PATH}\")
+                endif()
+                if(\"\${OTOOL_OUTPUT}\" MATCHES \"/usr/local/opt/jpeg/lib/libjpeg\\.9\\.dylib\")
+                    execute_process(COMMAND install_name_tool -change /usr/local/opt/jpeg/lib/libjpeg.9.dylib @rpath/libjpeg.9.dylib \"\${BINARY_PATH}\")
+                endif()
+                
+                # Update FontConfig dependencies
+                if(\"\${OTOOL_OUTPUT}\" MATCHES \"/opt/homebrew/opt/fontconfig/lib/libfontconfig\\.1\\.dylib\")
+                    execute_process(COMMAND install_name_tool -change /opt/homebrew/opt/fontconfig/lib/libfontconfig.1.dylib @rpath/libfontconfig.1.dylib \"\${BINARY_PATH}\")
+                endif()
+                if(\"\${OTOOL_OUTPUT}\" MATCHES \"/usr/local/opt/fontconfig/lib/libfontconfig\\.1\\.dylib\")
+                    execute_process(COMMAND install_name_tool -change /usr/local/opt/fontconfig/lib/libfontconfig.1.dylib @rpath/libfontconfig.1.dylib \"\${BINARY_PATH}\")
+                endif()
+                
+                # Update zstd dependencies (for LibTIFF)
+                if(\"\${OTOOL_OUTPUT}\" MATCHES \"/opt/homebrew/opt/zstd/lib/libzstd\\.1\\.dylib\")
+                    execute_process(COMMAND install_name_tool -change /opt/homebrew/opt/zstd/lib/libzstd.1.dylib @rpath/libzstd.1.dylib \"\${BINARY_PATH}\")
+                endif()
+                if(\"\${OTOOL_OUTPUT}\" MATCHES \"/usr/local/opt/zstd/lib/libzstd\\.1\\.dylib\")
+                    execute_process(COMMAND install_name_tool -change /usr/local/opt/zstd/lib/libzstd.1.dylib @rpath/libzstd.1.dylib \"\${BINARY_PATH}\")
+                endif()
+                
+                # Update liblzma/xz dependencies (for LibTIFF)
+                if(\"\${OTOOL_OUTPUT}\" MATCHES \"/opt/homebrew/opt/xz/lib/liblzma\\.5\\.dylib\")
+                    execute_process(COMMAND install_name_tool -change /opt/homebrew/opt/xz/lib/liblzma.5.dylib @rpath/liblzma.5.dylib \"\${BINARY_PATH}\")
+                endif()
+                if(\"\${OTOOL_OUTPUT}\" MATCHES \"/usr/local/opt/xz/lib/liblzma\\.5\\.dylib\")
+                    execute_process(COMMAND install_name_tool -change /usr/local/opt/xz/lib/liblzma.5.dylib @rpath/liblzma.5.dylib \"\${BINARY_PATH}\")
+                endif()
+                
+                get_filename_component(BINARY_NAME \"\${BINARY_PATH}\" NAME)
+                message(STATUS \"Fixed external dependencies for \${BINARY_NAME}\")
+            endif()
         endforeach()
         
         message(STATUS \"Fixed RPATH for all installed libraries in \${ACTUAL_INSTALL_PREFIX}\")
@@ -848,11 +1128,9 @@ elseif(APPLE)
         # Ensure the launcher executable and script have executable permissions
         if(EXISTS \"\${ACTUAL_INSTALL_PREFIX}/Kolosal.app/Contents/MacOS/kolosal-launcher\")
             execute_process(COMMAND chmod +x \"\${ACTUAL_INSTALL_PREFIX}/Kolosal.app/Contents/MacOS/kolosal-launcher\")
-            message(STATUS \"Set executable permissions for kolosal-launcher\")
         endif()
         if(EXISTS \"\${ACTUAL_INSTALL_PREFIX}/Kolosal.app/Contents/MacOS/kolosal-launcher.sh\")
             execute_process(COMMAND chmod +x \"\${ACTUAL_INSTALL_PREFIX}/Kolosal.app/Contents/MacOS/kolosal-launcher.sh\")
-            message(STATUS \"Set executable permissions for kolosal-launcher.sh\")
         endif()
     " COMPONENT Runtime)
 

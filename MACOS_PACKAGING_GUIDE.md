@@ -1,7 +1,7 @@
 # macOS Packaging Guide for Kolosal CLI
 
 ## Overview
-The macOS packaging creates a DMG installer that contains a macOS app bundle (`Kolosal.app`). When users double-click the app, it offers to set up command line access automatically.
+The macOS packaging creates a DMG installer that contains a macOS app bundle (`Kolosal.app`). When users double-click the app, it offers to set up command line access automatically. The app bundle includes all necessary external dependencies for a completely self-contained installation.
 
 ## New Structure
 
@@ -14,13 +14,20 @@ Kolosal [VERSION] (DMG Volume)/
 │   │   ├── MacOS/
 │   │   │   ├── kolosal                  # CLI executable
 │   │   │   ├── kolosal-server           # Server executable
+│   │   │   ├── kolosal-launcher         # Native launcher executable
 │   │   │   └── kolosal-launcher.sh      # Setup launcher script
-│   │   ├── Frameworks/                  # Shared libraries
-│   │   │   ├── libkolosal_server.dylib
-│   │   │   ├── libllama-metal.dylib
-│   │   │   ├── libllama-vulkan.dylib
-│   │   │   ├── libllama-cuda.dylib
-│   │   │   └── libllama-cpu.dylib
+│   │   ├── Frameworks/                  # Shared libraries (self-contained)
+│   │   │   ├── libkolosal_server.dylib  # Main server library
+│   │   │   ├── libllama-metal.dylib     # Inference engine
+│   │   │   ├── libssl.3.dylib           # OpenSSL SSL library
+│   │   │   ├── libcrypto.3.dylib        # OpenSSL Crypto library
+│   │   │   ├── libfreetype.6.dylib      # FreeType font library
+│   │   │   ├── libfontconfig.1.dylib    # Font configuration library
+│   │   │   ├── libpng16.16.dylib        # PNG image library
+│   │   │   ├── libtiff.6.dylib          # TIFF image library
+│   │   │   ├── libjpeg.8.dylib          # JPEG image library
+│   │   │   ├── libzstd.1.dylib          # Zstandard compression
+│   │   │   └── liblzma.5.dylib          # LZMA compression
 │   │   └── Resources/                   # App resources
 │   │       ├── config.yaml              # Default configuration
 │   │       ├── kolosal.icns             # App icon
@@ -28,6 +35,50 @@ Kolosal [VERSION] (DMG Volume)/
 │   │       └── LICENSE                  # License file
 └── Applications -> /Applications        # Symlink for easy access
 ```
+
+## Self-Contained Dependency Bundling
+
+The macOS package is designed to be completely self-contained, including all necessary external libraries. This ensures the application works on any macOS system without requiring users to install additional dependencies.
+
+### Bundled External Dependencies
+
+The following external libraries are automatically bundled and their RPATHs fixed during packaging:
+
+1. **OpenSSL Libraries** (`libssl.3.dylib`, `libcrypto.3.dylib`)
+   - Required for: HTTPS connections, cryptographic operations, PDF signing (PoDoFo)
+   - Source: Homebrew openssl@3 package
+
+2. **Font and Text Libraries**
+   - **FreeType** (`libfreetype.6.dylib`): Font rendering and typography
+   - **FontConfig** (`libfontconfig.1.dylib`): Font configuration and matching
+   - Source: Homebrew freetype and fontconfig packages
+
+3. **Image Libraries**
+   - **LibPNG** (`libpng16.16.dylib`): PNG image support for PDF processing
+   - **LibTIFF** (`libtiff.6.dylib`): TIFF image support for PDF processing
+   - **JPEG** (`libjpeg.8.dylib`): JPEG image support for PDF processing
+   - Source: Homebrew libpng, libtiff, and jpeg-turbo packages
+
+4. **Compression Libraries**
+   - **Zstd** (`libzstd.1.dylib`): Zstandard compression (dependency of LibTIFF)
+   - **LZMA** (`liblzma.5.dylib`): LZMA compression (dependency of LibTIFF)
+   - Source: Homebrew zstd and xz packages
+
+### RPATH Configuration
+
+All bundled libraries have their RPATHs automatically fixed to use `@rpath` references, ensuring they can find each other within the app bundle:
+
+- Main executables use `@executable_path/../Frameworks` to find libraries
+- Libraries use `@rpath/libname.dylib` for inter-library dependencies
+- All external paths (`/opt/homebrew/*`, `/usr/local/*`) are rewritten to use `@rpath`
+
+### Build-Time Dependency Resolution
+
+The packaging system automatically:
+1. Detects which external libraries are linked by the main binaries
+2. Copies them from Homebrew installation paths to the app bundle
+3. Recursively processes their dependencies
+4. Fixes all RPATHs to create a self-contained bundle
 
 ### Installation Process
 
@@ -141,6 +192,83 @@ cp /usr/local/kolosal/etc/config.yaml ~/Library/Application\ Support/Kolosal/
 
 # Unmount the DMG
 hdiutil unmount "/Volumes/Install Kolosal CLI"
+```
+
+## Packaging Tools and Scripts
+
+Two helper scripts are provided to assist with macOS packaging:
+
+### 1. Automated Packaging Script
+
+`scripts/package_macos.sh` - Complete build and packaging automation:
+
+```bash
+# Full build and package with dependency bundling
+./scripts/package_macos.sh
+
+# Options:
+./scripts/package_macos.sh -t Debug          # Debug build
+./scripts/package_macos.sh -c               # Clean build
+./scripts/package_macos.sh -n               # No DMG creation
+./scripts/package_macos.sh --skip-build     # Package existing build
+```
+
+Features:
+- Checks for required dependencies and tools
+- Builds the project with proper configuration
+- Creates self-contained app bundle with all dependencies
+- Fixes RPATHs automatically
+- Creates distributable DMG file
+- Provides comprehensive validation
+
+### 2. Dependency Verification Script
+
+`scripts/check_macos_dependencies.sh` - Validate dependency bundling:
+
+```bash
+# Check dependencies in installed app bundle
+./scripts/check_macos_dependencies.sh
+
+# Check specific directories
+./scripts/check_macos_dependencies.sh -f /path/to/Frameworks -i /path/to/install
+```
+
+Features:
+- Lists all bundled external libraries
+- Checks for missing dependencies
+- Validates RPATH configurations
+- Identifies remaining external dependencies
+- Provides detailed dependency tree analysis
+
+### Build Requirements
+
+For successful packaging, ensure you have:
+
+```bash
+# Install required dependencies via Homebrew
+brew install openssl@3 freetype fontconfig libpng libtiff jpeg-turbo zstd xz
+
+# Install build tools
+xcode-select --install  # For system development tools
+brew install cmake      # Build system
+```
+
+### Testing the Package
+
+After building, test the self-contained nature:
+
+```bash
+# Test that the app works without Homebrew dependencies
+# (temporarily rename Homebrew directory)
+sudo mv /opt/homebrew /opt/homebrew-disabled
+
+# Test the app
+open install/Kolosal.app
+# or
+install/Kolosal.app/Contents/MacOS/kolosal --version
+
+# Restore Homebrew
+sudo mv /opt/homebrew-disabled /opt/homebrew
 ```
 
 **Troubleshooting**: Check what's actually in the DMG:
