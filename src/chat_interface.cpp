@@ -136,13 +136,11 @@ bool ChatInterface::startChatInterface(const std::string& engineId) {
         // Force clear any lingering suggestions before showing AI response
         forceClearSuggestions();
 
-        // Add an empty line to visually separate user input from spinner/assistant response
-        std::cout << std::endl;
         // Show loading spinner using LoadingAnimation until first model response
         std::atomic<bool> gotFirstChunk{false};
+        std::atomic<bool> promptPrinted{false};
         LoadingAnimation loadingAnim("");
         std::string fullResponse;
-        bool printedPrompt = false;
 
         // Start spinner in a thread, but print prompt and clear spinner on first token
         std::thread loadingThread([&gotFirstChunk, &loadingAnim]() {
@@ -162,9 +160,13 @@ bool ChatInterface::startChatInterface(const std::string& engineId) {
         int currentColumn = 0;  // Track horizontal cursor position
         int terminalWidth = 80; // Default width, will be updated
         int terminalHeight = 24; // Default height, will be updated
+        int lineCount = 0; // Track approximate line count to avoid bottom-of-terminal issues
         
-        // Enable full functionality on all platforms including macOS
+        // Use safer mode on macOS to avoid terminal crashes
         bool useSimpleMode = false;
+#ifdef __APPLE__
+        useSimpleMode = true; // Default to simple mode on macOS to prevent crashes
+#endif
 
 #ifdef _WIN32
         // Get actual terminal dimensions on Windows
@@ -185,41 +187,7 @@ bool ChatInterface::startChatInterface(const std::string& engineId) {
         
         bool success = m_serverClient->streamingChatCompletion(engineId, userInput,
             [&](const std::string& chunk, double tps, double timeToFirstToken) {
-                if (!gotFirstChunk) {
-                    gotFirstChunk = true;
-                    // Move to start of spinner line, clear it, then print prompt and first token
-                    loadingAnim.stop();
-                    std::cout << "\r\033[32m> \033[32m";
-                    printedPrompt = true;
-                    
-                    // Print the first chunk that triggered this callback
-                    std::cout << chunk;
-                    std::cout.flush();
-                    fullResponse += chunk;
-                    
-                    if (!useSimpleMode) {
-                        // Update cursor position tracking for the first chunk (only if not in simple mode)
-                        for (char c : chunk) {
-                            if (c == '\n') {
-                                currentColumn = 0;
-                            } else if (c >= 32 && c <= 126) { // Printable characters
-                                currentColumn++;
-                                if (currentColumn >= terminalWidth) {
-                                    currentColumn = 0; // Wrapped to new line
-                                }
-                            }
-                        }
-                        
-                        // Update line state
-                        bool containsNewline = chunk.find('\n') != std::string::npos;
-                        lastWasNewline = containsNewline;
-                    }
-                    
-                    // Return early since we've already processed this chunk
-                    return;
-                }
-                
-                // Update metrics
+                // Update metrics first (before any processing)
                 if (tps > 0) {
                     currentTps = tps;
                     hasMetrics = true;
@@ -228,17 +196,57 @@ bool ChatInterface::startChatInterface(const std::string& engineId) {
                     ttft = timeToFirstToken;
                 }
                 
-                if (useSimpleMode) {
-                    // Simple mode for macOS - just output the chunk without complex ANSI sequences
-                    std::cout << chunk;
-                    std::cout.flush();
-                    fullResponse += chunk;
+                // Add chunk to full response first
+                fullResponse += chunk;
+                
+                // Check if this is the first time we're processing any chunk
+                if (!gotFirstChunk.load()) {
+                    gotFirstChunk = true;
+                    // Only print prompt if we haven't already
+                    if (!promptPrinted.exchange(true)) {
+                        // Move to start of spinner line, clear it, then print prompt
+                        loadingAnim.stop();
+                        std::cout << "\r\033[32m> \033[32m";
+                    }
+                }
+                
+                // Print the chunk content directly (no need to recalculate from fullResponse)
+                std::cout << chunk;
+                std::cout.flush();
+                
+                if (!useSimpleMode) {
+                    // Update cursor position tracking for the chunk content (only if not in simple mode)
+                    for (char c : chunk) {
+                        if (c == '\n') {
+                            currentColumn = 0;
+                            lineCount++; // Track line count
+                        } else if (c >= 32 && c <= 126) { // Printable characters
+                            currentColumn++;
+                            if (currentColumn >= terminalWidth) {
+                                currentColumn = 0; // Wrapped to new line
+                                lineCount++; // Count wrapped lines
+                            }
+                        }
+                    }
+                    
+                    // Update line state
+                    bool containsNewline = chunk.find('\n') != std::string::npos;
+                    lastWasNewline = containsNewline;
                 } else {
-                    // Complex mode for Windows/Linux with metrics and cursor management
+                    // Count newlines in simple mode too
+                    for (char c : chunk) {
+                        if (c == '\n') {
+                            lineCount++;
+                        }
+                    }
+                }
+                
+                // Handle metrics and complex display logic (only for non-simple mode)
+                if (!useSimpleMode) {
                     // Check if we need to clear previous metrics due to newline
                     bool containsNewline = chunk.find('\n') != std::string::npos;
                     if (containsNewline && metricsShown) {
-                        // Clear the metrics line before printing the chunk
+                        // Clear the metrics line before processing the chunk
                         std::cout << "\033[s";  // Save cursor position
                         std::cout << "\033[B\033[1G\033[2K"; // Move down, go to column 1, clear entire line
                         std::cout << "\033[u";  // Restore cursor position
@@ -268,26 +276,10 @@ bool ChatInterface::startChatInterface(const std::string& engineId) {
                         metricsShown = false;
                     }
                     
-                    std::cout << chunk;
-                    std::cout.flush();
-                    fullResponse += chunk;
-                    
-                    // Update cursor position tracking
-                    for (char c : chunk) {
-                        if (c == '\n') {
-                            currentColumn = 0;
-                        } else if (c >= 32 && c <= 126) { // Printable characters
-                            currentColumn++;
-                            if (currentColumn >= terminalWidth) {
-                                currentColumn = 0; // Wrapped to new line
-                            }
-                        }
-                    }
-                    
-                    // Update line state and clear metrics if newline was processed
+                    // Update line state for metrics display logic
                     if (containsNewline || willWrap) {
                         lastWasNewline = true;
-                        // Clear metrics again after printing the chunk to ensure they're gone
+                        // Clear metrics again after processing to ensure they're gone
                         if (metricsShown) {
                             std::cout << "\033[s";  // Save cursor position
                             std::cout << "\033[B\033[1G\033[2K"; // Move down, go to column 1, clear entire line
@@ -301,7 +293,8 @@ bool ChatInterface::startChatInterface(const std::string& engineId) {
                 
                 // Show metrics in real-time below the response (but not immediately after newlines)
                 // Skip metrics display in simple mode to avoid ANSI sequence issues on macOS
-                if (!useSimpleMode && hasMetrics && !lastWasNewline) {
+                // Also skip real-time metrics for single-line responses to avoid text duplication
+                if (!useSimpleMode && hasMetrics && !lastWasNewline && lineCount > 0) {
                     // Check if we're near the bottom of the terminal to avoid overriding text
                     bool canShowMetricsBelow = true;
                     
@@ -316,113 +309,45 @@ bool ChatInterface::startChatInterface(const std::string& engineId) {
                         }
                     }
 #else
-                    // On Linux/macOS, query cursor position with improved error handling
-                    // Save current terminal mode
-                    struct termios oldTermios, newTermios;
-                    if (tcgetattr(STDIN_FILENO, &oldTermios) != 0) {
-                        // If we can't get terminal attributes, assume we can show metrics
-                        canShowMetricsBelow = true;
-                    } else {
-                        newTermios = oldTermios;
-                        newTermios.c_lflag &= ~(ICANON | ECHO);
-                        
-                        if (tcsetattr(STDIN_FILENO, TCSANOW, &newTermios) != 0) {
-                            // If we can't set terminal mode, restore and assume safe
-                            canShowMetricsBelow = true;
-                        } else {
-                            // Flush output and query cursor position
-                            std::cout.flush();
-                            fflush(stdout);
-                            
-                            // Send cursor position query
-                            std::cout << "\033[6n" << std::flush;
-                            
-                            // Read response: \033[row;colR
-                            char response[32];
-                            int responseIndex = 0;
-                            int currentRow = 0;
-                            
-                            // Set non-blocking mode temporarily
-                            int flags = fcntl(STDIN_FILENO, F_GETFL, 0);
-                            if (flags >= 0) {
-                                fcntl(STDIN_FILENO, F_SETFL, flags | O_NONBLOCK);
-                                
-                                // Read response with timeout and better error handling
-                                auto startTime = std::chrono::steady_clock::now();
-                                bool gotResponse = false;
-                                
-                                while (!gotResponse && 
-                                       std::chrono::duration_cast<std::chrono::milliseconds>(
-                                           std::chrono::steady_clock::now() - startTime).count() < 100) {
-                                    
-                                    // Use read() instead of getchar() for better control on macOS
-                                    char c;
-                                    ssize_t bytesRead = read(STDIN_FILENO, &c, 1);
-                                    
-                                    if (bytesRead == 1 && responseIndex < 31) {
-                                        response[responseIndex++] = c;
-                                        if (c == 'R') {
-                                            response[responseIndex] = '\0';
-                                            gotResponse = true;
-                                        }
-                                    } else if (bytesRead < 0 && errno != EAGAIN && errno != EWOULDBLOCK) {
-                                        // Error occurred, break out
-                                        break;
-                                    }
-                                    
-                                    if (!gotResponse) {
-                                        std::this_thread::sleep_for(std::chrono::milliseconds(2));
-                                    }
-                                }
-                                
-                                // Restore blocking mode
-                                fcntl(STDIN_FILENO, F_SETFL, flags);
-                                
-                                // Parse cursor position if we got a valid response
-                                if (gotResponse && responseIndex > 4 && response[0] == '\033' && response[1] == '[') {
-                                    char* semiColon = strchr(response + 2, ';');
-                                    if (semiColon) {
-                                        *semiColon = '\0';
-                                        currentRow = atoi(response + 2);
-                                    }
-                                }
-                            }
-                            
-                            // Restore terminal settings
-                            tcsetattr(STDIN_FILENO, TCSANOW, &oldTermios);
-                            
-                            // Check if we're near the bottom of the terminal (same logic as Windows)
-                            if (currentRow > 0 && currentRow >= terminalHeight - 1) {
-                                canShowMetricsBelow = false;
-                            } else if (terminalHeight > 10) {
-                                canShowMetricsBelow = true;
-                            } else {
-                                canShowMetricsBelow = false;
-                            }
-                        }
+                    // Simplified approach for Linux/macOS - use line counting instead of cursor queries
+                    // Estimate if we're near the bottom based on line count
+                    if (lineCount >= terminalHeight - 3) {
+                        canShowMetricsBelow = false;
                     }
 #endif
                     
                     if (canShowMetricsBelow) {
-                        // Save current cursor position
-                        std::cout << "\033[s";
-                        
-                        // Move to next line and go to beginning of line, then clear and show metrics
-                        std::cout << "\033[B\033[1G\033[2K"; // Move down, go to column 1, clear line
-                        std::cout << "\033[90m"; // Dim gray color
-                        if (ttft > 0) {
-                            std::cout << "TTFT: " << std::fixed << std::setprecision(2) << ttft << "ms";
+                        // Clear any existing metrics first to avoid interference
+                        if (metricsShown) {
+                            std::cout << "\033[s";  // Save cursor position
+                            std::cout << "\033[B\033[1G\033[2K"; // Move down, go to column 1, clear entire line
+                            std::cout << "\033[u";  // Restore cursor position
+                            metricsShown = false;
                         }
-                        if (currentTps > 0) {
-                            if (ttft > 0) std::cout << " | ";
-                            std::cout << "TPS: " << std::fixed << std::setprecision(1) << currentTps;
-                        }
-                        std::cout << "\033[0m";
-                        metricsShown = true;
                         
-                        // Restore cursor position
-                        std::cout << "\033[u";
-                        std::cout.flush();
+                        // For single-line responses (lineCount == 0), don't show real-time metrics
+                        // to avoid cursor position conflicts that cause text duplication
+                        if (lineCount > 0) {
+                            // Save current cursor position
+                            std::cout << "\033[s";
+                            
+                            // Move to next line and go to beginning of line, then clear and show metrics
+                            std::cout << "\033[B\033[1G\033[2K"; // Move down, go to column 1, clear line
+                            std::cout << "\033[90m"; // Dim gray color
+                            if (ttft > 0) {
+                                std::cout << "TTFT: " << std::fixed << std::setprecision(2) << ttft << "ms";
+                            }
+                            if (currentTps > 0) {
+                                if (ttft > 0) std::cout << " | ";
+                                std::cout << "TPS: " << std::fixed << std::setprecision(1) << currentTps;
+                            }
+                            std::cout << "\033[0m";
+                            metricsShown = true;
+                            
+                            // Restore cursor position to end of response text
+                            std::cout << "\033[u";
+                            std::cout.flush();
+                        }
                     } else {
                         // If we can't show metrics below, clear any existing metrics
                         if (metricsShown) {
@@ -438,7 +363,7 @@ bool ChatInterface::startChatInterface(const std::string& engineId) {
         if (loadingThread.joinable()) loadingThread.join();
         
         // If the model never sent any chunk, still print the prompt for consistency and clear spinner
-        if (!printedPrompt) {
+        if (!promptPrinted.load()) {
             loadingAnim.stop();
             std::cout << "\n\033[32m> \033[32m";
             std::cout.flush();
@@ -677,6 +602,25 @@ std::string ChatInterface::getInputWithRealTimeAutocomplete(const std::string& p
     int suggestionStartRow = 0;
     const std::string hintText = "Type your message or use /help for commands...";
     
+    // Get terminal dimensions for boundary protection
+    struct winsize w;
+    int terminalHeight = 24; // Default fallback
+    if (ioctl(STDOUT_FILENO, TIOCGWINSZ, &w) == 0) {
+        terminalHeight = w.ws_row;
+    }
+    
+    // Check if we're too close to bottom for safe suggestion display
+    // Add some newlines to ensure we have space if needed
+    int currentLine = 1; // Assume we start somewhere in the middle
+    try {
+        // Simple approach: if terminal is small, add some padding
+        if (terminalHeight < 15) {
+            std::cout << "\n\n\n";
+        }
+    } catch (...) {
+        // Ignore errors in terminal handling
+    }
+    
     // Set terminal to raw mode for character-by-character input
     struct termios oldt, newt;
     tcgetattr(STDIN_FILENO, &oldt);
@@ -734,15 +678,18 @@ std::string ChatInterface::getInputWithRealTimeAutocomplete(const std::string& p
                     displayHintTextLinux(hintText, showingHint);
                 }
                 
-                // Update or clear suggestions
+                // Update or clear suggestions with boundary protection
                 if (input.length() >= 2 && input[0] == '/') {
-                    updateRealTimeSuggestionsLinux(input, showingSuggestions, suggestionStartRow, prompt);
+                    // Only show suggestions if we have enough terminal space
+                    if (terminalHeight > 10) {
+                        updateRealTimeSuggestionsLinux(input, showingSuggestions, suggestionStartRow, prompt);
+                    }
                 } else if (showingSuggestions) {
                     clearSuggestionsLinux(showingSuggestions, suggestionStartRow, prompt, input);
                 }
             }
         } else if (ch == 9) { // Tab - for command suggestions
-            if (input.length() >= 2 && input[0] == '/') {
+            if (input.length() >= 2 && input[0] == '/' && terminalHeight > 10) {
                 auto suggestions = m_commandManager->getCommandSuggestions(input);
                 if (!suggestions.empty()) {
                     if (showingHint) {
@@ -950,6 +897,18 @@ void ChatInterface::updateRealTimeSuggestionsLinux(const std::string& input, boo
         return;
     }
     
+    // Get terminal height for boundary checking
+    struct winsize w;
+    int terminalHeight = 24;
+    if (ioctl(STDOUT_FILENO, TIOCGWINSZ, &w) == 0) {
+        terminalHeight = w.ws_row;
+    }
+    
+    // Don't show suggestions if terminal is too small
+    if (terminalHeight < 10) {
+        return;
+    }
+    
     if (!showingSuggestions) {
         showingSuggestions = true;
         suggestionStartRow = 1; // Mark that we're showing suggestions below
@@ -958,40 +917,44 @@ void ChatInterface::updateRealTimeSuggestionsLinux(const std::string& input, boo
     // Save current cursor position (input line)
     printf("\033[s");
     
-    // Move cursor down one line to start suggestions below input
-    printf("\033[B");  // Move cursor down one line
-    printf("\033[1G"); // Move to beginning of line
-    
-    auto formattedSuggestions = m_commandManager->getFormattedCommandSuggestions(input);
-    size_t maxDisplay = 3;
-    size_t displayCount = (formattedSuggestions.size() < maxDisplay) ? formattedSuggestions.size() : maxDisplay;
-    
-    // Clear the suggestion area first (4 lines should be enough)
-    for (int i = 0; i < 4; ++i) {
-        printf("\033[K"); // Clear current line
-        if (i < 3) printf("\033[B"); // Move to next line
-    }
-    
-    // Move back up to start of suggestions area
-    for (int i = 0; i < 3; ++i) {
-        printf("\033[A"); // Move cursor up
-    }
-    printf("\033[1G"); // Move to beginning of line
-    
-    // Display suggestions in dark gray
-    for (size_t i = 0; i < displayCount; ++i) {
-        printf("\033[K"); // Clear current line
-        printf("\033[90m  %s\033[0m", formattedSuggestions[i].c_str()); // Dark gray
-        if (i < displayCount - 1) {
-            printf("\033[B"); // Move to next line for next suggestion
-            printf("\033[1G"); // Move to beginning of line
+    try {
+        // Move cursor down one line to start suggestions below input
+        printf("\033[B");  // Move cursor down one line
+        printf("\033[1G"); // Move to beginning of line
+        
+        auto formattedSuggestions = m_commandManager->getFormattedCommandSuggestions(input);
+        size_t maxDisplay = 3;
+        size_t displayCount = (formattedSuggestions.size() < maxDisplay) ? formattedSuggestions.size() : maxDisplay;
+        
+        // Clear the suggestion area first (4 lines should be enough)
+        for (int i = 0; i < 4; ++i) {
+            printf("\033[K"); // Clear current line
+            if (i < 3) printf("\033[B"); // Move to next line
         }
-    }
-    
-    if (formattedSuggestions.size() > maxDisplay) {
-        printf("\033[B"); // Move to next line
-        printf("\033[1G\033[K"); // Beginning of line and clear
-        printf("\033[90m  ... and %zu more\033[0m", formattedSuggestions.size() - maxDisplay);
+        
+        // Move back up to start of suggestions area
+        for (int i = 0; i < 3; ++i) {
+            printf("\033[A"); // Move cursor up
+        }
+        printf("\033[1G"); // Move to beginning of line
+        
+        // Display suggestions in dark gray
+        for (size_t i = 0; i < displayCount; ++i) {
+            printf("\033[K"); // Clear current line
+            printf("\033[90m  %s\033[0m", formattedSuggestions[i].c_str()); // Dark gray
+            if (i < displayCount - 1) {
+                printf("\033[B"); // Move to next line for next suggestion
+                printf("\033[1G"); // Move to beginning of line
+            }
+        }
+        
+        if (formattedSuggestions.size() > maxDisplay) {
+            printf("\033[B"); // Move to next line
+            printf("\033[1G\033[K"); // Beginning of line and clear
+            printf("\033[90m  ... and %zu more\033[0m", formattedSuggestions.size() - maxDisplay);
+        }
+    } catch (...) {
+        // If anything goes wrong with ANSI sequences, just restore cursor and continue
     }
     
     // Restore cursor position to input line
@@ -1040,17 +1003,21 @@ void ChatInterface::clearSuggestionsLinux(bool& showingSuggestions, int suggesti
     // Save current cursor position (input line)
     printf("\033[s");
     
-    // Move cursor down one line to start clearing suggestions below input
-    printf("\033[B");  // Move cursor down one line
-    printf("\033[1G"); // Move to beginning of line
-    
-    // Clear the suggestion area (4 lines should be enough)
-    for (int i = 0; i < 4; ++i) {
-        printf("\033[K"); // Clear current line
-        if (i < 3) {
-            printf("\033[B"); // Move to next line
-            printf("\033[1G"); // Move to beginning of line
+    try {
+        // Move cursor down one line to start clearing suggestions below input
+        printf("\033[B");  // Move cursor down one line
+        printf("\033[1G"); // Move to beginning of line
+        
+        // Clear the suggestion area (4 lines should be enough)
+        for (int i = 0; i < 4; ++i) {
+            printf("\033[K"); // Clear current line
+            if (i < 3) {
+                printf("\033[B"); // Move to next line
+                printf("\033[1G"); // Move to beginning of line
+            }
         }
+    } catch (...) {
+        // If anything goes wrong, just continue
     }
     
     // Restore cursor position to input line
