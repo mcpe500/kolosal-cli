@@ -49,3 +49,5 @@ kolosal-server
 .cache/
 
 install/
+
+.DS_Store
