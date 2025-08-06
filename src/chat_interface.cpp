@@ -72,8 +72,10 @@ bool ChatInterface::startChatInterface(const std::string& engineId) {
     
     SetConsoleCtrlHandler(consoleHandler, TRUE);
 #else
-    // Unix-style signal handling
+    // Unix-style signal handling with proper cleanup
     signal(SIGINT, [](int) {
+        // Give any running animation threads time to cleanup
+        std::this_thread::sleep_for(std::chrono::milliseconds(100));
         exit(0);
     });
 #endif
@@ -145,7 +147,7 @@ bool ChatInterface::startChatInterface(const std::string& engineId) {
         // Start spinner in a thread, but print prompt and clear spinner on first token
         std::thread loadingThread([&gotFirstChunk, &loadingAnim]() {
             loadingAnim.start();
-            while (!gotFirstChunk) {
+            while (!gotFirstChunk && loadingAnim.isRunning()) {
                 std::this_thread::sleep_for(std::chrono::milliseconds(10));
             }
             // Spinner will be cleared by main thread after first token
@@ -359,14 +361,29 @@ bool ChatInterface::startChatInterface(const std::string& engineId) {
                     }
                 }
             });
-        gotFirstChunk = true;
-        if (loadingThread.joinable()) loadingThread.join();
+        
+        // Ensure thread is properly joined before destroying loadingAnim
+        try {
+            gotFirstChunk = true;
+            if (loadingThread.joinable()) {
+                loadingThread.join();
+            }
+        } catch (...) {
+            // If join fails, detach to avoid resource leaks
+            if (loadingThread.joinable()) {
+                loadingThread.detach();
+            }
+        }
         
         // If the model never sent any chunk, still print the prompt for consistency and clear spinner
         if (!promptPrinted.load()) {
-            loadingAnim.stop();
-            std::cout << "\n\033[32m> \033[32m";
-            std::cout.flush();
+            try {
+                loadingAnim.stop();
+                std::cout << "\n\033[32m> \033[32m";
+                std::cout.flush();
+            } catch (...) {
+                // Ignore spinner cleanup errors
+            }
         }
 
         // Clear metrics line after completion to clean up (only if not in simple mode)

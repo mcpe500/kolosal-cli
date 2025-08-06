@@ -2,6 +2,7 @@
 #include <iostream>
 #include <iomanip>
 #include <chrono>
+#include <future>
 
 #ifdef _WIN32
 #include <windows.h>
@@ -33,9 +34,30 @@ LoadingAnimation::LoadingAnimation(const std::string& message)
 }
 
 LoadingAnimation::~LoadingAnimation() {
-    stop();
-    // Ensure cursor is always visible when object is destroyed
-    showCursor();
+    // Safely stop the animation and ensure thread cleanup
+    if (running.load()) {
+        running.store(false);
+        
+        // Wait for the animation thread to finish with a timeout
+        if (animationThread.joinable()) {
+            auto future = std::async(std::launch::async, [this]() {
+                animationThread.join();
+            });
+            
+            if (future.wait_for(std::chrono::milliseconds(500)) == std::future_status::timeout) {
+                // If thread doesn't join within timeout, detach it to avoid blocking
+                animationThread.detach();
+            }
+        }
+        
+        // Clear the line and restore cursor only if we successfully stopped
+        try {
+            clearLine();
+            showCursor();
+        } catch (...) {
+            // Ignore any errors during cleanup to prevent terminate() calls
+        }
+    }
 }
 
 void LoadingAnimation::initializeFrames() {
@@ -75,13 +97,24 @@ void LoadingAnimation::stop() {
     
     running.store(false);
     
+    // Give the animation thread a moment to see the running flag change
+    std::this_thread::sleep_for(std::chrono::milliseconds(50));
+    
     if (animationThread.joinable()) {
-        animationThread.join();
+        try {
+            animationThread.join();
+        } catch (...) {
+            // If join fails, detach to prevent resource leaks
+            animationThread.detach();
+        }
     }
     
-    clearLine();
-    // Show cursor again
-    showCursor();
+    try {
+        clearLine();
+        showCursor();
+    } catch (...) {
+        // Ignore cleanup errors to prevent crashes
+    }
 }
 
 void LoadingAnimation::complete(const std::string& completionMessage) {
@@ -98,13 +131,21 @@ void LoadingAnimation::animationLoop() {
     auto nextFrame = std::chrono::steady_clock::now();
     
     while (running.load()) {
-        displayFrame();
-        
-        // Calculate next frame time for consistent timing
-        nextFrame += std::chrono::milliseconds(INTERVAL_MS);
-        std::this_thread::sleep_until(nextFrame);
-        
-        currentFrame = (currentFrame + 1) % frames.size();
+        try {
+            displayFrame();
+            
+            // Calculate next frame time for consistent timing
+            nextFrame += std::chrono::milliseconds(INTERVAL_MS);
+            std::this_thread::sleep_until(nextFrame);
+            
+            // Check if we're still running before updating frame
+            if (running.load()) {
+                currentFrame = (currentFrame + 1) % frames.size();
+            }
+        } catch (...) {
+            // Ignore any errors in the animation loop to prevent crashes
+            break;
+        }
     }
 }
 

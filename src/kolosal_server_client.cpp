@@ -206,36 +206,29 @@ bool KolosalServerClient::startServer(const std::string &serverPath, int port)
         }
         
         std::string exeDir = exePath.substr(0, exePath.find_last_of(PATH_SEPARATOR));
-        std::cout << "Looking for kolosal-server from CLI directory: " << exeDir << std::endl;
 
         // Priority 1: Try same directory as CLI (highest priority for Windows)
         std::string sameDirPath = exeDir + PATH_SEPARATOR + "kolosal-server" + EXECUTABLE_EXTENSION;
-        std::cout << "Checking same directory: " << sameDirPath << std::endl;
         if (fileExists(sameDirPath))
         {
             actualServerPath = sameDirPath;
-            std::cout << "Found server at: " << actualServerPath << std::endl;
         }
         else
         {
             // Priority 2: Try kolosal-server subdirectory (common for extracted packages)
             std::string subDirPath = exeDir + PATH_SEPARATOR + "kolosal-server" + PATH_SEPARATOR + "kolosal-server" + EXECUTABLE_EXTENSION;
-            std::cout << "Checking subdirectory: " << subDirPath << std::endl;
             if (fileExists(subDirPath))
             {
                 actualServerPath = subDirPath;
-                std::cout << "Found server at: " << actualServerPath << std::endl;
             }
             else
             {
                 // Priority 3: Try parent/server-bin directory (Windows package structure)
                 std::string parentDir = exeDir.substr(0, exeDir.find_last_of(PATH_SEPARATOR));
                 std::string serverBinPath = parentDir + PATH_SEPARATOR + "server-bin" + PATH_SEPARATOR + "kolosal-server" + EXECUTABLE_EXTENSION;
-                std::cout << "Checking parent/server-bin: " << serverBinPath << std::endl;
                 if (fileExists(serverBinPath))
                 {
                     actualServerPath = serverBinPath;
-                    std::cout << "Found server at: " << actualServerPath << std::endl;
                 }
                 else
                 {
@@ -245,13 +238,11 @@ bool KolosalServerClient::startServer(const std::string &serverPath, int port)
                     if (fileExists(buildPath))
                     {
                         actualServerPath = buildPath;
-                        std::cout << "Found server at: " << actualServerPath << std::endl;
                     }
                     else
                     {
                         // Last resort: Fall back to system PATH
                         actualServerPath = "kolosal-server" + std::string(EXECUTABLE_EXTENSION);
-                        std::cout << "Using system PATH to find server: " << actualServerPath << std::endl;
                     }
                 }
             }
@@ -295,7 +286,6 @@ bool KolosalServerClient::startServer(const std::string &serverPath, int port)
             testWrite.close();
             std::filesystem::remove(testFile);
             workingDir = exeDir;
-            std::cout << "Using CLI directory as working directory: " << workingDir << std::endl;
         }
     }
     
@@ -362,9 +352,6 @@ bool KolosalServerClient::startServer(const std::string &serverPath, int port)
     CloseHandle(pi.hProcess);
     CloseHandle(pi.hThread);
 #else
-    // Unix/Linux process creation
-    std::cout << "Starting server: " << actualServerPath << std::endl;
-    
     // Check if the file is executable
     if (access(actualServerPath.c_str(), X_OK) != 0) {
         std::cerr << "Error: Server binary is not executable: " << actualServerPath << std::endl;
@@ -385,7 +372,6 @@ bool KolosalServerClient::startServer(const std::string &serverPath, int port)
             // Check if we can write to the exe directory
             if (access(exeDir.c_str(), W_OK) == 0) {
                 workingDir = exeDir;
-                std::cerr << "Using CLI directory as working directory: " << workingDir << std::endl;
             }
         }
         
@@ -440,9 +426,6 @@ bool KolosalServerClient::startServer(const std::string &serverPath, int port)
         std::cerr << "Error: Failed to start server process: " << strerror(errno) << std::endl;
         return false;
     }
-    // Parent process continues - server is now running in background
-    std::cout << "Server process started with PID: " << pid << std::endl;
-    std::cout << "Server logs available at: /tmp/kolosal-server.log" << std::endl;
     
     // Give the server a moment to start before returning
     std::this_thread::sleep_for(std::chrono::milliseconds(500));
