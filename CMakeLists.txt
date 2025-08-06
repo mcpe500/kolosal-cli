@@ -947,81 +947,86 @@ elseif(APPLE)
                 # Fix dependencies pointing to Homebrew paths
                 execute_process(COMMAND otool -L \"\${LIB_PATH}\" OUTPUT_VARIABLE OTOOL_OUTPUT)
                 
-                # Update OpenSSL dependencies
-                if(\"\${OTOOL_OUTPUT}\" MATCHES \"/opt/homebrew/opt/openssl@3/lib/libssl\\.3\\.dylib\")
-                    execute_process(COMMAND install_name_tool -change /opt/homebrew/opt/openssl@3/lib/libssl.3.dylib @rpath/libssl.3.dylib \"\${LIB_PATH}\")
-                endif()
-                if(\"\${OTOOL_OUTPUT}\" MATCHES \"/opt/homebrew/opt/openssl@3/lib/libcrypto\\.3\\.dylib\")
-                    execute_process(COMMAND install_name_tool -change /opt/homebrew/opt/openssl@3/lib/libcrypto.3.dylib @rpath/libcrypto.3.dylib \"\${LIB_PATH}\")
-                endif()
-                if(\"\${OTOOL_OUTPUT}\" MATCHES \"/usr/local/opt/openssl@3/lib/libssl\\.3\\.dylib\")
-                    execute_process(COMMAND install_name_tool -change /usr/local/opt/openssl@3/lib/libssl.3.dylib @rpath/libssl.3.dylib \"\${LIB_PATH}\")
-                endif()
-                if(\"\${OTOOL_OUTPUT}\" MATCHES \"/usr/local/opt/openssl@3/lib/libcrypto\\.3\\.dylib\")
-                    execute_process(COMMAND install_name_tool -change /usr/local/opt/openssl@3/lib/libcrypto.3.dylib @rpath/libcrypto.3.dylib \"\${LIB_PATH}\")
-                endif()
+                # Update OpenSSL dependencies - handle both opt and Cellar paths
+                string(REGEX MATCHALL \"/[^\\t\\n ]+/libssl\\.3\\.dylib\" SSL_DEPS \"\${OTOOL_OUTPUT}\")
+                foreach(SSL_DEP \${SSL_DEPS})
+                    if(SSL_DEP MATCHES \"/(opt|Cellar)/.*openssl.*\")
+                        execute_process(COMMAND install_name_tool -change \"\${SSL_DEP}\" @rpath/libssl.3.dylib \"\${LIB_PATH}\")
+                        message(STATUS \"Fixed SSL dependency: \${SSL_DEP} -> @rpath/libssl.3.dylib\")
+                    endif()
+                endforeach()
                 
-                # Update FreeType dependencies
-                if(\"\${OTOOL_OUTPUT}\" MATCHES \"/opt/homebrew/opt/freetype/lib/libfreetype\\.6\\.dylib\")
-                    execute_process(COMMAND install_name_tool -change /opt/homebrew/opt/freetype/lib/libfreetype.6.dylib @rpath/libfreetype.6.dylib \"\${LIB_PATH}\")
-                endif()
-                if(\"\${OTOOL_OUTPUT}\" MATCHES \"/usr/local/opt/freetype/lib/libfreetype\\.6\\.dylib\")
-                    execute_process(COMMAND install_name_tool -change /usr/local/opt/freetype/lib/libfreetype.6.dylib @rpath/libfreetype.6.dylib \"\${LIB_PATH}\")
-                endif()
+                string(REGEX MATCHALL \"/[^\\t\\n ]+/libcrypto\\.3\\.dylib\" CRYPTO_DEPS \"\${OTOOL_OUTPUT}\")
+                foreach(CRYPTO_DEP \${CRYPTO_DEPS})
+                    if(CRYPTO_DEP MATCHES \"/(opt|Cellar)/.*openssl.*\")
+                        execute_process(COMMAND install_name_tool -change \"\${CRYPTO_DEP}\" @rpath/libcrypto.3.dylib \"\${LIB_PATH}\")
+                        message(STATUS \"Fixed Crypto dependency: \${CRYPTO_DEP} -> @rpath/libcrypto.3.dylib\")
+                    endif()
+                endforeach()
                 
-                # Update LibPNG dependencies
-                if(\"\${OTOOL_OUTPUT}\" MATCHES \"/opt/homebrew/opt/libpng/lib/libpng16\\.16\\.dylib\")
-                    execute_process(COMMAND install_name_tool -change /opt/homebrew/opt/libpng/lib/libpng16.16.dylib @rpath/libpng16.16.dylib \"\${LIB_PATH}\")
-                endif()
-                if(\"\${OTOOL_OUTPUT}\" MATCHES \"/usr/local/opt/libpng/lib/libpng16\\.16\\.dylib\")
-                    execute_process(COMMAND install_name_tool -change /usr/local/opt/libpng/lib/libpng16.16.dylib @rpath/libpng16.16.dylib \"\${LIB_PATH}\")
-                endif()
+                # Update FreeType dependencies - handle both opt and Cellar paths
+                string(REGEX MATCHALL \"/[^\\t\\n ]+/libfreetype\\.6\\.dylib\" FREETYPE_DEPS \"\${OTOOL_OUTPUT}\")
+                foreach(FREETYPE_DEP \${FREETYPE_DEPS})
+                    if(FREETYPE_DEP MATCHES \"/(opt|Cellar)/.*freetype.*\")
+                        execute_process(COMMAND install_name_tool -change \"\${FREETYPE_DEP}\" @rpath/libfreetype.6.dylib \"\${LIB_PATH}\")
+                        message(STATUS \"Fixed FreeType dependency: \${FREETYPE_DEP} -> @rpath/libfreetype.6.dylib\")
+                    endif()
+                endforeach()
                 
-                # Update LibTIFF dependencies
-                if(\"\${OTOOL_OUTPUT}\" MATCHES \"/opt/homebrew/opt/libtiff/lib/libtiff\\.6\\.dylib\")
-                    execute_process(COMMAND install_name_tool -change /opt/homebrew/opt/libtiff/lib/libtiff.6.dylib @rpath/libtiff.6.dylib \"\${LIB_PATH}\")
-                endif()
-                if(\"\${OTOOL_OUTPUT}\" MATCHES \"/usr/local/opt/libtiff/lib/libtiff\\.6\\.dylib\")
-                    execute_process(COMMAND install_name_tool -change /usr/local/opt/libtiff/lib/libtiff.6.dylib @rpath/libtiff.6.dylib \"\${LIB_PATH}\")
-                endif()
+                # Update LibPNG dependencies - handle both opt and Cellar paths
+                string(REGEX MATCHALL \"/[^\\t\\n ]+/libpng16\\.16\\.dylib\" PNG_DEPS \"\${OTOOL_OUTPUT}\")
+                foreach(PNG_DEP \${PNG_DEPS})
+                    if(PNG_DEP MATCHES \"/(opt|Cellar)/.*libpng.*\")
+                        execute_process(COMMAND install_name_tool -change \"\${PNG_DEP}\" @rpath/libpng16.16.dylib \"\${LIB_PATH}\")
+                        message(STATUS \"Fixed PNG dependency: \${PNG_DEP} -> @rpath/libpng16.16.dylib\")
+                    endif()
+                endforeach()
                 
-                # Update JPEG dependencies
-                if(\"\${OTOOL_OUTPUT}\" MATCHES \"/opt/homebrew/opt/jpeg-turbo/lib/libjpeg\\.8\\.dylib\")
-                    execute_process(COMMAND install_name_tool -change /opt/homebrew/opt/jpeg-turbo/lib/libjpeg.8.dylib @rpath/libjpeg.8.dylib \"\${LIB_PATH}\")
-                endif()
-                if(\"\${OTOOL_OUTPUT}\" MATCHES \"/usr/local/opt/jpeg-turbo/lib/libjpeg\\.8\\.dylib\")
-                    execute_process(COMMAND install_name_tool -change /usr/local/opt/jpeg-turbo/lib/libjpeg.8.dylib @rpath/libjpeg.8.dylib \"\${LIB_PATH}\")
-                endif()
-                if(\"\${OTOOL_OUTPUT}\" MATCHES \"/opt/homebrew/opt/jpeg/lib/libjpeg\\.9\\.dylib\")
-                    execute_process(COMMAND install_name_tool -change /opt/homebrew/opt/jpeg/lib/libjpeg.9.dylib @rpath/libjpeg.9.dylib \"\${LIB_PATH}\")
-                endif()
-                if(\"\${OTOOL_OUTPUT}\" MATCHES \"/usr/local/opt/jpeg/lib/libjpeg\\.9\\.dylib\")
-                    execute_process(COMMAND install_name_tool -change /usr/local/opt/jpeg/lib/libjpeg.9.dylib @rpath/libjpeg.9.dylib \"\${LIB_PATH}\")
-                endif()
+                # Update LibTIFF dependencies - handle both opt and Cellar paths
+                string(REGEX MATCHALL \"/[^\\t\\n ]+/libtiff\\.6\\.dylib\" TIFF_DEPS \"\${OTOOL_OUTPUT}\")
+                foreach(TIFF_DEP \${TIFF_DEPS})
+                    if(TIFF_DEP MATCHES \"/(opt|Cellar)/.*libtiff.*\")
+                        execute_process(COMMAND install_name_tool -change \"\${TIFF_DEP}\" @rpath/libtiff.6.dylib \"\${LIB_PATH}\")
+                        message(STATUS \"Fixed TIFF dependency: \${TIFF_DEP} -> @rpath/libtiff.6.dylib\")
+                    endif()
+                endforeach()
                 
-                # Update FontConfig dependencies
-                if(\"\${OTOOL_OUTPUT}\" MATCHES \"/opt/homebrew/opt/fontconfig/lib/libfontconfig\\.1\\.dylib\")
-                    execute_process(COMMAND install_name_tool -change /opt/homebrew/opt/fontconfig/lib/libfontconfig.1.dylib @rpath/libfontconfig.1.dylib \"\${LIB_PATH}\")
-                endif()
-                if(\"\${OTOOL_OUTPUT}\" MATCHES \"/usr/local/opt/fontconfig/lib/libfontconfig\\.1\\.dylib\")
-                    execute_process(COMMAND install_name_tool -change /usr/local/opt/fontconfig/lib/libfontconfig.1.dylib @rpath/libfontconfig.1.dylib \"\${LIB_PATH}\")
-                endif()
+                # Update JPEG dependencies - handle both opt and Cellar paths
+                string(REGEX MATCHALL \"/[^\\t\\n ]+/libjpeg\\.[0-9]+\\.dylib\" JPEG_DEPS \"\${OTOOL_OUTPUT}\")
+                foreach(JPEG_DEP \${JPEG_DEPS})
+                    if(JPEG_DEP MATCHES \"/(opt|Cellar)/.*(jpeg|jpeg-turbo).*\")
+                        get_filename_component(JPEG_NAME \"\${JPEG_DEP}\" NAME)
+                        execute_process(COMMAND install_name_tool -change \"\${JPEG_DEP}\" @rpath/\${JPEG_NAME} \"\${LIB_PATH}\")
+                        message(STATUS \"Fixed JPEG dependency: \${JPEG_DEP} -> @rpath/\${JPEG_NAME}\")
+                    endif()
+                endforeach()
                 
-                # Update zstd dependencies (for LibTIFF)
-                if(\"\${OTOOL_OUTPUT}\" MATCHES \"/opt/homebrew/opt/zstd/lib/libzstd\\.1\\.dylib\")
-                    execute_process(COMMAND install_name_tool -change /opt/homebrew/opt/zstd/lib/libzstd.1.dylib @rpath/libzstd.1.dylib \"\${LIB_PATH}\")
-                endif()
-                if(\"\${OTOOL_OUTPUT}\" MATCHES \"/usr/local/opt/zstd/lib/libzstd\\.1\\.dylib\")
-                    execute_process(COMMAND install_name_tool -change /usr/local/opt/zstd/lib/libzstd.1.dylib @rpath/libzstd.1.dylib \"\${LIB_PATH}\")
-                endif()
+                # Update FontConfig dependencies - handle both opt and Cellar paths
+                string(REGEX MATCHALL \"/[^\\t\\n ]+/libfontconfig\\.1\\.dylib\" FONTCONFIG_DEPS \"\${OTOOL_OUTPUT}\")
+                foreach(FONTCONFIG_DEP \${FONTCONFIG_DEPS})
+                    if(FONTCONFIG_DEP MATCHES \"/(opt|Cellar)/.*fontconfig.*\")
+                        execute_process(COMMAND install_name_tool -change \"\${FONTCONFIG_DEP}\" @rpath/libfontconfig.1.dylib \"\${LIB_PATH}\")
+                        message(STATUS \"Fixed FontConfig dependency: \${FONTCONFIG_DEP} -> @rpath/libfontconfig.1.dylib\")
+                    endif()
+                endforeach()
                 
-                # Update liblzma/xz dependencies (for LibTIFF)
-                if(\"\${OTOOL_OUTPUT}\" MATCHES \"/opt/homebrew/opt/xz/lib/liblzma\\.5\\.dylib\")
-                    execute_process(COMMAND install_name_tool -change /opt/homebrew/opt/xz/lib/liblzma.5.dylib @rpath/liblzma.5.dylib \"\${LIB_PATH}\")
-                endif()
-                if(\"\${OTOOL_OUTPUT}\" MATCHES \"/usr/local/opt/xz/lib/liblzma\\.5\\.dylib\")
-                    execute_process(COMMAND install_name_tool -change /usr/local/opt/xz/lib/liblzma.5.dylib @rpath/liblzma.5.dylib \"\${LIB_PATH}\")
-                endif()
+                # Update zstd dependencies (for LibTIFF) - handle both opt and Cellar paths
+                string(REGEX MATCHALL \"/[^\\t\\n ]+/libzstd\\.1\\.dylib\" ZSTD_DEPS \"\${OTOOL_OUTPUT}\")
+                foreach(ZSTD_DEP \${ZSTD_DEPS})
+                    if(ZSTD_DEP MATCHES \"/(opt|Cellar)/.*zstd.*\")
+                        execute_process(COMMAND install_name_tool -change \"\${ZSTD_DEP}\" @rpath/libzstd.1.dylib \"\${LIB_PATH}\")
+                        message(STATUS \"Fixed zstd dependency: \${ZSTD_DEP} -> @rpath/libzstd.1.dylib\")
+                    endif()
+                endforeach()
+                
+                # Update liblzma/xz dependencies (for LibTIFF) - handle both opt and Cellar paths
+                string(REGEX MATCHALL \"/[^\\t\\n ]+/liblzma\\.5\\.dylib\" LZMA_DEPS \"\${OTOOL_OUTPUT}\")
+                foreach(LZMA_DEP \${LZMA_DEPS})
+                    if(LZMA_DEP MATCHES \"/(opt|Cellar)/.*xz.*\")
+                        execute_process(COMMAND install_name_tool -change \"\${LZMA_DEP}\" @rpath/liblzma.5.dylib \"\${LIB_PATH}\")
+                        message(STATUS \"Fixed lzma dependency: \${LZMA_DEP} -> @rpath/liblzma.5.dylib\")
+                    endif()
+                endforeach()
                 
                 message(STATUS \"Fixed RPATH and dependencies for \${LIB_NAME}\")
             endif()
@@ -1042,81 +1047,86 @@ elseif(APPLE)
             if(EXISTS \"\${BINARY_PATH}\")
                 execute_process(COMMAND otool -L \"\${BINARY_PATH}\" OUTPUT_VARIABLE OTOOL_OUTPUT)
                 
-                # Update OpenSSL dependencies
-                if(\"\${OTOOL_OUTPUT}\" MATCHES \"/opt/homebrew/opt/openssl@3/lib/libssl\\.3\\.dylib\")
-                    execute_process(COMMAND install_name_tool -change /opt/homebrew/opt/openssl@3/lib/libssl.3.dylib @rpath/libssl.3.dylib \"\${BINARY_PATH}\")
-                endif()
-                if(\"\${OTOOL_OUTPUT}\" MATCHES \"/opt/homebrew/opt/openssl@3/lib/libcrypto\\.3\\.dylib\")
-                    execute_process(COMMAND install_name_tool -change /opt/homebrew/opt/openssl@3/lib/libcrypto.3.dylib @rpath/libcrypto.3.dylib \"\${BINARY_PATH}\")
-                endif()
-                if(\"\${OTOOL_OUTPUT}\" MATCHES \"/usr/local/opt/openssl@3/lib/libssl\\.3\\.dylib\")
-                    execute_process(COMMAND install_name_tool -change /usr/local/opt/openssl@3/lib/libssl.3.dylib @rpath/libssl.3.dylib \"\${BINARY_PATH}\")
-                endif()
-                if(\"\${OTOOL_OUTPUT}\" MATCHES \"/usr/local/opt/openssl@3/lib/libcrypto\\.3\\.dylib\")
-                    execute_process(COMMAND install_name_tool -change /usr/local/opt/openssl@3/lib/libcrypto.3.dylib @rpath/libcrypto.3.dylib \"\${BINARY_PATH}\")
-                endif()
+                # Update OpenSSL dependencies - handle both opt and Cellar paths
+                string(REGEX MATCHALL \"/[^\\t\\n ]+/libssl\\.3\\.dylib\" SSL_DEPS \"\${OTOOL_OUTPUT}\")
+                foreach(SSL_DEP \${SSL_DEPS})
+                    if(SSL_DEP MATCHES \"/(opt|Cellar)/.*openssl.*\")
+                        execute_process(COMMAND install_name_tool -change \"\${SSL_DEP}\" @rpath/libssl.3.dylib \"\${BINARY_PATH}\")
+                        message(STATUS \"Fixed SSL dependency in \${BINARY_PATH}: \${SSL_DEP} -> @rpath/libssl.3.dylib\")
+                    endif()
+                endforeach()
                 
-                # Update FreeType dependencies
-                if(\"\${OTOOL_OUTPUT}\" MATCHES \"/opt/homebrew/opt/freetype/lib/libfreetype\\.6\\.dylib\")
-                    execute_process(COMMAND install_name_tool -change /opt/homebrew/opt/freetype/lib/libfreetype.6.dylib @rpath/libfreetype.6.dylib \"\${BINARY_PATH}\")
-                endif()
-                if(\"\${OTOOL_OUTPUT}\" MATCHES \"/usr/local/opt/freetype/lib/libfreetype\\.6\\.dylib\")
-                    execute_process(COMMAND install_name_tool -change /usr/local/opt/freetype/lib/libfreetype.6.dylib @rpath/libfreetype.6.dylib \"\${BINARY_PATH}\")
-                endif()
+                string(REGEX MATCHALL \"/[^\\t\\n ]+/libcrypto\\.3\\.dylib\" CRYPTO_DEPS \"\${OTOOL_OUTPUT}\")
+                foreach(CRYPTO_DEP \${CRYPTO_DEPS})
+                    if(CRYPTO_DEP MATCHES \"/(opt|Cellar)/.*openssl.*\")
+                        execute_process(COMMAND install_name_tool -change \"\${CRYPTO_DEP}\" @rpath/libcrypto.3.dylib \"\${BINARY_PATH}\")
+                        message(STATUS \"Fixed Crypto dependency in \${BINARY_PATH}: \${CRYPTO_DEP} -> @rpath/libcrypto.3.dylib\")
+                    endif()
+                endforeach()
                 
-                # Update LibPNG dependencies
-                if(\"\${OTOOL_OUTPUT}\" MATCHES \"/opt/homebrew/opt/libpng/lib/libpng16\\.16\\.dylib\")
-                    execute_process(COMMAND install_name_tool -change /opt/homebrew/opt/libpng/lib/libpng16.16.dylib @rpath/libpng16.16.dylib \"\${BINARY_PATH}\")
-                endif()
-                if(\"\${OTOOL_OUTPUT}\" MATCHES \"/usr/local/opt/libpng/lib/libpng16\\.16\\.dylib\")
-                    execute_process(COMMAND install_name_tool -change /usr/local/opt/libpng/lib/libpng16.16.dylib @rpath/libpng16.16.dylib \"\${BINARY_PATH}\")
-                endif()
+                # Update FreeType dependencies - handle both opt and Cellar paths
+                string(REGEX MATCHALL \"/[^\\t\\n ]+/libfreetype\\.6\\.dylib\" FREETYPE_DEPS \"\${OTOOL_OUTPUT}\")
+                foreach(FREETYPE_DEP \${FREETYPE_DEPS})
+                    if(FREETYPE_DEP MATCHES \"/(opt|Cellar)/.*freetype.*\")
+                        execute_process(COMMAND install_name_tool -change \"\${FREETYPE_DEP}\" @rpath/libfreetype.6.dylib \"\${BINARY_PATH}\")
+                        message(STATUS \"Fixed FreeType dependency in \${BINARY_PATH}: \${FREETYPE_DEP} -> @rpath/libfreetype.6.dylib\")
+                    endif()
+                endforeach()
                 
-                # Update LibTIFF dependencies
-                if(\"\${OTOOL_OUTPUT}\" MATCHES \"/opt/homebrew/opt/libtiff/lib/libtiff\\.6\\.dylib\")
-                    execute_process(COMMAND install_name_tool -change /opt/homebrew/opt/libtiff/lib/libtiff.6.dylib @rpath/libtiff.6.dylib \"\${BINARY_PATH}\")
-                endif()
-                if(\"\${OTOOL_OUTPUT}\" MATCHES \"/usr/local/opt/libtiff/lib/libtiff\\.6\\.dylib\")
-                    execute_process(COMMAND install_name_tool -change /usr/local/opt/libtiff/lib/libtiff.6.dylib @rpath/libtiff.6.dylib \"\${BINARY_PATH}\")
-                endif()
+                # Update LibPNG dependencies - handle both opt and Cellar paths
+                string(REGEX MATCHALL \"/[^\\t\\n ]+/libpng16\\.16\\.dylib\" PNG_DEPS \"\${OTOOL_OUTPUT}\")
+                foreach(PNG_DEP \${PNG_DEPS})
+                    if(PNG_DEP MATCHES \"/(opt|Cellar)/.*libpng.*\")
+                        execute_process(COMMAND install_name_tool -change \"\${PNG_DEP}\" @rpath/libpng16.16.dylib \"\${BINARY_PATH}\")
+                        message(STATUS \"Fixed PNG dependency in \${BINARY_PATH}: \${PNG_DEP} -> @rpath/libpng16.16.dylib\")
+                    endif()
+                endforeach()
                 
-                # Update JPEG dependencies
-                if(\"\${OTOOL_OUTPUT}\" MATCHES \"/opt/homebrew/opt/jpeg-turbo/lib/libjpeg\\.8\\.dylib\")
-                    execute_process(COMMAND install_name_tool -change /opt/homebrew/opt/jpeg-turbo/lib/libjpeg.8.dylib @rpath/libjpeg.8.dylib \"\${BINARY_PATH}\")
-                endif()
-                if(\"\${OTOOL_OUTPUT}\" MATCHES \"/usr/local/opt/jpeg-turbo/lib/libjpeg\\.8\\.dylib\")
-                    execute_process(COMMAND install_name_tool -change /usr/local/opt/jpeg-turbo/lib/libjpeg.8.dylib @rpath/libjpeg.8.dylib \"\${BINARY_PATH}\")
-                endif()
-                if(\"\${OTOOL_OUTPUT}\" MATCHES \"/opt/homebrew/opt/jpeg/lib/libjpeg\\.9\\.dylib\")
-                    execute_process(COMMAND install_name_tool -change /opt/homebrew/opt/jpeg/lib/libjpeg.9.dylib @rpath/libjpeg.9.dylib \"\${BINARY_PATH}\")
-                endif()
-                if(\"\${OTOOL_OUTPUT}\" MATCHES \"/usr/local/opt/jpeg/lib/libjpeg\\.9\\.dylib\")
-                    execute_process(COMMAND install_name_tool -change /usr/local/opt/jpeg/lib/libjpeg.9.dylib @rpath/libjpeg.9.dylib \"\${BINARY_PATH}\")
-                endif()
+                # Update LibTIFF dependencies - handle both opt and Cellar paths
+                string(REGEX MATCHALL \"/[^\\t\\n ]+/libtiff\\.6\\.dylib\" TIFF_DEPS \"\${OTOOL_OUTPUT}\")
+                foreach(TIFF_DEP \${TIFF_DEPS})
+                    if(TIFF_DEP MATCHES \"/(opt|Cellar)/.*libtiff.*\")
+                        execute_process(COMMAND install_name_tool -change \"\${TIFF_DEP}\" @rpath/libtiff.6.dylib \"\${BINARY_PATH}\")
+                        message(STATUS \"Fixed TIFF dependency in \${BINARY_PATH}: \${TIFF_DEP} -> @rpath/libtiff.6.dylib\")
+                    endif()
+                endforeach()
                 
-                # Update FontConfig dependencies
-                if(\"\${OTOOL_OUTPUT}\" MATCHES \"/opt/homebrew/opt/fontconfig/lib/libfontconfig\\.1\\.dylib\")
-                    execute_process(COMMAND install_name_tool -change /opt/homebrew/opt/fontconfig/lib/libfontconfig.1.dylib @rpath/libfontconfig.1.dylib \"\${BINARY_PATH}\")
-                endif()
-                if(\"\${OTOOL_OUTPUT}\" MATCHES \"/usr/local/opt/fontconfig/lib/libfontconfig\\.1\\.dylib\")
-                    execute_process(COMMAND install_name_tool -change /usr/local/opt/fontconfig/lib/libfontconfig.1.dylib @rpath/libfontconfig.1.dylib \"\${BINARY_PATH}\")
-                endif()
+                # Update JPEG dependencies - handle both opt and Cellar paths
+                string(REGEX MATCHALL \"/[^\\t\\n ]+/libjpeg\\.[0-9]+\\.dylib\" JPEG_DEPS \"\${OTOOL_OUTPUT}\")
+                foreach(JPEG_DEP \${JPEG_DEPS})
+                    if(JPEG_DEP MATCHES \"/(opt|Cellar)/.*(jpeg|jpeg-turbo).*\")
+                        get_filename_component(JPEG_NAME \"\${JPEG_DEP}\" NAME)
+                        execute_process(COMMAND install_name_tool -change \"\${JPEG_DEP}\" @rpath/\${JPEG_NAME} \"\${BINARY_PATH}\")
+                        message(STATUS \"Fixed JPEG dependency in \${BINARY_PATH}: \${JPEG_DEP} -> @rpath/\${JPEG_NAME}\")
+                    endif()
+                endforeach()
                 
-                # Update zstd dependencies (for LibTIFF)
-                if(\"\${OTOOL_OUTPUT}\" MATCHES \"/opt/homebrew/opt/zstd/lib/libzstd\\.1\\.dylib\")
-                    execute_process(COMMAND install_name_tool -change /opt/homebrew/opt/zstd/lib/libzstd.1.dylib @rpath/libzstd.1.dylib \"\${BINARY_PATH}\")
-                endif()
-                if(\"\${OTOOL_OUTPUT}\" MATCHES \"/usr/local/opt/zstd/lib/libzstd\\.1\\.dylib\")
-                    execute_process(COMMAND install_name_tool -change /usr/local/opt/zstd/lib/libzstd.1.dylib @rpath/libzstd.1.dylib \"\${BINARY_PATH}\")
-                endif()
+                # Update FontConfig dependencies - handle both opt and Cellar paths
+                string(REGEX MATCHALL \"/[^\\t\\n ]+/libfontconfig\\.1\\.dylib\" FONTCONFIG_DEPS \"\${OTOOL_OUTPUT}\")
+                foreach(FONTCONFIG_DEP \${FONTCONFIG_DEPS})
+                    if(FONTCONFIG_DEP MATCHES \"/(opt|Cellar)/.*fontconfig.*\")
+                        execute_process(COMMAND install_name_tool -change \"\${FONTCONFIG_DEP}\" @rpath/libfontconfig.1.dylib \"\${BINARY_PATH}\")
+                        message(STATUS \"Fixed FontConfig dependency in \${BINARY_PATH}: \${FONTCONFIG_DEP} -> @rpath/libfontconfig.1.dylib\")
+                    endif()
+                endforeach()
                 
-                # Update liblzma/xz dependencies (for LibTIFF)
-                if(\"\${OTOOL_OUTPUT}\" MATCHES \"/opt/homebrew/opt/xz/lib/liblzma\\.5\\.dylib\")
-                    execute_process(COMMAND install_name_tool -change /opt/homebrew/opt/xz/lib/liblzma.5.dylib @rpath/liblzma.5.dylib \"\${BINARY_PATH}\")
-                endif()
-                if(\"\${OTOOL_OUTPUT}\" MATCHES \"/usr/local/opt/xz/lib/liblzma\\.5\\.dylib\")
-                    execute_process(COMMAND install_name_tool -change /usr/local/opt/xz/lib/liblzma.5.dylib @rpath/liblzma.5.dylib \"\${BINARY_PATH}\")
-                endif()
+                # Update zstd dependencies (for LibTIFF) - handle both opt and Cellar paths
+                string(REGEX MATCHALL \"/[^\\t\\n ]+/libzstd\\.1\\.dylib\" ZSTD_DEPS \"\${OTOOL_OUTPUT}\")
+                foreach(ZSTD_DEP \${ZSTD_DEPS})
+                    if(ZSTD_DEP MATCHES \"/(opt|Cellar)/.*zstd.*\")
+                        execute_process(COMMAND install_name_tool -change \"\${ZSTD_DEP}\" @rpath/libzstd.1.dylib \"\${BINARY_PATH}\")
+                        message(STATUS \"Fixed zstd dependency in \${BINARY_PATH}: \${ZSTD_DEP} -> @rpath/libzstd.1.dylib\")
+                    endif()
+                endforeach()
+                
+                # Update liblzma/xz dependencies (for LibTIFF) - handle both opt and Cellar paths
+                string(REGEX MATCHALL \"/[^\\t\\n ]+/liblzma\\.5\\.dylib\" LZMA_DEPS \"\${OTOOL_OUTPUT}\")
+                foreach(LZMA_DEP \${LZMA_DEPS})
+                    if(LZMA_DEP MATCHES \"/(opt|Cellar)/.*xz.*\")
+                        execute_process(COMMAND install_name_tool -change \"\${LZMA_DEP}\" @rpath/liblzma.5.dylib \"\${BINARY_PATH}\")
+                        message(STATUS \"Fixed lzma dependency in \${BINARY_PATH}: \${LZMA_DEP} -> @rpath/liblzma.5.dylib\")
+                    endif()
+                endforeach()
                 
                 get_filename_component(BINARY_NAME \"\${BINARY_PATH}\" NAME)
                 message(STATUS \"Fixed external dependencies for \${BINARY_NAME}\")
@@ -1124,6 +1134,48 @@ elseif(APPLE)
         endforeach()
         
         message(STATUS \"Fixed RPATH for all installed libraries in \${ACTUAL_INSTALL_PREFIX}\")
+        
+        # Re-sign all external libraries to fix code signing issues
+        message(STATUS \"Re-signing external libraries to ensure proper code signing...\")
+        set(LIBS_TO_SIGN
+            \"\${ACTUAL_INSTALL_PREFIX}/Kolosal.app/Contents/Frameworks/libssl.3.dylib\"
+            \"\${ACTUAL_INSTALL_PREFIX}/Kolosal.app/Contents/Frameworks/libcrypto.3.dylib\"
+            \"\${ACTUAL_INSTALL_PREFIX}/Kolosal.app/Contents/Frameworks/libfontconfig.1.dylib\"
+            \"\${ACTUAL_INSTALL_PREFIX}/Kolosal.app/Contents/Frameworks/libfreetype.6.dylib\"
+            \"\${ACTUAL_INSTALL_PREFIX}/Kolosal.app/Contents/Frameworks/libpng16.16.dylib\"
+            \"\${ACTUAL_INSTALL_PREFIX}/Kolosal.app/Contents/Frameworks/libtiff.6.dylib\"
+            \"\${ACTUAL_INSTALL_PREFIX}/Kolosal.app/Contents/Frameworks/libjpeg.8.dylib\"
+            \"\${ACTUAL_INSTALL_PREFIX}/Kolosal.app/Contents/Frameworks/libjpeg.9.dylib\"
+            \"\${ACTUAL_INSTALL_PREFIX}/Kolosal.app/Contents/Frameworks/libzstd.1.dylib\"
+            \"\${ACTUAL_INSTALL_PREFIX}/Kolosal.app/Contents/Frameworks/liblzma.5.dylib\"
+            \"\${ACTUAL_INSTALL_PREFIX}/Kolosal.app/Contents/Frameworks/libkolosal_server.dylib\"
+            \"\${ACTUAL_INSTALL_PREFIX}/Kolosal.app/Contents/Frameworks/libllama-metal.dylib\"
+            \"\${ACTUAL_INSTALL_PREFIX}/Kolosal.app/Contents/MacOS/kolosal-server\"
+            \"\${ACTUAL_INSTALL_PREFIX}/Kolosal.app/Contents/MacOS/kolosal\"
+        )
+        
+        foreach(LIB_TO_SIGN \${LIBS_TO_SIGN})
+            if(EXISTS \"\${LIB_TO_SIGN}\")
+                # Remove existing signature first
+                execute_process(
+                    COMMAND codesign --remove-signature \"\${LIB_TO_SIGN}\"
+                    ERROR_QUIET
+                )
+                # Ad-hoc sign the library
+                execute_process(
+                    COMMAND codesign -s - --preserve-metadata=entitlements,requirements,flags,runtime \"\${LIB_TO_SIGN}\"
+                    RESULT_VARIABLE SIGN_RESULT
+                    ERROR_QUIET
+                )
+                if(SIGN_RESULT EQUAL 0)
+                    get_filename_component(LIB_NAME \"\${LIB_TO_SIGN}\" NAME)
+                    message(STATUS \"Successfully re-signed \${LIB_NAME}\")
+                else()
+                    get_filename_component(LIB_NAME \"\${LIB_TO_SIGN}\" NAME)
+                    message(WARNING \"Failed to re-sign \${LIB_NAME}\")
+                endif()
+            endif()
+        endforeach()
         
         # Ensure the launcher executable and script have executable permissions
         if(EXISTS \"\${ACTUAL_INSTALL_PREFIX}/Kolosal.app/Contents/MacOS/kolosal-launcher\")
