@@ -1,7 +1,7 @@
 #!/bin/bash
 
-# Custom DMG creation script with background image support
-# Usage: create_dmg.sh <source_dir> <dmg_name> <volume_name> <background_image>
+# Custom DMG creation script with background image support and code signing
+# Usage: create_dmg.sh <source_dir> <dmg_name> <volume_name> <background_image> [codesign_app_identity] [notarize_team_id]
 
 set -e
 
@@ -9,6 +9,8 @@ SOURCE_DIR="$1"
 DMG_NAME="$2"
 VOLUME_NAME="$3" 
 BACKGROUND_IMAGE="$4"
+CODESIGN_APP_IDENTITY="$5"  # Should be Developer ID Application (not Installer)
+NOTARIZE_TEAM_ID="$6"
 
 # Temporary directories
 TEMP_DMG_DIR="/tmp/${VOLUME_NAME}_temp"
@@ -18,6 +20,14 @@ echo "Creating DMG: $DMG_NAME"
 echo "Source: $SOURCE_DIR"
 echo "Volume: $VOLUME_NAME"
 echo "Background: $BACKGROUND_IMAGE"
+
+if [ -n "$CODESIGN_APP_IDENTITY" ]; then
+    echo "Code signing identity (Application): $CODESIGN_APP_IDENTITY"
+fi
+
+if [ -n "$NOTARIZE_TEAM_ID" ]; then
+    echo "Notarization team ID: $NOTARIZE_TEAM_ID"
+fi
 
 # Clean up any existing temp directories
 rm -rf "$TEMP_DMG_DIR" "$MOUNT_DIR"
@@ -186,6 +196,65 @@ hdiutil detach "$DEVICE"
 # Create final compressed DMG
 echo "Creating final compressed DMG..."
 hdiutil convert "/tmp/${VOLUME_NAME}_temp.dmg" -format UDBZ -o "$DMG_NAME"
+
+# Sign the DMG if code signing identity is provided
+if [ -n "$CODESIGN_APP_IDENTITY" ]; then
+    echo "Signing DMG with Application identity: $CODESIGN_APP_IDENTITY"
+    codesign --force --sign "$CODESIGN_APP_IDENTITY" --timestamp "$DMG_NAME"
+    
+    if [ $? -eq 0 ]; then
+        echo "DMG signed successfully"
+        
+        # Verify the signature
+        echo "Verifying DMG signature..."
+        codesign --verify --verbose "$DMG_NAME"
+        
+        # Submit for notarization if team ID is provided
+        if [ -n "$NOTARIZE_TEAM_ID" ]; then
+            echo "Submitting DMG for notarization..."
+            echo "Note: This requires Apple ID credentials to be stored first."
+            echo "If this fails, run: xcrun notarytool store-credentials --help"
+            
+            # Try notarization with stored credentials profile
+            xcrun notarytool submit "$DMG_NAME" --keychain-profile "kolosal-profile" --wait 2>/dev/null
+            
+            if [ $? -ne 0 ]; then
+                echo "Notarization with stored profile failed, trying with team-id only..."
+                echo "You may be prompted for Apple ID and password..."
+                xcrun notarytool submit "$DMG_NAME" --team-id "$NOTARIZE_TEAM_ID" --wait
+            fi
+            
+            if [ $? -eq 0 ]; then
+                echo "Notarization successful"
+                
+                # Staple the notarization
+                echo "Stapling notarization to DMG..."
+                xcrun stapler staple "$DMG_NAME"
+                
+                if [ $? -eq 0 ]; then
+                    echo "Notarization stapled successfully"
+                else
+                    echo "Warning: Failed to staple notarization"
+                fi
+            else
+                echo "Warning: Notarization failed."
+                echo "To set up notarization credentials, run:"
+                echo "  xcrun notarytool store-credentials 'kolosal-profile' \\"
+                echo "    --apple-id 'your-apple-id@example.com' \\"
+                echo "    --team-id '$NOTARIZE_TEAM_ID' \\"
+                echo "    --password 'app-specific-password'"
+                echo ""
+                echo "DMG is signed and ready for distribution, but not notarized."
+            fi
+        else
+            echo "No team ID provided, skipping notarization"
+        fi
+    else
+        echo "Warning: Failed to sign DMG"
+    fi
+else
+    echo "No code signing identity provided, DMG will not be signed"
+fi
 
 # Clean up
 rm -f "/tmp/${VOLUME_NAME}_temp.dmg"

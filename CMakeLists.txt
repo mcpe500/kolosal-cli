@@ -22,6 +22,12 @@ option(USE_VULKAN "Enable Vulkan support" OFF)
 option(USE_MPI "Enable MPI support" OFF)
 option(USE_METAL "Enable Apple Metal support" OFF)
 option(ENABLE_NATIVE_OPTIMIZATION "Enable native CPU optimization (-march=native)" OFF)
+option(ENABLE_CODESIGN "Enable code signing on macOS" OFF)
+
+# Code signing configuration for macOS
+set(CODESIGN_IDENTITY "" CACHE STRING "Code signing identity (e.g., 'Developer ID Application: Your Name')")
+set(CODESIGN_INSTALLER_IDENTITY "" CACHE STRING "Code signing identity for installer (e.g., 'Developer ID Installer: Your Name')")
+set(DEVELOPER_TEAM_ID "" CACHE STRING "Apple Developer Team ID for notarization")
 
 # Auto-enable Metal on Apple platforms
 if(APPLE)
@@ -1135,8 +1141,18 @@ elseif(APPLE)
         
         message(STATUS \"Fixed RPATH for all installed libraries in \${ACTUAL_INSTALL_PREFIX}\")
         
-        # Re-sign all external libraries to fix code signing issues
-        message(STATUS \"Re-signing external libraries to ensure proper code signing...\")
+        # Re-sign all external libraries and binaries with proper code signing
+        message(STATUS \"Setting up code signing for macOS distribution...\")
+        
+        # Check if code signing is enabled and we have a signing identity
+        set(SHOULD_CODESIGN OFF)
+        if(\"${ENABLE_CODESIGN}\" AND NOT \"${CODESIGN_IDENTITY}\" STREQUAL \"\")
+            set(SHOULD_CODESIGN ON)
+            message(STATUS \"Code signing enabled with identity: ${CODESIGN_IDENTITY}\")
+        else()
+            message(STATUS \"Code signing disabled or no identity provided - using ad-hoc signing\")
+        endif()
+        
         set(LIBS_TO_SIGN
             \"\${ACTUAL_INSTALL_PREFIX}/Kolosal.app/Contents/Frameworks/libssl.3.dylib\"
             \"\${ACTUAL_INSTALL_PREFIX}/Kolosal.app/Contents/Frameworks/libcrypto.3.dylib\"
@@ -1150,32 +1166,153 @@ elseif(APPLE)
             \"\${ACTUAL_INSTALL_PREFIX}/Kolosal.app/Contents/Frameworks/liblzma.5.dylib\"
             \"\${ACTUAL_INSTALL_PREFIX}/Kolosal.app/Contents/Frameworks/libkolosal_server.dylib\"
             \"\${ACTUAL_INSTALL_PREFIX}/Kolosal.app/Contents/Frameworks/libllama-metal.dylib\"
-            \"\${ACTUAL_INSTALL_PREFIX}/Kolosal.app/Contents/MacOS/kolosal-server\"
-            \"\${ACTUAL_INSTALL_PREFIX}/Kolosal.app/Contents/MacOS/kolosal\"
         )
         
+        set(BINARIES_TO_SIGN
+            \"\${ACTUAL_INSTALL_PREFIX}/Kolosal.app/Contents/MacOS/kolosal-server\"
+            \"\${ACTUAL_INSTALL_PREFIX}/Kolosal.app/Contents/MacOS/kolosal\"
+            \"\${ACTUAL_INSTALL_PREFIX}/Kolosal.app/Contents/MacOS/kolosal-launcher\"
+        )
+        
+        # Sign all libraries first
         foreach(LIB_TO_SIGN \${LIBS_TO_SIGN})
             if(EXISTS \"\${LIB_TO_SIGN}\")
+                get_filename_component(LIB_NAME \"\${LIB_TO_SIGN}\" NAME)
+                
                 # Remove existing signature first
                 execute_process(
                     COMMAND codesign --remove-signature \"\${LIB_TO_SIGN}\"
                     ERROR_QUIET
                 )
-                # Ad-hoc sign the library
+                
+                # Sign with appropriate identity
+                if(\${SHOULD_CODESIGN})
+                    execute_process(
+                        COMMAND codesign --force --sign \"${CODESIGN_IDENTITY}\" 
+                               --timestamp --options runtime \"\${LIB_TO_SIGN}\"
+                        RESULT_VARIABLE SIGN_RESULT
+                        ERROR_QUIET
+                    )
+                    if(SIGN_RESULT EQUAL 0)
+                        message(STATUS \"Successfully signed library \${LIB_NAME} with Developer ID\")
+                    else()
+                        message(WARNING \"Failed to sign \${LIB_NAME} with Developer ID, falling back to ad-hoc\")
+                        execute_process(
+                            COMMAND codesign -s - --preserve-metadata=entitlements,requirements,flags,runtime \"\${LIB_TO_SIGN}\"
+                            ERROR_QUIET
+                        )
+                    endif()
+                else()
+                    # Ad-hoc sign the library
+                    execute_process(
+                        COMMAND codesign -s - --preserve-metadata=entitlements,requirements,flags,runtime \"\${LIB_TO_SIGN}\"
+                        RESULT_VARIABLE SIGN_RESULT
+                        ERROR_QUIET
+                    )
+                    if(SIGN_RESULT EQUAL 0)
+                        message(STATUS \"Successfully ad-hoc signed library \${LIB_NAME}\")
+                    else()
+                        message(WARNING \"Failed to sign \${LIB_NAME}\")
+                    endif()
+                endif()
+            endif()
+        endforeach()
+        
+        # Sign all binaries
+        foreach(BINARY_TO_SIGN \${BINARIES_TO_SIGN})
+            if(EXISTS \"\${BINARY_TO_SIGN}\")
+                get_filename_component(BINARY_NAME \"\${BINARY_TO_SIGN}\" NAME)
+                
+                # Remove existing signature first
                 execute_process(
-                    COMMAND codesign -s - --preserve-metadata=entitlements,requirements,flags,runtime \"\${LIB_TO_SIGN}\"
+                    COMMAND codesign --remove-signature \"\${BINARY_TO_SIGN}\"
+                    ERROR_QUIET
+                )
+                
+                # Sign with appropriate identity
+                if(\${SHOULD_CODESIGN})
+                    # Create entitlements for the main executables
+                    if(\"\${BINARY_NAME}\" STREQUAL \"kolosal\" OR \"\${BINARY_NAME}\" STREQUAL \"kolosal-server\" OR \"\${BINARY_NAME}\" STREQUAL \"kolosal-launcher\")
+                        set(ENTITLEMENTS_FILE \"\${CMAKE_CURRENT_SOURCE_DIR}/resources/kolosal.entitlements\")
+                        if(EXISTS \"\${ENTITLEMENTS_FILE}\")
+                            set(ENTITLEMENTS_ARG --entitlements \"\${ENTITLEMENTS_FILE}\")
+                        else()
+                            set(ENTITLEMENTS_ARG \"\")
+                        endif()
+                    else()
+                        set(ENTITLEMENTS_ARG \"\")
+                    endif()
+                    
+                    execute_process(
+                        COMMAND codesign --force --sign \"${CODESIGN_IDENTITY}\" 
+                               --timestamp --options runtime \${ENTITLEMENTS_ARG} \"\${BINARY_TO_SIGN}\"
+                        RESULT_VARIABLE SIGN_RESULT
+                        ERROR_QUIET
+                    )
+                    if(SIGN_RESULT EQUAL 0)
+                        message(STATUS \"Successfully signed binary \${BINARY_NAME} with Developer ID\")
+                    else()
+                        message(WARNING \"Failed to sign \${BINARY_NAME} with Developer ID, falling back to ad-hoc\")
+                        execute_process(
+                            COMMAND codesign -s - --preserve-metadata=entitlements,requirements,flags,runtime \"\${BINARY_TO_SIGN}\"
+                            ERROR_QUIET
+                        )
+                    endif()
+                else()
+                    # Ad-hoc sign the binary
+                    execute_process(
+                        COMMAND codesign -s - --preserve-metadata=entitlements,requirements,flags,runtime \"\${BINARY_TO_SIGN}\"
+                        RESULT_VARIABLE SIGN_RESULT
+                        ERROR_QUIET
+                    )
+                    if(SIGN_RESULT EQUAL 0)
+                        message(STATUS \"Successfully ad-hoc signed binary \${BINARY_NAME}\")
+                    else()
+                        message(WARNING \"Failed to sign \${BINARY_NAME}\")
+                    endif()
+                endif()
+            endif()
+        endforeach()
+        
+        # Finally, sign the entire app bundle
+        if(EXISTS \"\${ACTUAL_INSTALL_PREFIX}/Kolosal.app\")
+            if(\${SHOULD_CODESIGN})
+                set(ENTITLEMENTS_FILE \"\${CMAKE_CURRENT_SOURCE_DIR}/resources/kolosal.entitlements\")
+                if(EXISTS \"\${ENTITLEMENTS_FILE}\")
+                    set(ENTITLEMENTS_ARG --entitlements \"\${ENTITLEMENTS_FILE}\")
+                else()
+                    set(ENTITLEMENTS_ARG \"\")
+                endif()
+                
+                execute_process(
+                    COMMAND codesign --force --sign \"${CODESIGN_IDENTITY}\" 
+                           --timestamp --options runtime \${ENTITLEMENTS_ARG} \"\${ACTUAL_INSTALL_PREFIX}/Kolosal.app\"
                     RESULT_VARIABLE SIGN_RESULT
                     ERROR_QUIET
                 )
                 if(SIGN_RESULT EQUAL 0)
-                    get_filename_component(LIB_NAME \"\${LIB_TO_SIGN}\" NAME)
-                    message(STATUS \"Successfully re-signed \${LIB_NAME}\")
+                    message(STATUS \"Successfully signed Kolosal.app bundle with Developer ID\")
                 else()
-                    get_filename_component(LIB_NAME \"\${LIB_TO_SIGN}\" NAME)
-                    message(WARNING \"Failed to re-sign \${LIB_NAME}\")
+                    message(WARNING \"Failed to sign app bundle with Developer ID, falling back to ad-hoc\")
+                    execute_process(
+                        COMMAND codesign -s - --preserve-metadata=entitlements,requirements,flags,runtime \"\${ACTUAL_INSTALL_PREFIX}/Kolosal.app\"
+                        ERROR_QUIET
+                    )
+                endif()
+            else()
+                # Ad-hoc sign the app bundle
+                execute_process(
+                    COMMAND codesign -s - --preserve-metadata=entitlements,requirements,flags,runtime \"\${ACTUAL_INSTALL_PREFIX}/Kolosal.app\"
+                    RESULT_VARIABLE SIGN_RESULT
+                    ERROR_QUIET
+                )
+                if(SIGN_RESULT EQUAL 0)
+                    message(STATUS \"Successfully ad-hoc signed Kolosal.app bundle\")
+                else()
+                    message(WARNING \"Failed to sign app bundle\")
                 endif()
             endif()
-        endforeach()
+        endif()
         
         # Ensure the launcher executable and script have executable permissions
         if(EXISTS \"\${ACTUAL_INSTALL_PREFIX}/Kolosal.app/Contents/MacOS/kolosal-launcher\")
@@ -1479,22 +1616,105 @@ elseif(APPLE)
     set(CPACK_COMPONENT_RUNTIME_DESCRIPTION "Main executable, server components, and all dependencies")
     set(CPACK_COMPONENT_RUNTIME_REQUIRED TRUE)
     
-    # Add a custom target for creating DMG with background image
+    # Code signing for CPack-generated DMG
+    if(ENABLE_CODESIGN AND NOT CODESIGN_IDENTITY STREQUAL "")
+        # Add post-build DMG signing (use Application certificate for DMG, not Installer)
+        set(CPACK_POST_BUILD_SCRIPT "${CMAKE_CURRENT_BINARY_DIR}/sign_dmg.cmake")
+        
+        # Create the signing script
+        file(WRITE "${CMAKE_CURRENT_BINARY_DIR}/sign_dmg.cmake"
+"# Sign the generated DMG with Application certificate (not Installer)
+message(STATUS \"Signing DMG with identity: ${CODESIGN_IDENTITY}\")
+execute_process(
+    COMMAND codesign --force --sign \"${CODESIGN_IDENTITY}\" --timestamp \"\${CPACK_PACKAGE_FILE}\"
+    RESULT_VARIABLE SIGN_RESULT
+)
+
+if(SIGN_RESULT EQUAL 0)
+    message(STATUS \"DMG signed successfully\")
+    
+    # Verify signature
+    execute_process(
+        COMMAND codesign --verify --verbose \"\${CPACK_PACKAGE_FILE}\"
+        RESULT_VARIABLE VERIFY_RESULT
+    )
+    
+    if(VERIFY_RESULT EQUAL 0)
+        message(STATUS \"DMG signature verified\")
+    else()
+        message(WARNING \"DMG signature verification failed\")
+    endif()
+    
+    # Submit for notarization if team ID is provided
+    if(NOT \"${DEVELOPER_TEAM_ID}\" STREQUAL \"\")
+        message(STATUS \"Submitting DMG for notarization with team ID: ${DEVELOPER_TEAM_ID}\")
+        
+        # Try with stored credentials profile first
+        execute_process(
+            COMMAND xcrun notarytool submit \"\${CPACK_PACKAGE_FILE}\" --keychain-profile \"kolosal-profile\" --wait
+            RESULT_VARIABLE NOTARIZE_RESULT
+            ERROR_QUIET
+        )
+        
+        if(NOT NOTARIZE_RESULT EQUAL 0)
+            message(STATUS \"Stored credentials not found, trying with team-id authentication...\")
+            execute_process(
+                COMMAND xcrun notarytool submit \"\${CPACK_PACKAGE_FILE}\" --team-id \"${DEVELOPER_TEAM_ID}\" --wait
+                RESULT_VARIABLE NOTARIZE_RESULT
+            )
+        endif()
+        
+        if(NOTARIZE_RESULT EQUAL 0)
+            message(STATUS \"Notarization successful\")
+            
+            # Staple the notarization
+            execute_process(
+                COMMAND xcrun stapler staple \"\${CPACK_PACKAGE_FILE}\"
+                RESULT_VARIABLE STAPLE_RESULT
+            )
+            
+            if(STAPLE_RESULT EQUAL 0)
+                message(STATUS \"Notarization stapled successfully\")
+            else()
+                message(WARNING \"Failed to staple notarization\")
+            endif()
+        else()
+            message(WARNING \"Notarization failed. To set up credentials, run:\")
+            message(WARNING \"  xcrun notarytool store-credentials 'kolosal-profile' --apple-id 'your-apple-id@example.com' --team-id '${DEVELOPER_TEAM_ID}' --password 'app-specific-password'\")
+        endif()
+    else()
+        message(STATUS \"No team ID provided, skipping notarization\")
+    endif()
+else()
+    message(WARNING \"Failed to sign DMG\")
+endif()
+")
+    endif()
+    
+    # Add a custom target for creating DMG with complete signing workflow
     add_custom_target(dmg
-        DEPENDS kolosal kolosal_server kolosal_server_exe
-        COMMAND ${CMAKE_COMMAND} --build ${CMAKE_BINARY_DIR} --target install --config $<CONFIG>
-        COMMAND "${CMAKE_CURRENT_SOURCE_DIR}/cmake/create_dmg.sh" 
-                "${CMAKE_INSTALL_PREFIX}" 
-                "${CMAKE_BINARY_DIR}/${CPACK_PACKAGE_FILE_NAME}.dmg"
-                "Kolosal ${PROJECT_VERSION}"
-                "${CMAKE_CURRENT_SOURCE_DIR}/resources/dmg_background.png"
-        WORKING_DIRECTORY ${CMAKE_BINARY_DIR}
-        COMMENT "Creating DMG with custom background image"
+        DEPENDS kolosal kolosal_server kolosal_server_exe kolosal-launcher
+        COMMAND "${CMAKE_CURRENT_SOURCE_DIR}/cmake/complete_signing.sh"
+        WORKING_DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR}
+        COMMENT "Creating DMG with complete signing workflow"
         VERBATIM
     )
     
     # Add message about packaging
     message(STATUS "macOS DMG packaging configured.")
+    if(ENABLE_CODESIGN)
+        if(NOT CODESIGN_IDENTITY STREQUAL "")
+            message(STATUS "• Code signing enabled for applications with: ${CODESIGN_IDENTITY}")
+        endif()
+        if(NOT CODESIGN_INSTALLER_IDENTITY STREQUAL "")
+            message(STATUS "• Code signing enabled for installers with: ${CODESIGN_INSTALLER_IDENTITY}")
+        endif()
+        if(NOT DEVELOPER_TEAM_ID STREQUAL "")
+            message(STATUS "• Notarization enabled with Team ID: ${DEVELOPER_TEAM_ID}")
+        endif()
+    else()
+        message(STATUS "• Code signing disabled (use -DENABLE_CODESIGN=ON to enable)")
+    endif()
     message(STATUS "• Use 'make package' for standard DMG creation")
     message(STATUS "• Use 'make dmg' for DMG with custom background image")
     message(STATUS "• Double-clicking Kolosal.app will offer to add kolosal/kolosal-server to PATH")
