@@ -53,3 +53,5 @@ install/
 .DS_Store
 
 *.dmg
+
+cert/
