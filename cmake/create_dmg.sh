@@ -108,8 +108,9 @@ fi
 echo "DMG mounted at: $MOUNT_POINT"
 
 # Configure DMG appearance with AppleScript
-if [ -n "$BACKGROUND_FILE" ]; then
 echo "Configuring DMG appearance..."
+if [ -n "$BACKGROUND_FILE" ]; then
+echo "Configuring DMG appearance... (background: $BACKGROUND_FILE)"
 
 osascript << EOF
 tell application "Finder"
@@ -127,7 +128,8 @@ tell application "Finder"
         
         -- Set background image using correct DMG path syntax
         try
-            set background picture of theViewOptions to file ".background:dmg_background.png"
+            set bgFile to ".background:$BACKGROUND_FILE"
+            set background picture of theViewOptions to file bgFile
         on error err_msg
             log "Background setting error: " & err_msg
         end try
@@ -186,12 +188,40 @@ end tell
 "
 fi
 
-# Wait for changes to be applied
-sleep 5
+# Hide the .background folder if possible (optional)
+if command -v SetFile >/dev/null 2>&1; then
+    SetFile -a V "$MOUNT_POINT/.background" 2>/dev/null || true
+fi
 
-# Unmount
+# Wait for Finder to persist .DS_Store
+echo "Waiting for Finder to write .DS_Store..."
+STORE_PATH="$MOUNT_POINT/.DS_Store"
+for i in 1 2 3 4 5; do
+    if [ -f "$STORE_PATH" ] && [ -s "$STORE_PATH" ]; then
+        break
+    fi
+    sleep 2
+done
+
+# Extra flush
+sync || true
+
+# Unmount with retries
 echo "Unmounting DMG..."
-hdiutil detach "$DEVICE"
+DETACH_OK=0
+for i in 1 2 3 4 5; do
+    if hdiutil detach "$DEVICE" -quiet 2>/dev/null; then
+        DETACH_OK=1
+        break
+    fi
+    echo "Retrying detach ($i/5)..."
+    sleep 2
+done
+
+if [ $DETACH_OK -ne 1 ]; then
+    echo "Warning: Failed to cleanly detach $DEVICE; attempting force detach"
+    hdiutil detach "$DEVICE" -force 2>/dev/null || true
+fi
 
 # Create final compressed DMG
 echo "Creating final compressed DMG..."

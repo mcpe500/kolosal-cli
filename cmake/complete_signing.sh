@@ -59,54 +59,24 @@ ln -sf /Applications "$DMG_STAGING/Applications"
 # Copy background image
 cp "$PROJECT_ROOT/resources/dmg_background.png" "$DMG_STAGING/.background/"
 
-# Step 5: Create DMG
-echo "📀 Creating final DMG..."
+# Step 5: Create DMG using unified script (consistent styling + signing)
+echo "📀 Creating final DMG with styling via create_dmg.sh..."
 DMG_NAME="kolosal-1.0.0-apple-silicon-signed.dmg"
 DMG_PATH="$BUILD_DIR/$DMG_NAME"
+VOLNAME="Kolosal 1.0.0"
 
-# Remove existing DMG
 rm -f "$DMG_PATH"
+"$PROJECT_ROOT/cmake/create_dmg.sh" \
+    "$DMG_STAGING" \
+    "$DMG_PATH" \
+    "$VOLNAME" \
+    "$PROJECT_ROOT/resources/dmg_background.png" \
+    "$CODESIGN_IDENTITY" \
+    "$TEAM_ID"
 
-# Create initial DMG
-hdiutil create -volname "Kolosal 1.0.0" -srcfolder "$DMG_STAGING" -ov -format UDRW "$DMG_PATH.tmp"
-
-# Check if the command actually created a .dmg.tmp.dmg file and rename it
-if [ -f "$DMG_PATH.tmp.dmg" ]; then
-    mv "$DMG_PATH.tmp.dmg" "$DMG_PATH.tmp"
-fi
-
-# Mount for configuration (minimal approach)
-mount_point="/tmp/kolosal_dmg_mount"
-
-# Clean up any existing mounts and processes
-if mountpoint -q "$mount_point" 2>/dev/null; then
-    hdiutil detach "$mount_point" -force 2>/dev/null || true
-fi
-diskutil unmount force "$mount_point" 2>/dev/null || true
-if [ -d "$mount_point" ]; then
-    rm -rf "$mount_point" 2>/dev/null || true
-fi
-
-# Kill any existing hdiutil processes
-pkill -f "hdiutil.*kolosal" 2>/dev/null || true
-pkill -f "hdiutil.*Kolosal" 2>/dev/null || true
-sleep 3
-
-# Create clean mount point and attach
-mkdir -p "$mount_point"
-
-echo "⚠️  Skipping DMG appearance configuration to ensure reliable build"
-echo "📝 Manual DMG styling can be done later if needed"
-
-# Convert to final compressed DMG
-hdiutil convert "$DMG_PATH.tmp" -format UDZO -imagekey zlib-level=9 -o "$DMG_PATH"
-
-# Clean up
-rm -f "$DMG_PATH.tmp"
-
-# Step 6: Sign the DMG
-echo "✍️  Signing DMG..."
-codesign --force --sign "$CODESIGN_IDENTITY" --timestamp "$DMG_PATH"
+# Step 6: (Optional) Re-sign DMG to ensure timestamp
+echo "✍️  Ensuring DMG is signed..."
+codesign --force --sign "$CODESIGN_IDENTITY" --timestamp "$DMG_PATH" || true
 
 # Step 7: Verify final DMG
 echo "🔍 Final verification..."
