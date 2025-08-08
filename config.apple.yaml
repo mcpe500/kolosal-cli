@@ -107,6 +107,7 @@ default_inference_engine: "llama-metal"  # Set Metal as the default engine for m
 # - /opt/homebrew/share/kolosal/models/
 models:
   # Example model configuration for macOS - Uncomment and modify as needed
+  # Default models directory on macOS is: ~/Library/Application Support/Kolosal/models
   # - id: "qwen3-0.6b"                              # Unique model identifier
   #   path: "https://huggingface.co/kolosal/qwen3-0.6b/resolve/main/Qwen3-0.6B-UD-Q4_K_XL.gguf"
   #   # Or use local path: "~/Library/Application Support/Kolosal/models/qwen3-0.6b.gguf"

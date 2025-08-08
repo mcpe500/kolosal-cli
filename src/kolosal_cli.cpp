@@ -295,10 +295,31 @@ bool KolosalCLI::processModelDownloadServe(const std::string &modelId, const Mod
     }
 
     // Send engine creation request to server (server handles download location)
-    if (!m_serverClient->addEngine(engineId, downloadUrl, "./models/" + modelFile.filename))
     {
-        std::cerr << "Failed to send download request." << std::endl;
-        return false;
+#ifdef __APPLE__
+        const char* home = getenv("HOME");
+        std::string targetPath;
+        if (home && *home)
+        {
+            std::filesystem::path p = std::filesystem::path(home) / "Library/Application Support/Kolosal/models" / modelFile.filename;
+            targetPath = std::filesystem::absolute(p).string();
+        }
+        else
+        {
+            targetPath = "./models/" + modelFile.filename;
+        }
+        if (!m_serverClient->addEngine(engineId, downloadUrl, targetPath))
+        {
+            std::cerr << "Failed to send download request." << std::endl;
+            return false;
+        }
+#else
+        if (!m_serverClient->addEngine(engineId, downloadUrl, "./models/" + modelFile.filename))
+        {
+            std::cerr << "Failed to send download request." << std::endl;
+            return false;
+        }
+#endif
     }
 
     // Track this download
@@ -419,10 +440,31 @@ bool KolosalCLI::processModelDownload(const std::string &modelId, const ModelFil
     }
 
     // Send engine creation request to server (server handles download location)
-    if (!m_serverClient->addEngine(engineId, downloadUrl, "./models/" + modelFile.filename))
     {
-        std::cerr << "Failed to send download request." << std::endl;
-        return false;
+#ifdef __APPLE__
+        const char* home = getenv("HOME");
+        std::string targetPath;
+        if (home && *home)
+        {
+            std::filesystem::path p = std::filesystem::path(home) / "Library/Application Support/Kolosal/models" / modelFile.filename;
+            targetPath = std::filesystem::absolute(p).string();
+        }
+        else
+        {
+            targetPath = "./models/" + modelFile.filename;
+        }
+        if (!m_serverClient->addEngine(engineId, downloadUrl, targetPath))
+        {
+            std::cerr << "Failed to send download request." << std::endl;
+            return false;
+        }
+#else
+        if (!m_serverClient->addEngine(engineId, downloadUrl, "./models/" + modelFile.filename))
+        {
+            std::cerr << "Failed to send download request." << std::endl;
+            return false;
+        }
+#endif
     }
 
     // Track this download
@@ -590,13 +632,34 @@ bool KolosalCLI::handleDirectGGUFUrlServe(const std::string &url)
         }
 
         // Process download through server
-        if (!m_serverClient->addEngine(engineId, url, "./models/" + modelFile.filename))
         {
-            std::cerr << "❌ Failed to start download." << std::endl;
-            return false;
-        }
+#ifdef __APPLE__
+            const char* home = getenv("HOME");
+            std::string targetPath;
+            if (home && *home)
+            {
+                std::filesystem::path p = std::filesystem::path(home) / "Library/Application Support/Kolosal/models" / modelFile.filename;
+                targetPath = std::filesystem::absolute(p).string();
+            }
+            else
+            {
+                targetPath = "./models/" + modelFile.filename;
+            }
+            if (!m_serverClient->addEngine(engineId, url, targetPath))
+            {
+                std::cerr << "❌ Failed to start download." << std::endl;
+                return false;
+            }
+#else
+            if (!m_serverClient->addEngine(engineId, url, "./models/" + modelFile.filename))
+            {
+                std::cerr << "❌ Failed to start download." << std::endl;
+                return false;
+            }
+#endif
+    }
 
-        m_activeDownloads.push_back(engineId);
+    m_activeDownloads.push_back(engineId);
 
         std::cout << "✅ Model '" << engineId << "' has been successfully added to the server." << std::endl;
         std::cout << "The model is now available for inference." << std::endl;
@@ -652,13 +715,34 @@ bool KolosalCLI::handleDirectGGUFUrl(const std::string &url)
         }
 
         // Process download through server
-        if (!m_serverClient->addEngine(engineId, url, "./models/" + modelFile.filename))
         {
-            std::cerr << "Failed to start download." << std::endl;
-            return false;
-        }
+#ifdef __APPLE__
+            const char* home = getenv("HOME");
+            std::string targetPath;
+            if (home && *home)
+            {
+                std::filesystem::path p = std::filesystem::path(home) / "Library/Application Support/Kolosal/models" / modelFile.filename;
+                targetPath = std::filesystem::absolute(p).string();
+            }
+            else
+            {
+                targetPath = "./models/" + modelFile.filename;
+            }
+            if (!m_serverClient->addEngine(engineId, url, targetPath))
+            {
+                std::cerr << "Failed to start download." << std::endl;
+                return false;
+            }
+#else
+            if (!m_serverClient->addEngine(engineId, url, "./models/" + modelFile.filename))
+            {
+                std::cerr << "Failed to start download." << std::endl;
+                return false;
+            }
+#endif
+    }
 
-        m_activeDownloads.push_back(engineId);
+    m_activeDownloads.push_back(engineId);
 
         std::cout << "\nDownload started successfully!" << std::endl;
 
@@ -2114,14 +2198,26 @@ std::string KolosalCLI::getExecutableDirectory()
 
 std::string KolosalCLI::getExecutableModelsDirectory()
 {
+    // On macOS, use a user-writable location under Application Support
+#ifdef __APPLE__
+    const char* home = getenv("HOME");
+    if (home && *home)
+    {
+        std::filesystem::path modelsPath = std::filesystem::path(home) /
+                                           "Library/Application Support/Kolosal/models";
+        return std::filesystem::absolute(modelsPath).string();
+    }
+    // Fallback if HOME is not set
+    return std::filesystem::absolute(std::filesystem::path("Kolosal/models")).string();
+#else
     std::string executableDir = getExecutableDirectory();
     if (executableDir.empty())
     {
         return "models"; // fallback to relative path
     }
-    
     std::filesystem::path modelsPath = std::filesystem::path(executableDir) / "models";
     return std::filesystem::absolute(modelsPath).string();
+#endif
 }
 
 bool KolosalCLI::downloadEngineFile(const std::string& engineName, const std::string& filename)
