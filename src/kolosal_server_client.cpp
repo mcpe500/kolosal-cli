@@ -1180,6 +1180,81 @@ bool KolosalServerClient::streamingChatCompletion(const std::string& engineId, c
     }
 }
 
+bool KolosalServerClient::streamingChatCompletionJson(const std::string& engineId, const std::string& message,
+                                                    const std::string& jsonSchema,
+                                                    std::function<void(const std::string&, double, double)> responseCallback)
+{
+    try {
+        json requestBody = {
+            {"model", engineId},
+            {"messages", json::array({
+                {{"role", "user"}, {"content", message}}
+            })},
+            {"streaming", true},
+            {"maxNewTokens", 2048},
+            {"temperature", 0.0}, // deterministic for JSON
+            {"topP", 1.0}
+        };
+
+        // Attach JSON Schema using the new inference support
+        // Prefer OpenAI-compatible response_format where possible
+        requestBody["response_format"] = {
+            {"type", "json_schema"},
+            {"json_schema", {
+                {"name", "schema"},
+                {"schema", json::parse(jsonSchema, nullptr, false).is_discarded() ? json::object() : json::parse(jsonSchema)}
+            }}
+        };
+
+        // Also include a raw jsonSchema field for direct inference route parsing
+        // If the schema isn't valid JSON, pass it as string
+        try {
+            auto parsed = json::parse(jsonSchema);
+            requestBody["jsonSchema"] = parsed;
+        } catch (...) {
+            requestBody["jsonSchema"] = jsonSchema;
+        }
+
+        std::string url = m_baseUrl + "/v1/inference/chat/completions";
+        std::string headers = "Content-Type: application/json\r\n";
+        headers += "Accept: text/event-stream\r\n";
+        headers += "Cache-Control: no-cache\r\n";
+        if (!m_apiKey.empty()) {
+            headers += "Authorization: Bearer " + m_apiKey + "\r\n";
+        }
+
+        bool receivedContent = false;
+        bool streamComplete = false;
+        bool httpSuccess = HttpClient::getInstance().makeStreamingRequest(url, requestBody.dump(), headers,
+            [&](const std::string& jsonData) {
+                try {
+                    json chunkJson = json::parse(jsonData);
+                    if (chunkJson.contains("text")) {
+                        std::string content = chunkJson["text"].get<std::string>();
+                        double tps = chunkJson.value("tps", 0.0);
+                        double ttft = chunkJson.value("ttft", 0.0);
+                        if (!content.empty()) {
+                            responseCallback(content, tps, ttft);
+                            receivedContent = true;
+                        }
+                    }
+                    if (chunkJson.contains("partial") && !chunkJson["partial"].get<bool>()) {
+                        streamComplete = true;
+                    }
+                    if (chunkJson.contains("error")) {
+                        streamComplete = true;
+                    }
+                } catch (const std::exception&) {
+                    // ignore malformed chunks
+                }
+            });
+
+        return receivedContent || streamComplete;
+    } catch (const std::exception&) {
+        return false;
+    }
+}
+
 bool KolosalServerClient::getLogs(std::vector<std::tuple<std::string, std::string, std::string>>& logs) {
     try {
         std::string response;

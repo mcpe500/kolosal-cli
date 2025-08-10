@@ -1576,7 +1576,7 @@ The installation will:
     endif()
 elseif(APPLE)
     # macOS-specific packaging settings for DMG distribution
-    set(CPACK_DMG_VOLUME_NAME "Kolosal ${PROJECT_VERSION}")
+    set(CPACK_DMG_VOLUME_NAME "Kolosal")
     
     # Use DragNDrop generator but override with our custom DMG creation
     set(CPACK_GENERATOR "DragNDrop")

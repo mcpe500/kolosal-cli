@@ -100,6 +100,14 @@ void CommandManager::initializeBuiltInCommands() {
     // Exit command
     registerCommand("exit", "Exit the chat session", "/exit", 
         [this](const std::vector<std::string>& args) { return handleExit(args); });
+
+    // JSON command
+    registerCommand(
+        "json",
+        "Send next message with JSON constraints",
+        "/json <json schema> (press Enter) then type your prompt",
+        [this](const std::vector<std::string>& args) { return handleJson(args); }
+    );
 }
 
 CommandResult CommandManager::handleHelp(const std::vector<std::string>& args) {
@@ -136,6 +144,23 @@ CommandResult CommandManager::handleHelp(const std::vector<std::string>& args) {
 
 CommandResult CommandManager::handleExit(const std::vector<std::string>& args) {
     return CommandResult(true, "Goodbye! 👋", true, false);
+}
+
+CommandResult CommandManager::handleJson(const std::vector<std::string>& args) {
+    if (args.empty()) {
+        return CommandResult(false, "Usage: /json <json schema>\nExample: /json {\\\"type\\\":\\\"object\\\", \\\"properties\\\":{...}}", false, true);
+    }
+
+    // Join args back into a single schema string
+    std::ostringstream oss;
+    for (size_t i = 0; i < args.size(); ++i) {
+        if (i) oss << ' ';
+        oss << args[i];
+    }
+    m_jsonSchema = oss.str();
+    m_jsonPending = true;
+
+    return CommandResult(true, "JSON mode enabled. Now type your prompt to generate a JSON that matches the schema.", false, true);
 }
 
 bool CommandManager::isPartialCommand(const std::string& input) const {

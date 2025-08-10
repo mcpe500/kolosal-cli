@@ -113,10 +113,22 @@ public:
      */
     std::vector<std::string> getFormattedCommandSuggestions(const std::string& partialInput) const;
 
+    // JSON mode helpers
+    bool hasPendingJson() const { return m_jsonPending; }
+    bool consumePendingJson(std::string& schemaOut) {
+        if (!m_jsonPending) return false;
+        schemaOut = m_jsonSchema;
+        m_jsonPending = false;
+        m_jsonSchema.clear();
+        return true;
+    }
+
 private:
     std::map<std::string, CommandInfo> m_commands;
     std::string m_currentEngine;
     std::vector<std::pair<std::string, std::string>>* m_chatHistory;
+    bool m_jsonPending = false;
+    std::string m_jsonSchema;
     
     /**
      * @brief Parse command input into command name and arguments
@@ -133,6 +145,7 @@ private:
     // Built-in command handlers
     CommandResult handleHelp(const std::vector<std::string>& args);
     CommandResult handleExit(const std::vector<std::string>& args);
+    CommandResult handleJson(const std::vector<std::string>& args);
 };
 
 #endif // COMMAND_MANAGER_H

@@ -187,7 +187,39 @@ bool ChatInterface::startChatInterface(const std::string& engineId) {
         }
 #endif
         
-        bool success = m_serverClient->streamingChatCompletion(engineId, userInput,
+        // If user previously issued /json, use JSON-constrained streaming for this prompt
+        std::string pendingSchema;
+        bool useJsonMode = m_commandManager->consumePendingJson(pendingSchema);
+        bool success = (useJsonMode
+            ? m_serverClient->streamingChatCompletionJson(engineId, userInput, pendingSchema,
+                [&](const std::string& chunk, double tps, double timeToFirstToken) {
+                    // callback body remains identical
+                    if (tps > 0) { currentTps = tps; hasMetrics = true; }
+                    if (timeToFirstToken > 0) { ttft = timeToFirstToken; }
+                    fullResponse += chunk;
+                    if (!gotFirstChunk.load()) {
+                        gotFirstChunk = true;
+                        if (!promptPrinted.exchange(true)) { loadingAnim.stop(); std::cout << "\r\033[32m> \033[32m"; }
+                    }
+                    std::cout << chunk; std::cout.flush();
+                    if (!useSimpleMode) {
+                        for (char c : chunk) { if (c == '\n') { currentColumn = 0; lineCount++; } else if (c >= 32 && c <= 126) { currentColumn++; if (currentColumn >= terminalWidth) { currentColumn = 0; lineCount++; } } }
+                        bool containsNewline = chunk.find('\n') != std::string::npos; lastWasNewline = containsNewline;
+                    } else { for (char c : chunk) { if (c == '\n') { lineCount++; } } }
+                    if (!useSimpleMode) {
+                        bool containsNewline = chunk.find('\n') != std::string::npos; if (containsNewline && metricsShown) { std::cout << "\033[s"; std::cout << "\033[B\033[1G\033[2K"; std::cout << "\033[u"; metricsShown = false; }
+                        bool willWrap = false; int chunkVisibleLength = 0; for (char c : chunk) { if (c == '\n') { currentColumn = 0; } else if (c >= 32 && c <= 126) { chunkVisibleLength++; if (currentColumn + chunkVisibleLength >= terminalWidth) { willWrap = true; break; } } }
+                        if (willWrap && metricsShown) { std::cout << "\033[s"; std::cout << "\033[B\033[1G\033[2K"; std::cout << "\033[u"; metricsShown = false; }
+                        if (containsNewline || willWrap) { lastWasNewline = true; if (metricsShown) { std::cout << "\033[s"; std::cout << "\033[B\033[1G\033[2K"; std::cout << "\033[u"; metricsShown = false; } } else { lastWasNewline = false; }
+                    }
+                    if (!useSimpleMode && hasMetrics && !lastWasNewline && lineCount > 0) {
+                        bool canShowMetricsBelow = true; if (lineCount >= terminalHeight - 3) { canShowMetricsBelow = false; }
+                        if (canShowMetricsBelow) { if (metricsShown) { std::cout << "\033[s"; std::cout << "\033[B\033[1G\033[2K"; std::cout << "\033[u"; metricsShown = false; }
+                            if (lineCount > 0) { std::cout << "\033[s"; std::cout << "\033[B\033[1G\033[2K"; std::cout << "\033[90m"; if (ttft > 0) { std::cout << "TTFT: " << std::fixed << std::setprecision(2) << ttft << "ms"; } if (currentTps > 0) { if (ttft > 0) std::cout << " | "; std::cout << "TPS: " << std::fixed << std::setprecision(1) << currentTps; } std::cout << "\033[0m"; metricsShown = true; std::cout << "\033[u"; std::cout.flush(); } }
+                        else { if (metricsShown) { std::cout << "\033[s"; std::cout << "\033[B\033[1G\033[2K"; std::cout << "\033[u"; metricsShown = false; } }
+                    }
+                })
+            : m_serverClient->streamingChatCompletion(engineId, userInput,
             [&](const std::string& chunk, double tps, double timeToFirstToken) {
                 // Update metrics first (before any processing)
                 if (tps > 0) {
@@ -360,7 +392,8 @@ bool ChatInterface::startChatInterface(const std::string& engineId) {
                         }
                     }
                 }
-            });
+            }))
+        ;
         
         // Ensure thread is properly joined before destroying loadingAnim
         try {
@@ -905,78 +938,54 @@ void ChatInterface::updateRealTimeSuggestions(const std::string& input, bool& sh
 
 void ChatInterface::updateRealTimeSuggestionsLinux(const std::string& input, bool& showingSuggestions, int& suggestionStartRow, const std::string& prompt) {
 #ifndef _WIN32
+    static int prevLines = 0; // number of suggestion lines last rendered
+
     auto suggestions = m_commandManager->getCommandSuggestions(input);
-    
-    if (suggestions.empty()) {
-        if (showingSuggestions) {
-            clearSuggestionsLinux(showingSuggestions, suggestionStartRow, prompt, input);
-        }
-        return;
-    }
-    
-    // Get terminal height for boundary checking
-    struct winsize w;
-    int terminalHeight = 24;
-    if (ioctl(STDOUT_FILENO, TIOCGWINSZ, &w) == 0) {
-        terminalHeight = w.ws_row;
-    }
-    
-    // Don't show suggestions if terminal is too small
-    if (terminalHeight < 10) {
-        return;
-    }
-    
-    if (!showingSuggestions) {
-        showingSuggestions = true;
-        suggestionStartRow = 1; // Mark that we're showing suggestions below
-    }
-    
-    // Save current cursor position (input line)
-    printf("\033[s");
-    
-    try {
-        // Move cursor down one line to start suggestions below input
-        printf("\033[B");  // Move cursor down one line
-        printf("\033[1G"); // Move to beginning of line
-        
-        auto formattedSuggestions = m_commandManager->getFormattedCommandSuggestions(input);
+
+    // Build lines to display
+    std::vector<std::string> lines;
+    if (!suggestions.empty()) {
+        auto formatted = m_commandManager->getFormattedCommandSuggestions(input);
         size_t maxDisplay = 3;
-        size_t displayCount = (formattedSuggestions.size() < maxDisplay) ? formattedSuggestions.size() : maxDisplay;
-        
-        // Clear the suggestion area first (4 lines should be enough)
-        for (int i = 0; i < 4; ++i) {
-            printf("\033[K"); // Clear current line
-            if (i < 3) printf("\033[B"); // Move to next line
-        }
-        
-        // Move back up to start of suggestions area
-        for (int i = 0; i < 3; ++i) {
-            printf("\033[A"); // Move cursor up
-        }
-        printf("\033[1G"); // Move to beginning of line
-        
-        // Display suggestions in dark gray
+        size_t displayCount = std::min(formatted.size(), maxDisplay);
         for (size_t i = 0; i < displayCount; ++i) {
-            printf("\033[K"); // Clear current line
-            printf("\033[90m  %s\033[0m", formattedSuggestions[i].c_str()); // Dark gray
-            if (i < displayCount - 1) {
-                printf("\033[B"); // Move to next line for next suggestion
-                printf("\033[1G"); // Move to beginning of line
-            }
+            lines.emplace_back("  " + formatted[i]);
         }
-        
-        if (formattedSuggestions.size() > maxDisplay) {
-            printf("\033[B"); // Move to next line
-            printf("\033[1G\033[K"); // Beginning of line and clear
-            printf("\033[90m  ... and %zu more\033[0m", formattedSuggestions.size() - maxDisplay);
+        if (formatted.size() > maxDisplay) {
+            lines.emplace_back("  ... and " + std::to_string(formatted.size() - maxDisplay) + " more");
         }
-    } catch (...) {
-        // If anything goes wrong with ANSI sequences, just restore cursor and continue
     }
-    
-    // Restore cursor position to input line
-    printf("\033[u");
+
+    // Terminal height guard (avoid flicker on very small terminals)
+    struct winsize ws; 
+    if (ioctl(STDOUT_FILENO, TIOCGWINSZ, &ws) == 0 && ws.ws_row > 0 && ws.ws_row < 8) {
+        lines.clear(); // suppress
+    }
+
+    if (lines.empty()) {
+        if (prevLines > 0) {
+            // Clear previous suggestions
+            printf("\033[s\033[1G\033[J\033[u"); // save, go col1, clear to end, restore
+            fflush(stdout);
+            prevLines = 0;
+        }
+        showingSuggestions = false;
+        return;
+    }
+
+    // Redraw suggestions: save cursor (end of input), move to start of line, clear to end of screen, print input stays since we only clear after cursor? We clear after start so need to reprint input? Simpler: we only clear from current cursor downward.
+    // Approach: Save cursor, move to start-of-line, move cursor back to saved to avoid erasing input characters before cursor, so instead: save cursor then print suggestions starting with newline and rely on clear-to-end-of-screen.
+    printf("\033[s");          // Save cursor at end of input
+    printf("\033[J");          // Clear from cursor to end of screen (old suggestions)
+    // Print suggestions block
+    for (size_t i = 0; i < lines.size(); ++i) {
+        printf("\n\033[90m%s\033[0m", lines[i].c_str());
+    }
+    printf("\033[u");          // Restore cursor to end of input
     fflush(stdout);
+
+    prevLines = static_cast<int>(lines.size());
+    showingSuggestions = true;
 #endif
 }
 

@@ -47,7 +47,11 @@ echo "✅ Code signature verified (spctl check skipped - requires notarization)"
 
 # Step 4: Create DMG staging
 echo "💿 Creating DMG staging..."
-rm -rf "$DMG_STAGING"
+# Remove existing staging with permission fix
+if [ -d "$DMG_STAGING" ]; then
+    chmod -R +w "$DMG_STAGING" 2>/dev/null || true
+    rm -rf "$DMG_STAGING"
+fi
 mkdir -p "$DMG_STAGING/.background"
 
 # Copy signed app bundle
@@ -63,7 +67,7 @@ cp "$PROJECT_ROOT/resources/dmg_background.png" "$DMG_STAGING/.background/"
 echo "📀 Creating final DMG with styling via create_dmg.sh..."
 DMG_NAME="kolosal-1.0.0-apple-silicon-signed.dmg"
 DMG_PATH="$BUILD_DIR/$DMG_NAME"
-VOLNAME="Kolosal 1.0.0"
+VOLNAME="Kolosal"
 
 rm -f "$DMG_PATH"
 "$PROJECT_ROOT/cmake/create_dmg.sh" \
@@ -104,4 +108,7 @@ echo "📦 Final DMG: $DMG_PATH"
 echo "🔐 Ready for notarization and distribution"
 
 # Clean up staging
-rm -rf "$DMG_STAGING"
+if [ -d "$DMG_STAGING" ]; then
+    chmod -R +w "$DMG_STAGING" 2>/dev/null || true
+    rm -rf "$DMG_STAGING"
+fi

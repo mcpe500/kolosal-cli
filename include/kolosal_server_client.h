@@ -178,6 +178,11 @@ public:
     bool streamingChatCompletion(const std::string& engineId, const std::string& message, 
                                std::function<void(const std::string&, double, double)> responseCallback);
 
+    // Streaming chat completion with JSON schema constraint
+    bool streamingChatCompletionJson(const std::string& engineId, const std::string& message,
+                                     const std::string& jsonSchema,
+                                     std::function<void(const std::string&, double, double)> responseCallback);
+
     /**
      * @brief Get server logs
      * @param logs Output: vector of log entries with level, timestamp, and message
