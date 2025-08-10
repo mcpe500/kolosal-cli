@@ -23,6 +23,7 @@ option(USE_MPI "Enable MPI support" OFF)
 option(USE_METAL "Enable Apple Metal support" OFF)
 option(ENABLE_NATIVE_OPTIMIZATION "Enable native CPU optimization (-march=native)" OFF)
 option(ENABLE_CODESIGN "Enable code signing on macOS" OFF)
+option(STRICT_CUDA_DEPENDS "If ON and building with CUDA, declare a hard DEB dependency on CUDA runtime; otherwise only recommend it" OFF)
 
 # Code signing configuration for macOS
 set(CODESIGN_IDENTITY "" CACHE STRING "Code signing identity (e.g., 'Developer ID Application: Your Name')")
@@ -1727,18 +1728,6 @@ else()
     
     # Essential runtime dependencies based on ldd output
     set(CPACK_DEBIAN_PACKAGE_DEPENDS "libc6 (>= 2.17), libgcc-s1, libstdc++6, libcurl4, libgomp1, libssl3 | libssl1.1, zlib1g")
-    
-    # Add acceleration-specific dependencies
-    if(USE_CUDA)
-        set(CPACK_DEBIAN_PACKAGE_DEPENDS "${CPACK_DEBIAN_PACKAGE_DEPENDS}, nvidia-cuda-runtime | cuda-runtime")
-        set(DEBIAN_SUGGESTS_LIST "libvulkan1")
-    elseif(USE_VULKAN)
-        set(CPACK_DEBIAN_PACKAGE_DEPENDS "${CPACK_DEBIAN_PACKAGE_DEPENDS}, libvulkan1")
-        set(DEBIAN_SUGGESTS_LIST "")
-    else()
-        # Always suggest vulkan runtime since we include vulkan inference engine by default
-        set(DEBIAN_SUGGESTS_LIST "libvulkan1")
-    endif()
     
     # Build suggests list properly
     if(DEBIAN_SUGGESTS_LIST)
