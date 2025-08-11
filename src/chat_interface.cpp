@@ -10,6 +10,7 @@
 #include <csignal>
 #include <chrono>
 #include <cstring>
+#include <cstdlib>
 
 #ifdef _WIN32
 #include <windows.h>
@@ -54,6 +55,8 @@ bool ChatInterface::startChatInterface(const std::string& engineId) {
     std::cout << "\033[35m" << engineId << "\033[0m" << std::endl;
     std::cout << "Type '/exit' or press Ctrl+C to quit" << std::endl;
     std::cout << "Type '/help' to see available commands" << std::endl;
+    // Provide an initial single blank line before first user input
+    std::cout << std::endl;
 
     // Set up signal handling for graceful exit
     bool shouldExit = false;
@@ -85,10 +88,12 @@ bool ChatInterface::startChatInterface(const std::string& engineId) {
     // Set chat history reference for command manager
     m_commandManager->setChatHistory(&chatHistory);
 
+    bool lastPrintedBlank = true; // header ended with a blank line
     while (!shouldExit) {
-        // Get user input with real-time autocomplete support
-        std::cout << "\n";
+        // Get user input with real-time autocomplete support (previous loop ended with exactly one blank line)
         std::string userInput = getInputWithRealTimeAutocomplete("");
+        // User just entered a line; last line now contains text (not a blank separator)
+        lastPrintedBlank = false;
 
         // Check if input was cancelled (empty string returned)
         if (userInput.empty() && std::cin.eof()) {
@@ -110,7 +115,20 @@ bool ChatInterface::startChatInterface(const std::string& engineId) {
             CommandResult result = m_commandManager->executeCommand(userInput);
 
             if (!result.message.empty()) {
-                std::cout << "\n\033[33m> " << result.message << "\033[0m\n" << std::endl;
+                // For exit commands we already have a spacer line from suggestion rendering; avoid adding another
+                if (!result.shouldExit) {
+                    if (!lastPrintedBlank) {
+                        std::cout << "\n"; // single separator before command output
+                    }
+                }
+                // Print command output
+                std::cout << "\033[33m> " << result.message << "\033[0m\n";
+                lastPrintedBlank = false; // content line printed
+                if (!result.shouldExit) {
+                    // Add one blank separator only for non-exit commands to maintain spacing contract
+                    std::cout << "\n";
+                    lastPrintedBlank = true;
+                }
             }
 
             if (result.shouldExit) {
@@ -164,11 +182,15 @@ bool ChatInterface::startChatInterface(const std::string& engineId) {
         int terminalHeight = 24; // Default height, will be updated
         int lineCount = 0; // Track approximate line count to avoid bottom-of-terminal issues
         
-        // Use safer mode on macOS to avoid terminal crashes
+        // Advanced (Windows-like) interactive metrics & cursor handling.
+        // Allow fallback to simple mode via environment variable KOLOSAL_SIMPLE_CHAT=1.
         bool useSimpleMode = false;
-#ifdef __APPLE__
-        useSimpleMode = true; // Default to simple mode on macOS to prevent crashes
-#endif
+        if (const char *simp = std::getenv("KOLOSAL_SIMPLE_CHAT")) {
+            std::string val = simp; 
+            if (val == "1" || val == "true" || val == "TRUE") {
+                useSimpleMode = true;
+            }
+        }
 
 #ifdef _WIN32
         // Get actual terminal dimensions on Windows
@@ -437,12 +459,12 @@ bool ChatInterface::startChatInterface(const std::string& engineId) {
         }
 
         std::cout << "\033[0m";
-        
-        // Display final metrics below the completed response
+
+        // Display final metrics below the completed response (single blank line separation handled after block)
+        bool printedMetrics = false;
         if (hasMetrics && (ttft > 0 || currentTps > 0)) {
             if (useSimpleMode) {
-                // Simple metrics display for macOS without complex ANSI sequences
-                std::cout << "\n";
+                std::cout << "\n"; // terminate assistant line
                 if (ttft > 0) {
                     std::cout << "TTFT: " << std::fixed << std::setprecision(2) << ttft << "ms";
                 }
@@ -450,9 +472,9 @@ bool ChatInterface::startChatInterface(const std::string& engineId) {
                     if (ttft > 0) std::cout << " | ";
                     std::cout << "TPS: " << std::fixed << std::setprecision(1) << currentTps;
                 }
+                printedMetrics = true;
             } else {
-                // Full metrics display with colors for Windows/Linux
-                std::cout << "\n\033[90m"; // New line and dim gray color
+                std::cout << "\n\033[90m"; // terminate assistant line then metrics color
                 if (ttft > 0) {
                     std::cout << "TTFT: " << std::fixed << std::setprecision(2) << ttft << "ms";
                 }
@@ -460,11 +482,25 @@ bool ChatInterface::startChatInterface(const std::string& engineId) {
                     if (ttft > 0) std::cout << " | ";
                     std::cout << "TPS: " << std::fixed << std::setprecision(1) << currentTps;
                 }
-                std::cout << "\033[0m"; // Reset color
+                std::cout << "\033[0m";
+                printedMetrics = true;
             }
         }
-        
-        std::cout << std::endl;
+
+        // Finalize spacing after assistant response:
+        // Goal: exactly one blank line separating assistant block from next user input.
+        if (printedMetrics) {
+            // Metrics line currently has no terminating newline; add newline to end metrics line + one blank line
+            std::cout << "\n\n"; // first ends metrics line, second is the blank separator
+            lastPrintedBlank = true;
+        } else {
+            // Ensure the assistant text ends with a newline, then add one more newline for the blank separator
+            if (fullResponse.empty() || fullResponse.back() != '\n') {
+                std::cout << "\n"; // terminate assistant line
+            }
+            std::cout << "\n"; // blank separator
+            lastPrintedBlank = true;
+        }
     }
 
 #ifdef _WIN32
@@ -721,64 +757,49 @@ std::string ChatInterface::getInputWithRealTimeAutocomplete(const std::string& p
         } else if (ch == 127 || ch == 8) { // Backspace (DEL or BS)
             if (!input.empty()) {
                 input.pop_back();
-                std::cout << "\b \b" << std::flush;
-                
-                // If input becomes empty, show hint text again
-                if (input.empty() && !showingHint) {
+                // Redraw entire line & suggestions for consistent behavior
+                redrawInputAndSuggestionsLinux(input);
+                if (input.empty()) {
+                    // Show hint again when cleared
                     displayHintTextLinux(hintText, showingHint);
-                }
-                
-                // Update or clear suggestions with boundary protection
-                if (input.length() >= 2 && input[0] == '/') {
-                    // Only show suggestions if we have enough terminal space
-                    if (terminalHeight > 10) {
-                        updateRealTimeSuggestionsLinux(input, showingSuggestions, suggestionStartRow, prompt);
+                    showingSuggestions = false; // no suggestions on empty
+                } else if (input[0] != '/') {
+                    // If no longer a command, clear any lingering suggestions block
+                    if (showingSuggestions) {
+                        clearSuggestionsLinux(showingSuggestions, suggestionStartRow, prompt, input);
                     }
-                } else if (showingSuggestions) {
-                    clearSuggestionsLinux(showingSuggestions, suggestionStartRow, prompt, input);
+                } else {
+                    // We're in command mode; mark suggestions shown (redraw already printed them)
+                    showingSuggestions = true;
                 }
             }
-        } else if (ch == 9) { // Tab - for command suggestions
-            if (input.length() >= 2 && input[0] == '/' && terminalHeight > 10) {
+        } else if (ch == 9) { // Tab - inline autocomplete (no newline)
+            if (input.size() >= 1 && input[0] == '/') {
                 auto suggestions = m_commandManager->getCommandSuggestions(input);
                 if (!suggestions.empty()) {
                     if (showingHint) {
                         clearHintTextLinux(hintText, showingHint);
                     }
-                    if (showingSuggestions) {
-                        clearSuggestionsLinux(showingSuggestions, suggestionStartRow, prompt, input);
-                    }
-                    
-                    // Clear current input line for interactive selection
-                    for (size_t i = 0; i < input.length(); ++i) {
-                        std::cout << "\b \b";
-                    }
-                    std::cout << std::flush;
-                    
+                    // If single suggestion: complete fully
                     if (suggestions.size() == 1) {
-                        // Auto-complete single match
                         input = "/" + suggestions[0];
-                        std::cout << "\033[96m" << input << "\033[0m" << std::flush;
+                        redrawInputAndSuggestionsLinux(input);
+                        showingSuggestions = true;
                     } else {
-                        // Show interactive selection
-                        std::cout << std::endl;
-                        auto formattedSuggestions = m_commandManager->getFormattedCommandSuggestions(input);
-                        formattedSuggestions.push_back("Continue with '" + input + "'");
-                        
-                        InteractiveList suggestionList(formattedSuggestions);
-                        int selected = suggestionList.run();
-                        
-                        if (selected >= 0 && selected < static_cast<int>(suggestions.size())) {
-                            input = "/" + suggestions[selected];
-                            std::cout << "U: \033[96m" << input << "\033[0m" << std::flush;
-                        } else if (selected == static_cast<int>(suggestions.size())) {
-                            std::cout << "U: \033[96m" << input << "\033[0m" << std::flush;
-                        } else {
-                            // User cancelled
-                            tcsetattr(STDIN_FILENO, TCSANOW, &oldt);
-                            return "";
+                        // Multiple: compute longest common prefix beyond current token
+                        std::string prefixPart = input.substr(1); // without '/'
+                        std::string lcp = suggestions[0];
+                        for (size_t i = 1; i < suggestions.size(); ++i) {
+                            size_t j = 0; while (j < lcp.size() && j < suggestions[i].size() && lcp[j] == suggestions[i][j]) j++; lcp.resize(j);
+                            if (lcp.empty()) break;
                         }
-                        showingSuggestions = false; // Reset suggestion state
+                        if (lcp.size() > prefixPart.size()) {
+                            // Extend input with new portion of LCP
+                            input = "/" + lcp;
+                        }
+                        // Redraw (even if no extension) to ensure suggestions visible
+                        redrawInputAndSuggestionsLinux(input);
+                        showingSuggestions = true;
                     }
                 }
             }
@@ -789,14 +810,16 @@ std::string ChatInterface::getInputWithRealTimeAutocomplete(const std::string& p
             }
             
             input += ch;
-            // Display user input in cyan color
-            std::cout << "\033[96m" << static_cast<char>(ch) << "\033[0m" << std::flush;
-            
-            // Show suggestions for commands
-            if (input.length() >= 2 && input[0] == '/') {
-                updateRealTimeSuggestionsLinux(input, showingSuggestions, suggestionStartRow, prompt);
-            } else if (showingSuggestions) {
-                clearSuggestionsLinux(showingSuggestions, suggestionStartRow, prompt, input);
+            // If it's a command (starts with '/') trigger full redraw logic
+            if (input.size() >= 1 && input[0] == '/') {
+                redrawInputAndSuggestionsLinux(input);
+                showingSuggestions = true; // treated as showing
+            } else {
+                // Display user input in cyan color (no suggestions)
+                std::cout << "\033[96m" << static_cast<char>(ch) << "\033[0m" << std::flush;
+                if (showingSuggestions) {
+                    clearSuggestionsLinux(showingSuggestions, suggestionStartRow, prompt, input);
+                }
             }
         } else if (ch == 3) { // Ctrl+C
             tcsetattr(STDIN_FILENO, TCSANOW, &oldt);
@@ -938,16 +961,15 @@ void ChatInterface::updateRealTimeSuggestions(const std::string& input, bool& sh
 
 void ChatInterface::updateRealTimeSuggestionsLinux(const std::string& input, bool& showingSuggestions, int& suggestionStartRow, const std::string& prompt) {
 #ifndef _WIN32
-    static int prevLines = 0; // number of suggestion lines last rendered
+    // Stable in-place redraw of command suggestions (Linux/mac & other UNIX)
+    static int prevLines = 0; // previously rendered suggestion lines (excluding spacer)
 
     auto suggestions = m_commandManager->getCommandSuggestions(input);
-
-    // Build lines to display
     std::vector<std::string> lines;
     if (!suggestions.empty()) {
         auto formatted = m_commandManager->getFormattedCommandSuggestions(input);
-        size_t maxDisplay = 3;
-        size_t displayCount = std::min(formatted.size(), maxDisplay);
+        const size_t maxDisplay = 3;
+        const size_t displayCount = std::min(formatted.size(), maxDisplay);
         for (size_t i = 0; i < displayCount; ++i) {
             lines.emplace_back("  " + formatted[i]);
         }
@@ -956,36 +978,60 @@ void ChatInterface::updateRealTimeSuggestionsLinux(const std::string& input, boo
         }
     }
 
-    // Terminal height guard (avoid flicker on very small terminals)
+    // Suppress on very small terminals (avoid jitter)
     struct winsize ws; 
     if (ioctl(STDOUT_FILENO, TIOCGWINSZ, &ws) == 0 && ws.ws_row > 0 && ws.ws_row < 8) {
-        lines.clear(); // suppress
+        lines.clear();
     }
 
     if (lines.empty()) {
-        if (prevLines > 0) {
-            // Clear previous suggestions
-            printf("\033[s\033[1G\033[J\033[u"); // save, go col1, clear to end, restore
+        if (showingSuggestions && prevLines > 0) {
+            // Clear old suggestions
+            printf("\033[s");      // save cursor at end of input
+            printf("\033[B");      // move to first suggestion line (spacer or first suggestion)
+            for (int i = 0; i < prevLines; ++i) {
+                printf("\033[2K");
+                if (i < prevLines - 1) printf("\033[B");
+            }
+            printf("\033[u");      // restore cursor
             fflush(stdout);
-            prevLines = 0;
         }
+        prevLines = 0;
         showingSuggestions = false;
         return;
     }
 
-    // Redraw suggestions: save cursor (end of input), move to start of line, clear to end of screen, print input stays since we only clear after cursor? We clear after start so need to reprint input? Simpler: we only clear from current cursor downward.
-    // Approach: Save cursor, move to start-of-line, move cursor back to saved to avoid erasing input characters before cursor, so instead: save cursor then print suggestions starting with newline and rely on clear-to-end-of-screen.
-    printf("\033[s");          // Save cursor at end of input
-    printf("\033[J");          // Clear from cursor to end of screen (old suggestions)
-    // Print suggestions block
-    for (size_t i = 0; i < lines.size(); ++i) {
-        printf("\n\033[90m%s\033[0m", lines[i].c_str());
+    // Draw / redraw
+    printf("\033[s"); // S1 save cursor at end of input
+    if (!showingSuggestions) {
+        // Add spacer line below input on first show
+        printf("\n");
+        showingSuggestions = true;
     }
-    printf("\033[u");          // Restore cursor to end of input
-    fflush(stdout);
+    // Restore & save again (S2) then move to first suggestion line
+    printf("\033[u\033[s\033[B");
 
-    prevLines = static_cast<int>(lines.size());
-    showingSuggestions = true;
+    // Clear previous suggestion block
+    for (int i = 0; i < prevLines; ++i) {
+        printf("\033[2K");
+        if (i < prevLines - 1) printf("\033[B");
+    }
+    // Move back up to first suggestion line
+    if (prevLines > 1) {
+        for (int i = 0; i < prevLines - 1; ++i) printf("\033[A");
+    }
+
+    // Print new suggestions
+    int newLines = static_cast<int>(lines.size());
+    for (int i = 0; i < newLines; ++i) {
+        printf("\033[2K\033[90m%s\033[0m", lines[i].c_str());
+        if (i < newLines - 1) printf("\033[B");
+    }
+
+    // Restore cursor to end of input
+    printf("\033[u");
+    fflush(stdout);
+    prevLines = newLines;
 #endif
 }
 
@@ -1025,43 +1071,32 @@ void ChatInterface::clearSuggestions(bool& showingSuggestions, int suggestionSta
 void ChatInterface::clearSuggestionsLinux(bool& showingSuggestions, int suggestionStartRow, const std::string& prompt, const std::string& input) {
 #ifndef _WIN32
     if (!showingSuggestions) return;
-    
-    // Save current cursor position (input line)
+
+    // Save cursor at input line
     printf("\033[s");
-    
-    try {
-        // Move cursor down one line to start clearing suggestions below input
-        printf("\033[B");  // Move cursor down one line
-        printf("\033[1G"); // Move to beginning of line
-        
-        // Clear the suggestion area (4 lines should be enough)
-        for (int i = 0; i < 4; ++i) {
-            printf("\033[K"); // Clear current line
-            if (i < 3) {
-                printf("\033[B"); // Move to next line
-                printf("\033[1G"); // Move to beginning of line
-            }
-        }
-    } catch (...) {
-        // If anything goes wrong, just continue
-    }
-    
-    // Restore cursor position to input line
-    printf("\033[u");
     fflush(stdout);
-    
+    try {
+        // Move to first suggestion line (the spacer inserted when suggestions first appeared)
+        printf("\033[B\033[1G");
+        // Delete up to 6 lines (spacer + up to 5 suggestions) to collapse vertical space
+        // Use ANSI Delete Line (DL) command which scrolls lines below upward
+        printf("\033[6M");
+        // Move cursor back to original input position
+        printf("\033[u");
+    } catch (...) {
+        // Fallback: restore position even if deletion unsupported
+        printf("\033[u");
+    }
+    fflush(stdout);
     showingSuggestions = false;
 #endif
 }
 
 void ChatInterface::clearCurrentInput(const std::string& input, bool& showingSuggestions, int suggestionStartRow, const std::string& prompt) {
 #ifdef _WIN32
-    // Clear only the user input part (after the '> ')
     for (size_t i = 0; i < input.length(); ++i) {
         std::cout << "\b \b";
     }
-    
-    // Clear suggestions if showing
     if (showingSuggestions) {
         clearSuggestions(showingSuggestions, suggestionStartRow, prompt, "");
     }
@@ -1072,54 +1107,23 @@ void ChatInterface::forceClearSuggestions() {
 #ifdef _WIN32
     CONSOLE_SCREEN_BUFFER_INFO csbi;
     HANDLE hConsole = GetStdHandle(STD_OUTPUT_HANDLE);
-    GetConsoleScreenBufferInfo(hConsole, &csbi);
-    
-    // Store current cursor position
+    if (!GetConsoleScreenBufferInfo(hConsole, &csbi)) return;
     COORD currentPos = csbi.dwCursorPosition;
-    
-    // Clear several lines below current position to ensure suggestions are gone
     DWORD written;
     for (int i = 1; i <= 10; ++i) {
         COORD clearPos = {0, static_cast<SHORT>(currentPos.Y + i)};
-        FillConsoleOutputCharacter(hConsole, ' ', 120, clearPos, &written);
-        FillConsoleOutputAttribute(hConsole, csbi.wAttributes, 120, clearPos, &written);
+        FillConsoleOutputCharacter(hConsole, ' ', 160, clearPos, &written);
+        FillConsoleOutputAttribute(hConsole, csbi.wAttributes, 160, clearPos, &written);
     }
-    
-    // Restore cursor position
     SetConsoleCursorPosition(hConsole, currentPos);
     std::cout.flush();
-#endif
-}
-
-void ChatInterface::displayHintText(const std::string& hintText, bool& showingHint) {
-#ifdef _WIN32
-    if (showingHint) return; // Already showing hint
-    
-    CONSOLE_SCREEN_BUFFER_INFO csbi;
-    HANDLE hConsole = GetStdHandle(STD_OUTPUT_HANDLE);
-    GetConsoleScreenBufferInfo(hConsole, &csbi);
-    
-    // Store current cursor position (where user will type)
-    COORD inputPos = csbi.dwCursorPosition;
-    
-    // Get original attributes for restoration
-    WORD originalAttributes = csbi.wAttributes;
-    
-    // Set dark gray color for hint text (same as command suggestions)
-    WORD hintAttributes = (originalAttributes & 0xF0) | 8; // Dark gray
-    SetConsoleTextAttribute(hConsole, hintAttributes);
-    
-    // Display hint text at current cursor position
-    std::cout << hintText;
-    
-    // Restore original attributes
-    SetConsoleTextAttribute(hConsole, originalAttributes);
-    
-    // Move cursor back to the beginning (where user should type)
-    SetConsoleCursorPosition(hConsole, inputPos);
-    
-    showingHint = true;
-    std::cout.flush();
+#else
+    printf("\033[s");
+    for (int i = 0; i < 10; ++i) {
+        printf("\033[B\033[2K");
+    }
+    printf("\033[10A\033[u");
+    fflush(stdout);
 #endif
 }
 
@@ -1176,5 +1180,44 @@ void ChatInterface::clearHintTextLinux(const std::string& hintText, bool& showin
     std::cout << std::flush;
     
     showingHint = false;
+#endif
+}
+
+void ChatInterface::redrawInputAndSuggestionsLinux(const std::string& input) {
+#ifndef _WIN32
+    // Save current cursor (end of existing line)
+    printf("\033[s");
+    // Move to start of line, clear line and everything below to remove old suggestions
+    printf("\r\033[J");
+    // Rewrite input with cyan coloring
+    printf("\033[96m%s\033[0m", input.c_str());
+
+    // Build suggestions
+    auto formatted = m_commandManager->getFormattedCommandSuggestions(input);
+    if (!formatted.empty()) {
+        const size_t maxDisplay = 3;
+        size_t displayCount = std::min(formatted.size(), maxDisplay);
+        for (size_t i = 0; i < displayCount; ++i) {
+            printf("\n\033[90m%s\033[0m", formatted[i].c_str());
+        }
+        if (formatted.size() > maxDisplay) {
+            printf("\n\033[90m... and %zu more\033[0m", formatted.size() - maxDisplay);
+        }
+    }
+    fflush(stdout);
+    // Restore cursor to end of input (which is first line). We moved it by printing; so move up lines count of suggestions.
+    size_t suggestionLines = 0;
+    if (!formatted.empty()) {
+        suggestionLines = std::min<size_t>(formatted.size(), 3);
+        if (formatted.size() > 3) suggestionLines += 1; // 'more' line
+    }
+    if (suggestionLines > 0) {
+        for (size_t i = 0; i < suggestionLines; ++i) {
+            printf("\033[A");
+        }
+        // Move cursor to end of input (already at correct column after rewrite)
+        // Nothing extra needed since we're still at end of line after upward moves
+    }
+    fflush(stdout);
 #endif
 }

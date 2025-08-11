@@ -112,6 +112,8 @@ private:
      * @param prompt Input prompt string
      */
     void updateRealTimeSuggestionsLinux(const std::string& input, bool& showingSuggestions, int& suggestionStartRow, const std::string& prompt);
+    // Full-line redraw variant for Linux/mac: clears input & suggestions then redraws
+    void redrawInputAndSuggestionsLinux(const std::string& input);
     
     /**
      * @brief Clear suggestions for Linux
