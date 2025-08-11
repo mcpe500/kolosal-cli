@@ -181,6 +181,15 @@ bool ChatInterface::startChatInterface(const std::string& engineId) {
         int terminalWidth = 80; // Default width, will be updated
         int terminalHeight = 24; // Default height, will be updated
         int lineCount = 0; // Track approximate line count to avoid bottom-of-terminal issues
+        // New flag: suppress noisy real-time metrics updates during multi-line streaming.
+        // The previous implementation attempted to render a transient metrics line beneath the
+        // streaming assistant output, but on many terminals (especially macOS default Terminal
+        // and iTerm with wrapping) this resulted in duplicated interleaved lines such as:
+        //   TTFT: 65.82ms | TPS: 67.0 for you to find
+        // because cursor save/restore + wrapping/newlines race with streamed tokens.
+        // We now disable in-flight metrics rendering to keep the assistant output clean and
+        // only show a single concise metrics line after generation completes.
+        const bool suppressRealtimeMetrics = true;
         
         // Advanced (Windows-like) interactive metrics & cursor handling.
         // Allow fallback to simple mode via environment variable KOLOSAL_SIMPLE_CHAT=1.
@@ -234,7 +243,7 @@ bool ChatInterface::startChatInterface(const std::string& engineId) {
                         if (willWrap && metricsShown) { std::cout << "\033[s"; std::cout << "\033[B\033[1G\033[2K"; std::cout << "\033[u"; metricsShown = false; }
                         if (containsNewline || willWrap) { lastWasNewline = true; if (metricsShown) { std::cout << "\033[s"; std::cout << "\033[B\033[1G\033[2K"; std::cout << "\033[u"; metricsShown = false; } } else { lastWasNewline = false; }
                     }
-                    if (!useSimpleMode && hasMetrics && !lastWasNewline && lineCount > 0) {
+                    if (!suppressRealtimeMetrics && !useSimpleMode && hasMetrics && !lastWasNewline && lineCount > 0) {
                         bool canShowMetricsBelow = true; if (lineCount >= terminalHeight - 3) { canShowMetricsBelow = false; }
                         if (canShowMetricsBelow) { if (metricsShown) { std::cout << "\033[s"; std::cout << "\033[B\033[1G\033[2K"; std::cout << "\033[u"; metricsShown = false; }
                             if (lineCount > 0) { std::cout << "\033[s"; std::cout << "\033[B\033[1G\033[2K"; std::cout << "\033[90m"; if (ttft > 0) { std::cout << "TTFT: " << std::fixed << std::setprecision(2) << ttft << "ms"; } if (currentTps > 0) { if (ttft > 0) std::cout << " | "; std::cout << "TPS: " << std::fixed << std::setprecision(1) << currentTps; } std::cout << "\033[0m"; metricsShown = true; std::cout << "\033[u"; std::cout.flush(); } }
@@ -350,7 +359,7 @@ bool ChatInterface::startChatInterface(const std::string& engineId) {
                 // Show metrics in real-time below the response (but not immediately after newlines)
                 // Skip metrics display in simple mode to avoid ANSI sequence issues on macOS
                 // Also skip real-time metrics for single-line responses to avoid text duplication
-                if (!useSimpleMode && hasMetrics && !lastWasNewline && lineCount > 0) {
+                if (!suppressRealtimeMetrics && !useSimpleMode && hasMetrics && !lastWasNewline && lineCount > 0) {
                     // Check if we're near the bottom of the terminal to avoid overriding text
                     bool canShowMetricsBelow = true;
                     
@@ -442,7 +451,7 @@ bool ChatInterface::startChatInterface(const std::string& engineId) {
         }
 
         // Clear metrics line after completion to clean up (only if not in simple mode)
-        if (!useSimpleMode && metricsShown) {
+        if (!suppressRealtimeMetrics && !useSimpleMode && metricsShown) {
             std::cout << "\033[s";  // Save cursor position
             std::cout << "\033[B\033[1G\033[2K"; // Move down, go to column 1, clear entire line
             std::cout << "\033[u";  // Restore cursor position
