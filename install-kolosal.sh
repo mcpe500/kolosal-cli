@@ -182,6 +182,8 @@ install_mac() {
   MOUNT_POINT=""
   local bin_target="/usr/local/bin/kolosal"
   local app_exec="/Applications/${app_name}/Contents/MacOS/kolosal"
+  local bin_server_target="/usr/local/bin/kolosal-server"
+  local app_server_exec="/Applications/${app_name}/Contents/MacOS/kolosal-server"
   ensure_sudo
   if [[ -x "$app_exec" ]]; then
     echo "Creating symlink $bin_target -> $app_exec"
@@ -193,6 +195,14 @@ install_mac() {
 open -a "${app_name%.app}" --args "$@"
 EOF
     sudo chmod +x "$bin_target"
+  fi
+
+  if [[ -x "$app_server_exec" ]]; then
+    echo "Creating symlink $bin_server_target -> $app_server_exec"
+    sudo ln -sf "$app_server_exec" "$bin_server_target"
+  else
+    echo "Notice: kolosal-server binary not found at expected path ($app_server_exec)." >&2
+    echo "If you built from source, you can manually symlink build/bin/kolosal-server to /usr/local/bin." >&2
   fi
   if [[ $FORCE_LAUNCH -eq 1 ]]; then
     echo "Launching application (requested)..."
