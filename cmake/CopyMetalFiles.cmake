@@ -11,9 +11,13 @@ set(METAL_FILES
 # Define search directories (in order of preference)
 set(SEARCH_DIRS
     "${SOURCE_DIR}"
-    "${SOURCE_DIR}/external/llama.cpp"
+    # New location for llama.cpp (under inference)
+    "${SOURCE_DIR}/inference/external/llama.cpp"
     "${SOURCE_DIR}/inference"
     "${SOURCE_DIR}/src"
+    # Legacy fallback location (pre-move)
+    "${SOURCE_DIR}/external/llama.cpp"
+    "${SOURCE_DIR}/inference/external/llama.cpp/src"
     "${SOURCE_DIR}/external/llama.cpp/src"
 )
 
