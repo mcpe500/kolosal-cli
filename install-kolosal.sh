@@ -13,6 +13,52 @@ TMP_DIR="$(mktemp -d -t kolosal-install-XXXXXXXX)"
 DOWNLOADED_FILE=""
 MOUNT_POINT=""
 
+# Headless install defaults
+# Set HEADLESS=0 or pass --launch to allow post-install GUI launch (mac) or interactive installer (win)
+HEADLESS=1
+FORCE_LAUNCH=0
+
+print_usage() {
+  cat <<EOF
+${SCRIPT_NAME} - Install Kolosal CLI (headless by default)
+
+Usage: ${SCRIPT_NAME} [options]
+
+Options:
+  --print-os          Detect and print the inferred OS, then exit
+  --headless          Force headless mode (default)
+  --launch            Launch application after install (mac) / allow GUI (win)
+  --no-color          (Reserved for future) suppress ANSI colors
+  -h, --help          Show this help
+
+Environment overrides:
+  HEADLESS=0          Same as --launch
+
+Examples:
+  curl -fsSL https://.../install-kolosal.sh | bash
+  bash install-kolosal.sh --launch
+EOF
+}
+
+parse_args() {
+  while [[ $# -gt 0 ]]; do
+    case "$1" in
+      --print-os) PRINT_OS=1 ; shift ;;
+      --headless) HEADLESS=1 ; FORCE_LAUNCH=0 ; shift ;;
+      --launch) HEADLESS=0 ; FORCE_LAUNCH=1 ; shift ;;
+      -h|--help) print_usage; exit 0 ;;
+      *) echo "Unknown option: $1" >&2; print_usage; exit 1 ;;
+    esac
+  done
+  # Env var override
+  if [[ "${HEADLESS}" != "0" && "${HEADLESS}" != "1" ]]; then
+    HEADLESS=1
+  fi
+  if [[ "${HEADLESS}" == "0" ]]; then
+    FORCE_LAUNCH=1
+  fi
+}
+
 cleanup() {
   local ec=$?
   if [[ -n "${MOUNT_POINT}" && -d "${MOUNT_POINT}" ]]; then
@@ -86,11 +132,11 @@ install_mac() {
   DOWNLOADED_FILE="${TMP_DIR}/kolosal-${VERSION}.dmg"
   echo "Downloading Kolosal (macOS) ..."
   download "$URL_DMG_ARM64" "$DOWNLOADED_FILE"
-  echo "Mounting DMG..."
+  echo "Mounting DMG (headless)..."
   # Prefer explicit mountpoint for reliability
   MOUNT_POINT="${TMP_DIR}/mnt"
   mkdir -p "$MOUNT_POINT"
-  if ! hdiutil attach -nobrowse -noautoopen -readonly -mountpoint "$MOUNT_POINT" "$DOWNLOADED_FILE" >/dev/null 2>&1; then
+  if ! hdiutil attach -quiet -nobrowse -noautoopen -readonly -mountpoint "$MOUNT_POINT" "$DOWNLOADED_FILE" >/dev/null 2>&1; then
     echo "Primary attach method failed, attempting fallback parsing method..." >&2
     local attach_output
     attach_output=$(hdiutil attach -nobrowse -noautoopen "$DOWNLOADED_FILE" 2>&1 || true)
@@ -148,9 +194,13 @@ open -a "${app_name%.app}" --args "$@"
 EOF
     sudo chmod +x "$bin_target"
   fi
-  echo "Launching application once for initial setup..."
-  open -a "${app_name%.app}" || true
-  echo "Kolosal installed. Test with: kolosal --help"
+  if [[ $FORCE_LAUNCH -eq 1 ]]; then
+    echo "Launching application (requested)..."
+    open -a "${app_name%.app}" || true
+  else
+    echo "Headless install complete. To launch GUI later: open -a ${app_name%.app}" 
+  fi
+  echo "Kolosal installed. Test CLI with: kolosal --help"
 }
 
 install_deb() {
@@ -175,25 +225,38 @@ install_deb() {
 }
 
 install_windows_note() {
-  echo "Detected Windows environment (MSYS/Cygwin/Git Bash)." >&2
-  echo "Automated silent install not guaranteed. Downloading installer..." >&2
+  echo "Windows environment detected." >&2
   DOWNLOADED_FILE="${TMP_DIR}/kolosal-${VERSION}-win64.exe"
+  echo "Downloading Kolosal (Windows installer) ..." >&2
   download "$URL_WIN" "$DOWNLOADED_FILE"
-  echo "Attempting to run installer (may prompt GUI)..."
-  if command -v cmd.exe >/dev/null 2>&1; then
-    cmd.exe /c start "KolosalInstaller" "$(printf '%s' "$DOWNLOADED_FILE" | sed 's|/|\\|g')" || true
-    echo "If no silent mode, follow GUI and ensure kolosal is added to PATH."
-  else
-    echo "cmd.exe not available; run the installer manually: $DOWNLOADED_FILE" >&2
+  if ! command -v cmd.exe >/dev/null 2>&1; then
+    echo "cmd.exe not available; manual install required: $DOWNLOADED_FILE" >&2
+    return 0
   fi
+  local win_path
+  win_path=$(printf '%s' "$DOWNLOADED_FILE" | sed 's|/|\\|g')
+  if [[ $FORCE_LAUNCH -eq 1 ]]; then
+    echo "Launching interactive installer (requested)..." >&2
+    cmd.exe /c start "KolosalInstaller" "$win_path" || true
+  else
+    echo "Attempting silent install (/S)..." >&2
+    # Run directly (no start) so we can wait; wrap in quotes
+    cmd.exe /c "\"$win_path\" /S" || {
+      echo "Silent mode may not be supported. Re-run with --launch for GUI or execute installer manually." >&2
+    }
+  fi
+  echo "Kolosal installation process triggered. After completion, open a new shell and run: kolosal --help" >&2
 }
 
 main() {
-  if [[ ${1:-} == "--print-os" ]]; then
+  PRINT_OS=0
+  parse_args "$@"
+  if [[ ${PRINT_OS:-0} -eq 1 ]]; then
     detect_os; exit 0
   fi
   local os
   os=$(detect_os)
+  echo "Detected OS: $os (headless=${HEADLESS})"
   case "$os" in
     mac) install_mac ;;
     deb) install_deb ;;
