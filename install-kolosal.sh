@@ -201,8 +201,30 @@ EOF
     echo "Creating symlink $bin_server_target -> $app_server_exec"
     sudo ln -sf "$app_server_exec" "$bin_server_target"
   else
-    echo "Notice: kolosal-server binary not found at expected path ($app_server_exec)." >&2
-    echo "If you built from source, you can manually symlink build/bin/kolosal-server to /usr/local/bin." >&2
+    # Try to locate an alternative kolosal-server* executable inside the bundle
+    alt_server_exec=$(find "/Applications/${app_name}/Contents/MacOS" -maxdepth 1 -type f -perm +111 -name 'kolosal-server*' 2>/dev/null | head -1 || true)
+    if [[ -n "$alt_server_exec" ]]; then
+      echo "Found alternate server binary: $alt_server_exec"
+      echo "Creating symlink $bin_server_target -> $alt_server_exec"
+      sudo ln -sf "$alt_server_exec" "$bin_server_target"
+    else
+      echo "Notice: kolosal-server binary not found at ($app_server_exec) or via wildcard search." >&2
+      echo "Creating fallback wrapper script that attempts to launch server via kolosal if supported." >&2
+      sudo tee "$bin_server_target" >/dev/null <<'EOF'
+#!/usr/bin/env bash
+# Fallback wrapper: try direct kolosal-server if it appears later, else call kolosal with a server subcommand if supported.
+if command -v /Applications/Kolosal.app/Contents/MacOS/kolosal-server >/dev/null 2>&1; then
+  exec /Applications/Kolosal.app/Contents/MacOS/kolosal-server "$@"
+elif command -v kolosal >/dev/null 2>&1; then
+  # Attempt a subcommand invocation (adjust if actual server launch syntax differs)
+  exec kolosal server "$@"
+else
+  echo "kolosal-server binary not installed yet. Re-run installer or build from source." >&2
+  exit 1
+fi
+EOF
+      sudo chmod +x "$bin_server_target"
+    fi
   fi
   if [[ $FORCE_LAUNCH -eq 1 ]]; then
     echo "Launching application (requested)..."
