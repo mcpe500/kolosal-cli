@@ -555,6 +555,7 @@ bool KolosalServerClient::addEngine(const std::string &engineId, const std::stri
         loadParams["n_gpu_layers"] = 50;
         loadParams["n_batch"] = 2048;
         loadParams["n_ubatch"] = 512;
+        loadParams["split_mode"] = -1;
         
         payload["loading_parameters"] = loadParams;
 
