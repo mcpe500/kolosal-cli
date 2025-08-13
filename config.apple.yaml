@@ -29,7 +29,7 @@ server:
 # Logging Configuration  
 # =============================================================================
 logging:
-  level: "INFO"                       # Log level: DEBUG, INFO, WARN, ERROR
+  level: "DEBUG"                       # Log level: DEBUG, INFO, WARN, ERROR
   file: "~/Library/Logs/Kolosal/server.log"  # Log file path (empty = console only)
   access_log: false                   # Enable HTTP access logging for all requests
 
