@@ -16,6 +16,53 @@ ucm_set_runtime(DYNAMIC)
 set(CMAKE_CXX_STANDARD 17)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
 
+# macOS: broaden OS support and optionally build universal binaries
+if(APPLE)
+    # Option to build universal2 (arm64 + x86_64). Note: universal requires macOS 11.0+ for arm64 slices.
+    option(BUILD_UNIVERSAL2 "Build universal (arm64;x86_64) binaries" OFF)
+    if(BUILD_UNIVERSAL2)
+        set(CMAKE_OSX_ARCHITECTURES "arm64;x86_64" CACHE STRING "Architectures for macOS build" FORCE)
+    endif()
+
+    # Decide minimum supported macOS version
+    # If user didn't specify CMAKE_OSX_DEPLOYMENT_TARGET, choose a sensible default:
+    #  - 11.0 when building for arm64 (incl. universal2)
+    #  - 10.15 for Intel-only builds to support more Macs
+    if(NOT DEFINED CMAKE_OSX_DEPLOYMENT_TARGET OR CMAKE_OSX_DEPLOYMENT_TARGET STREQUAL "")
+        set(__has_arm64 FALSE)
+        if(CMAKE_OSX_ARCHITECTURES)
+            string(FIND "${CMAKE_OSX_ARCHITECTURES}" "arm64" __arm64_index)
+            if(NOT __arm64_index EQUAL -1)
+                set(__has_arm64 TRUE)
+            endif()
+        endif()
+        if(NOT __has_arm64 AND CMAKE_SYSTEM_PROCESSOR MATCHES "arm64|aarch64")
+            set(__has_arm64 TRUE)
+        endif()
+
+        if(__has_arm64)
+            set(MACOS_MIN_VERSION "11.0")
+        else()
+            set(MACOS_MIN_VERSION "10.15")
+        endif()
+
+        set(CMAKE_OSX_DEPLOYMENT_TARGET "${MACOS_MIN_VERSION}" CACHE STRING "macOS minimum deployment target" FORCE)
+    else()
+        # Respect user-provided target and use it for Info.plist too
+        set(MACOS_MIN_VERSION "${CMAKE_OSX_DEPLOYMENT_TARGET}")
+    endif()
+
+    message(STATUS "macOS architectures: ${CMAKE_OSX_ARCHITECTURES}")
+    message(STATUS "macOS deployment target: ${CMAKE_OSX_DEPLOYMENT_TARGET}")
+
+    # Older macOS SDKs (< 13.3) mark std::to_chars(fp) unavailable; PoDoFo uses it.
+    # Disable PoDoFo in that case to keep compatibility with older macOS versions.
+    if(DEFINED CMAKE_OSX_DEPLOYMENT_TARGET AND CMAKE_OSX_DEPLOYMENT_TARGET VERSION_LESS "13.3")
+        set(USE_PODOFO OFF CACHE BOOL "Compile with PoDoFo PDF support" FORCE)
+        message(STATUS "PoDoFo disabled for macOS < 13.3 to maximize compatibility")
+    endif()
+endif()
+
 # Options
 option(USE_CUDA "Enable CUDA support" OFF)
 option(USE_VULKAN "Enable Vulkan support" OFF)
@@ -41,6 +88,7 @@ set(USE_CUDA ${USE_CUDA} CACHE BOOL "Enable CUDA support" FORCE)
 set(USE_VULKAN ${USE_VULKAN} CACHE BOOL "Enable Vulkan support" FORCE)
 set(USE_MPI ${USE_MPI} CACHE BOOL "Enable MPI support" FORCE)
 set(USE_METAL ${USE_METAL} CACHE BOOL "Enable Apple Metal support" FORCE)
+set(USE_PODOFO ${USE_PODOFO} CACHE BOOL "Compile with PoDoFo PDF support" FORCE)
 
 # Add the kolosal-server submodule
 add_subdirectory(kolosal-server)
@@ -710,9 +758,13 @@ elseif(APPLE)
         OPTIONAL
     )
     
-    # Install app bundle Info.plist
-    install(FILES "${CMAKE_CURRENT_SOURCE_DIR}/resources/Info.plist"
+    # Configure app bundle Info.plist with correct minimum macOS version
+    set(APP_PLIST_IN  "${CMAKE_CURRENT_SOURCE_DIR}/resources/Info.plist.in")
+    set(APP_PLIST_OUT "${CMAKE_CURRENT_BINARY_DIR}/Info.plist")
+    configure_file(${APP_PLIST_IN} ${APP_PLIST_OUT} @ONLY)
+    install(FILES "${APP_PLIST_OUT}"
         DESTINATION "Kolosal.app/Contents"
+        RENAME Info.plist
         COMPONENT Runtime
     )
     
