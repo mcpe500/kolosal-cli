@@ -540,6 +540,16 @@ bool KolosalServerClient::addEngine(const std::string &engineId, const std::stri
         json payload;
         payload["model_id"] = engineId;
         payload["model_path"] = modelUrl; // For download, we pass URL as model_path
+        // Server requires an explicit model_type: "llm" or "embedding"
+        // Default to LLM; use a light heuristic to detect embedding models by name
+        {
+            std::string lowerId = engineId;
+            std::transform(lowerId.begin(), lowerId.end(), lowerId.begin(), ::tolower);
+            bool looksEmbedding = (lowerId.find("embed") != std::string::npos) ||
+                                  (lowerId.find("embedding") != std::string::npos) ||
+                                  (lowerId.find("text-embedding") != std::string::npos);
+            payload["model_type"] = looksEmbedding ? "embedding" : "llm";
+        }
         payload["load_immediately"] = false;
         payload["main_gpu_id"] = 0;
         
@@ -562,6 +572,13 @@ bool KolosalServerClient::addEngine(const std::string &engineId, const std::stri
         std::string response;
         if (!makePostRequest("/models", payload.dump(), response))  // Using new model-based API endpoint
         {
+            // Even on non-2xx, server may return a JSON error body; try to surface a meaningful failure
+            try {
+                json err = json::parse(response);
+                if (err.contains("error") && err["error"].contains("message")) {
+                    std::cerr << "Server error: " << err["error"]["message"].get<std::string>() << std::endl;
+                }
+            } catch (...) {}
             return false;
         }
         

@@ -79,6 +79,9 @@ sudo apt update
 sudo apt install build-essential cmake git curl \
                  libcurl4-openssl-dev libssl-dev \
                  pkg-config ninja-build
+sudo apt install libfreetype6-dev libjpeg-dev \
+                 libpng-dev libtiff-dev libxml2-dev \
+                 libfontconfig1-dev
 ```
 
 **Ubuntu 20.04 LTS and 22.04 LTS (requires CMake upgrade):**
