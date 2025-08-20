@@ -1489,10 +1489,10 @@ elseif(UNIX)
         DIRECTORY_PERMISSIONS OWNER_READ OWNER_WRITE OWNER_EXECUTE GROUP_READ GROUP_EXECUTE WORLD_READ WORLD_EXECUTE
     )
     
-    # Install systemd service file for kolosal-server if it exists (place under /etc, not /usr/etc)
+    # Install systemd service file for kolosal-server if it exists
     if(EXISTS "${CMAKE_CURRENT_SOURCE_DIR}/kolosal-server/kolosal-server.service")
         install(FILES kolosal-server/kolosal-server.service
-            DESTINATION "/etc/systemd/system"
+            DESTINATION etc/systemd/system
             OPTIONAL
         )
     endif()
@@ -1524,85 +1524,80 @@ Categories=Development;Science;
     endif()
 
     # Prune development and example artifacts from the install tree before packaging
+    # This install(CODE) runs during the normal install phase, but CPack also needs cleanup
     install(CODE "
         message(STATUS \"Pruning non-runtime files from Linux package...\")
-        # Only prune during packaging when DESTDIR is present
-        if(NOT DEFINED ENV{DESTDIR})
-            message(STATUS \"DESTDIR not set; skipping prune (not a packaging install)\")
-            return()
+        if(DEFINED ENV{DESTDIR})
+            set(ROOT \"$ENV{DESTDIR}${CMAKE_INSTALL_PREFIX}\")
+        else()
+            set(ROOT \"${CMAKE_INSTALL_PREFIX}\")
         endif()
-
-        # Compute staging root for the install prefix (typically .../_CPack_Packages/.../usr)
-        set(PREFIX_ROOT \"$ENV{DESTDIR}${CMAKE_INSTALL_PREFIX}\")
-
-        # Safety: echo where we're pruning
-        message(STATUS \"Prune root: ${PREFIX_ROOT}\")
 
         # Remove extraneous binaries and examples
         file(REMOVE
-            \"${PREFIX_ROOT}/bin/convert_hf_to_gguf.py\"
-            \"${PREFIX_ROOT}/bin/inference_smoketest\"
+            \"${ROOT}/usr/bin/convert_hf_to_gguf.py\"
+            \"${ROOT}/usr/bin/inference_smoketest\"
         )
-        file(GLOB TEST_BINS \"${PREFIX_ROOT}/bin/test_*\")
+        file(GLOB TEST_BINS \"${ROOT}/usr/bin/test_*\")
         if(TEST_BINS)
             file(REMOVE ${TEST_BINS})
         endif()
-        if(EXISTS \"${PREFIX_ROOT}/bin/examples\")
-            file(REMOVE_RECURSE \"${PREFIX_ROOT}/bin/examples\")
+        if(EXISTS \"${ROOT}/usr/bin/examples\")
+            file(REMOVE_RECURSE \"${ROOT}/usr/bin/examples\")
         endif()
 
         # Remove development headers installed by inference subproject
         file(GLOB OUR_HDRS
-            \"${PREFIX_ROOT}/include/ggml*.h\"
-            \"${PREFIX_ROOT}/include/gguf.h\"
-            \"${PREFIX_ROOT}/include/inference*.h\"
-            \"${PREFIX_ROOT}/include/llama*.h\"
+            \"${ROOT}/usr/include/ggml*.h\"
+            \"${ROOT}/usr/include/gguf.h\"
+            \"${ROOT}/usr/include/inference*.h\"
+            \"${ROOT}/usr/include/llama*.h\"
         )
         if(OUR_HDRS)
             file(REMOVE ${OUR_HDRS})
         endif()
         # Clean up include dir if empty
-        if(EXISTS \"${PREFIX_ROOT}/include\")
-            file(GLOB REMAIN_HDRS \"${PREFIX_ROOT}/include/*\")
+        if(EXISTS \"${ROOT}/usr/include\")
+            file(GLOB REMAIN_HDRS \"${ROOT}/usr/include/*\")
             if(NOT REMAIN_HDRS)
-                file(REMOVE_RECURSE \"${PREFIX_ROOT}/include\")
+                file(REMOVE_RECURSE \"${ROOT}/usr/include\")
             endif()
         endif()
 
         # Remove CMake package metadata and pkgconfig files we don't ship
-        if(EXISTS \"${PREFIX_ROOT}/lib/cmake/ggml\")
-            file(REMOVE_RECURSE \"${PREFIX_ROOT}/lib/cmake/ggml\")
+        if(EXISTS \"${ROOT}/usr/lib/cmake/ggml\")
+            file(REMOVE_RECURSE \"${ROOT}/usr/lib/cmake/ggml\")
         endif()
-        if(EXISTS \"${PREFIX_ROOT}/lib/cmake/llama\")
-            file(REMOVE_RECURSE \"${PREFIX_ROOT}/lib/cmake/llama\")
+        if(EXISTS \"${ROOT}/usr/lib/cmake/llama\")
+            file(REMOVE_RECURSE \"${ROOT}/usr/lib/cmake/llama\")
         endif()
-        if(EXISTS \"${PREFIX_ROOT}/lib/pkgconfig/llama.pc\")
-            file(REMOVE \"${PREFIX_ROOT}/lib/pkgconfig/llama.pc\")
+        if(EXISTS \"${ROOT}/usr/lib/pkgconfig/llama.pc\")
+            file(REMOVE \"${ROOT}/usr/lib/pkgconfig/llama.pc\")
         endif()
         # Clean up pkgconfig dir if empty
-        if(EXISTS \"${PREFIX_ROOT}/lib/pkgconfig\")
-            file(GLOB PKGCFG_LEFT \"${PREFIX_ROOT}/lib/pkgconfig/*\")
+        if(EXISTS \"${ROOT}/usr/lib/pkgconfig\")
+            file(GLOB PKGCFG_LEFT \"${ROOT}/usr/lib/pkgconfig/*\")
             if(NOT PKGCFG_LEFT)
-                file(REMOVE_RECURSE \"${PREFIX_ROOT}/lib/pkgconfig\")
+                file(REMOVE_RECURSE \"${ROOT}/usr/lib/pkgconfig\")
             endif()
         endif()
 
         # Remove static libraries not required at runtime
         file(GLOB STATIC_LIBS
-            \"${PREFIX_ROOT}/lib/libggml*.a\"
-            \"${PREFIX_ROOT}/lib/libllama.a\"
+            \"${ROOT}/usr/lib/libggml*.a\"
+            \"${ROOT}/usr/lib/libllama.a\"
         )
         if(STATIC_LIBS)
             file(REMOVE ${STATIC_LIBS})
         endif()
 
         # Remove example sources/data under share
-        if(EXISTS \"${PREFIX_ROOT}/share/kolosal/examples\")
-            file(REMOVE_RECURSE \"${PREFIX_ROOT}/share/kolosal/examples\")
+        if(EXISTS \"${ROOT}/usr/share/kolosal/examples\")
+            file(REMOVE_RECURSE \"${ROOT}/usr/share/kolosal/examples\")
         endif()
 
         message(STATUS \"Prune complete.\")
-    ")
+    " COMPONENT Runtime)
 endif()
 
 # CPack configuration for packaging
@@ -2140,6 +2135,90 @@ exit 0
     if(EXISTS "/etc/redhat-release" OR EXISTS "/etc/fedora-release")
         set(CPACK_GENERATOR "RPM")
     endif()
+endif()
+
+# Create a cleanup script for DEB packaging that removes development files
+if(UNIX AND NOT APPLE)
+    set(CLEANUP_SCRIPT "${CMAKE_CURRENT_BINARY_DIR}/cleanup_deb.cmake")
+    file(WRITE ${CLEANUP_SCRIPT}
+"# Cleanup script for DEB packaging - removes development files
+
+# Get CPack build directory
+if(DEFINED CPACK_TEMPORARY_DIRECTORY)
+    set(TEMP_DIR \"\${CPACK_TEMPORARY_DIRECTORY}\")
+elseif(DEFINED ENV{DESTDIR})
+    set(TEMP_DIR \"$ENV{DESTDIR}\")
+else()
+    # Try to find the temporary directory
+    file(GLOB TEMP_DIRS \"${CMAKE_CURRENT_BINARY_DIR}/_CPack_Packages/Linux/DEB/kolosal-*\")
+    if(TEMP_DIRS)
+        list(GET TEMP_DIRS 0 TEMP_DIR)
+    else()
+        message(WARNING \"Could not find CPack temporary directory for cleanup\")
+        return()
+    endif()
+endif()
+
+message(STATUS \"Cleaning up development files in: \${TEMP_DIR}\")
+
+# Remove test and example binaries
+file(REMOVE
+    \"\${TEMP_DIR}/usr/bin/convert_hf_to_gguf.py\"
+    \"\${TEMP_DIR}/usr/bin/inference_smoketest\"
+)
+
+file(GLOB TEST_BINS \"\${TEMP_DIR}/usr/bin/test_*\")
+if(TEST_BINS)
+    foreach(test_bin \${TEST_BINS})
+        file(REMOVE \"\${test_bin}\")
+        message(STATUS \"Removed: \${test_bin}\")
+    endforeach()
+endif()
+
+# Remove examples directory
+if(EXISTS \"\${TEMP_DIR}/usr/bin/examples\")
+    file(REMOVE_RECURSE \"\${TEMP_DIR}/usr/bin/examples\")
+    message(STATUS \"Removed: \${TEMP_DIR}/usr/bin/examples\")
+endif()
+
+# Remove development headers
+if(EXISTS \"\${TEMP_DIR}/usr/include\")
+    file(REMOVE_RECURSE \"\${TEMP_DIR}/usr/include\")
+    message(STATUS \"Removed: \${TEMP_DIR}/usr/include\")
+endif()
+
+# Remove static libraries
+file(GLOB STATIC_LIBS \"\${TEMP_DIR}/usr/lib/*.a\")
+if(STATIC_LIBS)
+    foreach(static_lib \${STATIC_LIBS})
+        file(REMOVE \"\${static_lib}\")
+        message(STATUS \"Removed: \${static_lib}\")
+    endforeach()
+endif()
+
+# Remove CMake files
+if(EXISTS \"\${TEMP_DIR}/usr/lib/cmake\")
+    file(REMOVE_RECURSE \"\${TEMP_DIR}/usr/lib/cmake\")
+    message(STATUS \"Removed: \${TEMP_DIR}/usr/lib/cmake\")
+endif()
+
+# Remove pkgconfig files
+if(EXISTS \"\${TEMP_DIR}/usr/lib/pkgconfig\")
+    file(REMOVE_RECURSE \"\${TEMP_DIR}/usr/lib/pkgconfig\")
+    message(STATUS \"Removed: \${TEMP_DIR}/usr/lib/pkgconfig\")
+endif()
+
+# Remove examples from share
+if(EXISTS \"\${TEMP_DIR}/usr/share/kolosal/examples\")
+    file(REMOVE_RECURSE \"\${TEMP_DIR}/usr/share/kolosal/examples\")
+    message(STATUS \"Removed: \${TEMP_DIR}/usr/share/kolosal/examples\")
+endif()
+
+message(STATUS \"DEB cleanup complete\")
+")
+
+    # Add cleanup script to CPack configuration for DEB
+    set(CPACK_DEBIAN_PACKAGE_CONTROL_EXTRA "${CLEANUP_SCRIPT}")
 endif()
 
 include(CPack)
