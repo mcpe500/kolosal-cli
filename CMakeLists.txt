@@ -1522,6 +1522,81 @@ Categories=Development;Science;
             OPTIONAL
         )
     endif()
+
+    # Prune development and example artifacts from the install tree before packaging
+    install(CODE "
+        message(STATUS \"Pruning non-runtime files from Linux package...\")
+        if(DEFINED ENV{DESTDIR})
+            set(ROOT \"$ENV{DESTDIR}${CMAKE_INSTALL_PREFIX}\")
+        else()
+            set(ROOT \"${CMAKE_INSTALL_PREFIX}\")
+        endif()
+
+        # Remove extraneous binaries and examples
+        file(REMOVE
+            \"${ROOT}/usr/bin/convert_hf_to_gguf.py\"
+            \"${ROOT}/usr/bin/inference_smoketest\"
+        )
+        file(GLOB TEST_BINS \"${ROOT}/usr/bin/test_*\")
+        if(TEST_BINS)
+            file(REMOVE ${TEST_BINS})
+        endif()
+        if(EXISTS \"${ROOT}/usr/bin/examples\")
+            file(REMOVE_RECURSE \"${ROOT}/usr/bin/examples\")
+        endif()
+
+        # Remove development headers installed by inference subproject
+        file(GLOB OUR_HDRS
+            \"${ROOT}/usr/include/ggml*.h\"
+            \"${ROOT}/usr/include/gguf.h\"
+            \"${ROOT}/usr/include/inference*.h\"
+            \"${ROOT}/usr/include/llama*.h\"
+        )
+        if(OUR_HDRS)
+            file(REMOVE ${OUR_HDRS})
+        endif()
+        # Clean up include dir if empty
+        if(EXISTS \"${ROOT}/usr/include\")
+            file(GLOB REMAIN_HDRS \"${ROOT}/usr/include/*\")
+            if(NOT REMAIN_HDRS)
+                file(REMOVE_RECURSE \"${ROOT}/usr/include\")
+            endif()
+        endif()
+
+        # Remove CMake package metadata and pkgconfig files we don't ship
+        if(EXISTS \"${ROOT}/usr/lib/cmake/ggml\")
+            file(REMOVE_RECURSE \"${ROOT}/usr/lib/cmake/ggml\")
+        endif()
+        if(EXISTS \"${ROOT}/usr/lib/cmake/llama\")
+            file(REMOVE_RECURSE \"${ROOT}/usr/lib/cmake/llama\")
+        endif()
+        if(EXISTS \"${ROOT}/usr/lib/pkgconfig/llama.pc\")
+            file(REMOVE \"${ROOT}/usr/lib/pkgconfig/llama.pc\")
+        endif()
+        # Clean up pkgconfig dir if empty
+        if(EXISTS \"${ROOT}/usr/lib/pkgconfig\")
+            file(GLOB PKGCFG_LEFT \"${ROOT}/usr/lib/pkgconfig/*\")
+            if(NOT PKGCFG_LEFT)
+                file(REMOVE_RECURSE \"${ROOT}/usr/lib/pkgconfig\")
+            endif()
+        endif()
+
+        # Remove static libraries not required at runtime
+        file(GLOB STATIC_LIBS
+            \"${ROOT}/usr/lib/libggml*.a\"
+            \"${ROOT}/usr/lib/libllama.a\"
+        )
+        if(STATIC_LIBS)
+            file(REMOVE ${STATIC_LIBS})
+        endif()
+
+        # Remove example sources/data under share
+        if(EXISTS \"${ROOT}/usr/share/kolosal/examples\")
+            file(REMOVE_RECURSE \"${ROOT}/usr/share/kolosal/examples\")
+        endif()
+
+        message(STATUS \"Prune complete.\")
+    ")
 endif()
 
 # CPack configuration for packaging
