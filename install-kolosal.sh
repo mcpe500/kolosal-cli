@@ -91,18 +91,6 @@ ensure_sudo() {
   fi
 }
 
-# Run the given command as root: use sudo if not root, otherwise run directly.
-run_as_root() {
-  if [[ $EUID -eq 0 ]]; then
-    "$@"
-  elif command -v sudo >/dev/null 2>&1; then
-    sudo "$@"
-  else
-    echo "This operation requires root privileges, and 'sudo' is not available." >&2
-    exit 1
-  fi
-}
-
 detect_os() {
   local uname_s
   uname_s="$(uname -s 2>/dev/null || echo unknown)"
@@ -146,8 +134,8 @@ install_debian_runtime_deps() {
   if command -v apt-get >/dev/null 2>&1; then
     echo "Ensuring PoDoFo runtime dependencies are present (${RUNTIME_DEB_PKGS}) ..."
     # Don't hard fail if any package name differs by distro release; apt will resolve missing ones later
-    run_as_root apt-get update -y || true
-    run_as_root apt-get install -y ${RUNTIME_DEB_PKGS} || true
+    sudo apt-get update -y || true
+    sudo apt-get install -y ${RUNTIME_DEB_PKGS} || true
   fi
 }
 
@@ -274,13 +262,13 @@ install_deb() {
   install_debian_runtime_deps || true
   echo "Installing .deb package..."
   if command -v apt-get >/dev/null 2>&1; then
-      run_as_root apt-get update -y || true
-      run_as_root apt-get install -y "./$(basename "$DOWNLOADED_FILE")" 2>/dev/null || {
-      run_as_root dpkg -i "$DOWNLOADED_FILE" || true
-      run_as_root apt-get -f install -y
+    sudo apt-get update -y || true
+    sudo apt-get install -y "./$(basename "$DOWNLOADED_FILE")" 2>/dev/null || {
+      sudo dpkg -i "$DOWNLOADED_FILE" || true
+      sudo apt-get -f install -y
     }
   else
-      run_as_root dpkg -i "$DOWNLOADED_FILE" || {
+    sudo dpkg -i "$DOWNLOADED_FILE" || {
       echo "dpkg reported issues. Resolve dependencies manually." >&2
     }
   fi
