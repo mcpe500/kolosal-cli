@@ -90,33 +90,6 @@ set(USE_MPI ${USE_MPI} CACHE BOOL "Enable MPI support" FORCE)
 set(USE_METAL ${USE_METAL} CACHE BOOL "Enable Apple Metal support" FORCE)
 set(USE_PODOFO ${USE_PODOFO} CACHE BOOL "Compile with PoDoFo PDF support" FORCE)
 
-# Discover PoDoFo when enabled so we can bundle its runtime as needed
-if(USE_PODOFO)
-    # Try modern package first (0.10+ often provides podofo::podofo)
-    find_package(PoDoFo QUIET)
-    if(NOT PoDoFo_FOUND)
-        # Fallback: locate library directly for packaging
-        find_library(PODOFO_LIBRARY
-            NAMES podofo libpodofo
-            HINTS $ENV{PODOFO_ROOT}/lib /usr/local/lib /usr/lib /opt/homebrew/opt/podofo/lib /opt/homebrew/lib
-        )
-        if(PODOFO_LIBRARY)
-            set(PoDoFo_LIBRARIES ${PODOFO_LIBRARY})
-            message(STATUS "Found PoDoFo library for packaging: ${PODOFO_LIBRARY}")
-        else()
-            message(WARNING "USE_PODOFO=ON but PoDoFo not found; packaging will attempt optional fallbacks.")
-        endif()
-    endif()
-
-    # Discover core libraries PoDoFo depends on (to bundle runtimes when packaging)
-    find_package(Freetype QUIET)
-    find_package(PNG QUIET)
-    find_package(TIFF QUIET)
-    find_package(JPEG QUIET)
-    find_package(LibXml2 QUIET)
-    find_package(Fontconfig QUIET)
-endif()
-
 # Add the kolosal-server submodule
 add_subdirectory(kolosal-server)
 
@@ -289,73 +262,6 @@ if(WIN32)
         COMMENT "Copying libcurl.dll from server directory"
         VERBATIM
     )
-
-    # If PoDoFo is enabled, try to bundle its DLL and common runtime deps (OpenSSL, zlib)
-    if(USE_PODOFO)
-        # Preferred: copy via imported target if available
-        if(TARGET podofo::podofo)
-            add_custom_command(TARGET kolosal POST_BUILD
-                COMMAND ${CMAKE_COMMAND} -E make_directory "${CMAKE_BINARY_DIR}/bin/$<CONFIG>"
-                COMMAND ${CMAKE_COMMAND} -E copy_if_different "$<TARGET_FILE:podofo::podofo>" "${CMAKE_BINARY_DIR}/bin/$<CONFIG>/"
-                COMMENT "Copying PoDoFo DLL to output directory"
-                VERBATIM
-            )
-        else()
-            # Fallback candidates
-            set(PODOFO_DLL_CANDIDATES
-                "$ENV{PODOFO_ROOT}/bin/podofo.dll"
-                "$ENV{PODOFO_ROOT}/bin/libpodofo.dll"
-                "${CMAKE_BINARY_DIR}/podofo.dll"
-                "${CMAKE_BINARY_DIR}/bin/podofo.dll"
-            )
-            foreach(_cand ${PODOFO_DLL_CANDIDATES})
-                add_custom_command(TARGET kolosal POST_BUILD
-                    COMMAND ${CMAKE_COMMAND} -E copy_if_different "${_cand}" "${CMAKE_BINARY_DIR}/bin/$<CONFIG>/"
-                    COMMENT "Attempting to copy PoDoFo from ${_cand}"
-                    VERBATIM
-                )
-            endforeach()
-        endif()
-
-        # Optional: try to copy OpenSSL runtime if present in common locations
-        set(OPENSSL_DLL_CANDIDATES
-            "$ENV{OPENSSL_ROOT_DIR}/bin/libssl-3-x64.dll"
-            "$ENV{OPENSSL_ROOT_DIR}/bin/libcrypto-3-x64.dll"
-            "C:/Program Files/OpenSSL-Win64/bin/libssl-3-x64.dll"
-            "C:/Program Files/OpenSSL-Win64/bin/libcrypto-3-x64.dll"
-        )
-        foreach(_cand ${OPENSSL_DLL_CANDIDATES})
-            add_custom_command(TARGET kolosal POST_BUILD
-                COMMAND ${CMAKE_COMMAND} -E copy_if_different "${_cand}" "${CMAKE_BINARY_DIR}/bin/$<CONFIG>/"
-                COMMENT "Attempting to copy OpenSSL runtime from ${_cand}"
-                VERBATIM
-            )
-        endforeach()
-
-        # Optional: zlib runtime (name varies; most systems include it)
-        set(ZLIB_DLL_CANDIDATES
-            "$ENV{ZLIB_ROOT}/bin/zlib1.dll"
-            "C:/Windows/System32/zlib1.dll"
-        )
-        foreach(_cand ${ZLIB_DLL_CANDIDATES})
-            add_custom_command(TARGET kolosal POST_BUILD
-                COMMAND ${CMAKE_COMMAND} -E copy_if_different "${_cand}" "${CMAKE_BINARY_DIR}/bin/$<CONFIG>/"
-                COMMENT "Attempting to copy zlib runtime from ${_cand}"
-                VERBATIM
-            )
-        endforeach()
-
-        # Also copy all 3rd-party DLLs shipped with PoDoFo extern deps
-        set(PODOFO_3RDPARTY_DIR "${CMAKE_CURRENT_SOURCE_DIR}/kolosal-server/external/podofo/extern/deps/3rdparty")
-        if(EXISTS "${PODOFO_3RDPARTY_DIR}")
-            add_custom_command(TARGET kolosal POST_BUILD
-                COMMAND ${CMAKE_COMMAND} -E make_directory "${CMAKE_BINARY_DIR}/bin/$<CONFIG>"
-                COMMAND ${CMAKE_COMMAND} -E copy_directory "${PODOFO_3RDPARTY_DIR}" "${CMAKE_BINARY_DIR}/bin/$<CONFIG>"
-                COMMENT "Copying PoDoFo 3rdparty DLLs to output directory"
-                VERBATIM
-            )
-        endif()
-    endif()
 elseif(APPLE)
     # macOS-specific libraries and frameworks
     target_link_libraries(kolosal pthread dl)
@@ -502,52 +408,6 @@ elseif(APPLE)
         BUILD_WITH_INSTALL_RPATH TRUE
         INSTALL_RPATH_USE_LINK_PATH TRUE
     )
-
-    # If PoDoFo is enabled, copy its dylib and core deps next to our binaries (bin/lib)
-    if(USE_PODOFO)
-        if(TARGET podofo::podofo)
-            add_custom_command(TARGET kolosal POST_BUILD
-                COMMAND ${CMAKE_COMMAND} -E make_directory "${CMAKE_BINARY_DIR}/bin" "${CMAKE_BINARY_DIR}/lib"
-                COMMAND ${CMAKE_COMMAND} -E copy_if_different "$<TARGET_FILE:podofo::podofo>" "${CMAKE_BINARY_DIR}/bin/"
-                COMMAND ${CMAKE_COMMAND} -E copy_if_different "$<TARGET_FILE:podofo::podofo>" "${CMAKE_BINARY_DIR}/lib/"
-                COMMENT "Copying PoDoFo dylib to output directories"
-                VERBATIM
-            )
-        elseif(DEFINED PoDoFo_LIBRARIES)
-            foreach(__podofo_lib ${PoDoFo_LIBRARIES})
-                add_custom_command(TARGET kolosal POST_BUILD
-                    COMMAND ${CMAKE_COMMAND} -E make_directory "${CMAKE_BINARY_DIR}/bin" "${CMAKE_BINARY_DIR}/lib"
-                    COMMAND ${CMAKE_COMMAND} -E copy_if_different "${__podofo_lib}" "${CMAKE_BINARY_DIR}/bin/"
-                    COMMAND ${CMAKE_COMMAND} -E copy_if_different "${__podofo_lib}" "${CMAKE_BINARY_DIR}/lib/"
-                    COMMENT "Copying PoDoFo dylib (${__podofo_lib}) to output directories"
-                    VERBATIM
-                )
-            endforeach()
-        endif()
-
-        # Also copy OpenSSL and Zlib runtime if available via imported targets
-        if(TARGET OpenSSL::SSL)
-            add_custom_command(TARGET kolosal POST_BUILD
-                COMMAND ${CMAKE_COMMAND} -E copy_if_different "$<TARGET_FILE:OpenSSL::SSL>" "${CMAKE_BINARY_DIR}/lib/"
-                COMMENT "Copying OpenSSL::SSL to lib directory"
-                VERBATIM
-            )
-        endif()
-        if(TARGET OpenSSL::Crypto)
-            add_custom_command(TARGET kolosal POST_BUILD
-                COMMAND ${CMAKE_COMMAND} -E copy_if_different "$<TARGET_FILE:OpenSSL::Crypto>" "${CMAKE_BINARY_DIR}/lib/"
-                COMMENT "Copying OpenSSL::Crypto to lib directory"
-                VERBATIM
-            )
-        endif()
-        if(TARGET ZLIB::ZLIB)
-            add_custom_command(TARGET kolosal POST_BUILD
-                COMMAND ${CMAKE_COMMAND} -E copy_if_different "$<TARGET_FILE:ZLIB::ZLIB>" "${CMAKE_BINARY_DIR}/lib/"
-                COMMENT "Copying ZLIB::ZLIB to lib directory"
-                VERBATIM
-            )
-        endif()
-    endif()
 else()
     # Linux-specific libraries
     target_link_libraries(kolosal pthread dl)
@@ -781,58 +641,6 @@ if(WIN32)
             OPTIONAL
         )
     endif()
-
-    # If PoDoFo is enabled, attempt to include its runtime and common dependencies
-    if(USE_PODOFO)
-        if(TARGET podofo::podofo)
-            install(FILES "$<TARGET_FILE:podofo::podofo>"
-                DESTINATION bin
-                COMPONENT Runtime
-                OPTIONAL
-            )
-        endif()
-        # Fallback candidates
-        set(PODOFO_DLL_CANDIDATES
-            "$ENV{PODOFO_ROOT}/bin/podofo.dll"
-            "$ENV{PODOFO_ROOT}/bin/libpodofo.dll"
-            "${CMAKE_BINARY_DIR}/bin/$<CONFIG>/podofo.dll"
-            "${CMAKE_BINARY_DIR}/bin/$<CONFIG>/libpodofo.dll"
-        )
-        foreach(PODOFO_DLL_PATH ${PODOFO_DLL_CANDIDATES})
-            install(FILES "${PODOFO_DLL_PATH}"
-                DESTINATION bin
-                COMPONENT Runtime
-                OPTIONAL
-            )
-        endforeach()
-
-        # Optional OpenSSL and zlib DLLs
-        set(OPENSSL_DLL_CANDIDATES
-            "$ENV{OPENSSL_ROOT_DIR}/bin/libssl-3-x64.dll"
-            "$ENV{OPENSSL_ROOT_DIR}/bin/libcrypto-3-x64.dll"
-            "C:/Program Files/OpenSSL-Win64/bin/libssl-3-x64.dll"
-            "C:/Program Files/OpenSSL-Win64/bin/libcrypto-3-x64.dll"
-        )
-        foreach(OPENSSL_DLL_PATH ${OPENSSL_DLL_CANDIDATES})
-            install(FILES "${OPENSSL_DLL_PATH}"
-                DESTINATION bin
-                COMPONENT Runtime
-                OPTIONAL
-            )
-        endforeach()
-
-        set(ZLIB_DLL_CANDIDATES
-            "$ENV{ZLIB_ROOT}/bin/zlib1.dll"
-            "${CMAKE_BINARY_DIR}/bin/$<CONFIG>/zlib1.dll"
-        )
-        foreach(ZLIB_DLL_PATH ${ZLIB_DLL_CANDIDATES})
-            install(FILES "${ZLIB_DLL_PATH}"
-                DESTINATION bin
-                COMPONENT Runtime
-                OPTIONAL
-            )
-        endforeach()
-    endif()
     
     # Install additional DLLs from build output directories
     install(CODE "
@@ -914,19 +722,6 @@ if(WIN32)
         PATTERN "*.exe"
         PERMISSIONS OWNER_READ OWNER_WRITE OWNER_EXECUTE GROUP_READ GROUP_EXECUTE WORLD_READ WORLD_EXECUTE
     )
-
-    # Include PoDoFo 3rdparty DLLs directly if available (fallback)
-    if(USE_PODOFO)
-        set(PODOFO_3RDPARTY_DIR "${CMAKE_CURRENT_SOURCE_DIR}/kolosal-server/external/podofo/extern/deps/3rdparty")
-        if(EXISTS "${PODOFO_3RDPARTY_DIR}")
-            install(DIRECTORY "${PODOFO_3RDPARTY_DIR}/"
-                DESTINATION bin
-                COMPONENT Runtime
-                FILES_MATCHING PATTERN "*.dll"
-                OPTIONAL
-            )
-        endif()
-    endif()
     
 elseif(APPLE)
     # Install kolosal executable directly
@@ -1039,46 +834,6 @@ elseif(APPLE)
         )
     endforeach()
     
-    # Bundle PoDoFo and its core dependencies inside the app when enabled
-    if(USE_PODOFO)
-        # Prefer imported target for reliable path resolution
-        if(TARGET podofo::podofo)
-            install(FILES "$<TARGET_FILE:podofo::podofo>"
-                DESTINATION "Kolosal.app/Contents/Frameworks"
-                COMPONENT Runtime
-                OPTIONAL
-            )
-        elseif(DEFINED PoDoFo_LIBRARIES)
-            foreach(__podofo_lib ${PoDoFo_LIBRARIES})
-                install(FILES "${__podofo_lib}"
-                    DESTINATION "Kolosal.app/Contents/Frameworks"
-                    COMPONENT Runtime
-                    OPTIONAL
-                )
-            endforeach()
-        else()
-            # Fallback common Homebrew paths
-            install(FILES 
-                "/opt/homebrew/opt/podofo/lib/libpodofo.dylib"
-                "/usr/local/opt/podofo/lib/libpodofo.dylib"
-                DESTINATION "Kolosal.app/Contents/Frameworks"
-                COMPONENT Runtime
-                OPTIONAL
-            )
-        endif()
-
-        # Bundle OpenSSL and Zlib (imported target paths if available)
-        if(TARGET OpenSSL::SSL)
-            install(FILES "$<TARGET_FILE:OpenSSL::SSL>" DESTINATION "Kolosal.app/Contents/Frameworks" COMPONENT Runtime OPTIONAL)
-        endif()
-        if(TARGET OpenSSL::Crypto)
-            install(FILES "$<TARGET_FILE:OpenSSL::Crypto>" DESTINATION "Kolosal.app/Contents/Frameworks" COMPONENT Runtime OPTIONAL)
-        endif()
-        if(TARGET ZLIB::ZLIB)
-            install(FILES "$<TARGET_FILE:ZLIB::ZLIB>" DESTINATION "Kolosal.app/Contents/Frameworks" COMPONENT Runtime OPTIONAL)
-        endif()
-    endif()
-
     # Install external libraries from Homebrew that are required dependencies
     # These libraries are dynamically linked and need to be bundled with the app
     set(EXTERNAL_DYLIB_CANDIDATES
@@ -1133,10 +888,6 @@ elseif(APPLE)
         "/opt/homebrew/lib/libjpeg.9.dylib"
         "/usr/local/opt/jpeg/lib/libjpeg.9.dylib"
         "/usr/local/lib/libjpeg.9.dylib"
-
-    # LibXML2
-    "/opt/homebrew/opt/libxml2/lib/libxml2.2.dylib"
-    "/usr/local/opt/libxml2/lib/libxml2.2.dylib"
     )
     
     foreach(EXTERNAL_DYLIB_PATH ${EXTERNAL_DYLIB_CANDIDATES})
@@ -1236,7 +987,6 @@ elseif(APPLE)
         set(EXTERNAL_LIBS_TO_FIX
             \"libssl.3.dylib\"
             \"libcrypto.3.dylib\"
-            \"libpodofo.dylib\"
             \"libfontconfig.1.dylib\"
             \"libfreetype.6.dylib\"
             \"libpng16.16.dylib\"
@@ -1459,7 +1209,6 @@ elseif(APPLE)
         set(LIBS_TO_SIGN
             \"\${ACTUAL_INSTALL_PREFIX}/Kolosal.app/Contents/Frameworks/libssl.3.dylib\"
             \"\${ACTUAL_INSTALL_PREFIX}/Kolosal.app/Contents/Frameworks/libcrypto.3.dylib\"
-            \"\${ACTUAL_INSTALL_PREFIX}/Kolosal.app/Contents/Frameworks/libpodofo.dylib\"
             \"\${ACTUAL_INSTALL_PREFIX}/Kolosal.app/Contents/Frameworks/libfontconfig.1.dylib\"
             \"\${ACTUAL_INSTALL_PREFIX}/Kolosal.app/Contents/Frameworks/libfreetype.6.dylib\"
             \"\${ACTUAL_INSTALL_PREFIX}/Kolosal.app/Contents/Frameworks/libpng16.16.dylib\"
@@ -1693,27 +1442,6 @@ elseif(UNIX)
         )
     endif()
     
-    # If PoDoFo is enabled, attempt to install runtime .so for its dependencies to avoid extra apt installs
-    if(USE_PODOFO)
-        # PoDoFo itself usually comes from system, but try to package .so if present in build tree
-        install(FILES
-            "${CMAKE_BINARY_DIR}/lib/libpodofo.so"
-            "${CMAKE_BINARY_DIR}/bin/libpodofo.so"
-            DESTINATION lib
-            OPTIONAL
-        )
-        # Common PoDoFo dependency libraries; include if present to minimize external installs
-        install(FILES
-            "${CMAKE_BINARY_DIR}/lib/libfreetype.so"
-            "${CMAKE_BINARY_DIR}/lib/libpng16.so"
-            "${CMAKE_BINARY_DIR}/lib/libtiff.so"
-            "${CMAKE_BINARY_DIR}/lib/libjpeg.so"
-            "${CMAKE_BINARY_DIR}/lib/libxml2.so"
-            "${CMAKE_BINARY_DIR}/lib/libfontconfig.so"
-            DESTINATION lib
-            OPTIONAL
-        )
-    endif()
     # Create a desktop entry (optional)
     set(DESKTOP_FILE "${CMAKE_CURRENT_BINARY_DIR}/kolosal-cli.desktop")
     file(WRITE ${DESKTOP_FILE}
@@ -2052,11 +1780,6 @@ else()
     
     # Essential runtime dependencies based on ldd output
     set(CPACK_DEBIAN_PACKAGE_DEPENDS "libc6 (>= 2.17), libgcc-s1, libstdc++6, libcurl4, libgomp1, libssl3 | libssl1.1, zlib1g")
-
-    # When PoDoFo is enabled, ensure Debian package depends on PoDoFo and its core deps
-    if(USE_PODOFO)
-    set(CPACK_DEBIAN_PACKAGE_DEPENDS "${CPACK_DEBIAN_PACKAGE_DEPENDS}, libpodofo (>= 0.9), libfreetype6, libjpeg62-turbo, libpng16-16, libtiff5, libxml2, libfontconfig1")
-    endif()
     
     # Build suggests list properly
     if(DEBIAN_SUGGESTS_LIST)
@@ -2254,10 +1977,6 @@ exit 0
     
     # Essential runtime dependencies based on ldd output
     set(CPACK_RPM_PACKAGE_REQUIRES "glibc >= 2.17, libgcc, libstdc++, libcurl, libgomp, openssl-libs, zlib")
-
-    if(USE_PODOFO)
-    set(CPACK_RPM_PACKAGE_REQUIRES "${CPACK_RPM_PACKAGE_REQUIRES}, podofo, freetype, libjpeg-turbo, libpng, libtiff, libxml2, fontconfig")
-    endif()
     
     # Add acceleration-specific dependencies
     if(USE_CUDA)
