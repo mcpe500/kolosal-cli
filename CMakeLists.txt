@@ -1524,7 +1524,6 @@ Categories=Development;Science;
     endif()
 
     # Prune development and example artifacts from the install tree before packaging
-    # This install(CODE) runs during the normal install phase, but CPack also needs cleanup
     install(CODE "
         message(STATUS \"Pruning non-runtime files from Linux package...\")
         if(DEFINED ENV{DESTDIR})
@@ -1597,7 +1596,7 @@ Categories=Development;Science;
         endif()
 
         message(STATUS \"Prune complete.\")
-    " COMPONENT Runtime)
+    ")
 endif()
 
 # CPack configuration for packaging
@@ -2135,90 +2134,6 @@ exit 0
     if(EXISTS "/etc/redhat-release" OR EXISTS "/etc/fedora-release")
         set(CPACK_GENERATOR "RPM")
     endif()
-endif()
-
-# Create a cleanup script for DEB packaging that removes development files
-if(UNIX AND NOT APPLE)
-    set(CLEANUP_SCRIPT "${CMAKE_CURRENT_BINARY_DIR}/cleanup_deb.cmake")
-    file(WRITE ${CLEANUP_SCRIPT}
-"# Cleanup script for DEB packaging - removes development files
-
-# Get CPack build directory
-if(DEFINED CPACK_TEMPORARY_DIRECTORY)
-    set(TEMP_DIR \"\${CPACK_TEMPORARY_DIRECTORY}\")
-elseif(DEFINED ENV{DESTDIR})
-    set(TEMP_DIR \"$ENV{DESTDIR}\")
-else()
-    # Try to find the temporary directory
-    file(GLOB TEMP_DIRS \"${CMAKE_CURRENT_BINARY_DIR}/_CPack_Packages/Linux/DEB/kolosal-*\")
-    if(TEMP_DIRS)
-        list(GET TEMP_DIRS 0 TEMP_DIR)
-    else()
-        message(WARNING \"Could not find CPack temporary directory for cleanup\")
-        return()
-    endif()
-endif()
-
-message(STATUS \"Cleaning up development files in: \${TEMP_DIR}\")
-
-# Remove test and example binaries
-file(REMOVE
-    \"\${TEMP_DIR}/usr/bin/convert_hf_to_gguf.py\"
-    \"\${TEMP_DIR}/usr/bin/inference_smoketest\"
-)
-
-file(GLOB TEST_BINS \"\${TEMP_DIR}/usr/bin/test_*\")
-if(TEST_BINS)
-    foreach(test_bin \${TEST_BINS})
-        file(REMOVE \"\${test_bin}\")
-        message(STATUS \"Removed: \${test_bin}\")
-    endforeach()
-endif()
-
-# Remove examples directory
-if(EXISTS \"\${TEMP_DIR}/usr/bin/examples\")
-    file(REMOVE_RECURSE \"\${TEMP_DIR}/usr/bin/examples\")
-    message(STATUS \"Removed: \${TEMP_DIR}/usr/bin/examples\")
-endif()
-
-# Remove development headers
-if(EXISTS \"\${TEMP_DIR}/usr/include\")
-    file(REMOVE_RECURSE \"\${TEMP_DIR}/usr/include\")
-    message(STATUS \"Removed: \${TEMP_DIR}/usr/include\")
-endif()
-
-# Remove static libraries
-file(GLOB STATIC_LIBS \"\${TEMP_DIR}/usr/lib/*.a\")
-if(STATIC_LIBS)
-    foreach(static_lib \${STATIC_LIBS})
-        file(REMOVE \"\${static_lib}\")
-        message(STATUS \"Removed: \${static_lib}\")
-    endforeach()
-endif()
-
-# Remove CMake files
-if(EXISTS \"\${TEMP_DIR}/usr/lib/cmake\")
-    file(REMOVE_RECURSE \"\${TEMP_DIR}/usr/lib/cmake\")
-    message(STATUS \"Removed: \${TEMP_DIR}/usr/lib/cmake\")
-endif()
-
-# Remove pkgconfig files
-if(EXISTS \"\${TEMP_DIR}/usr/lib/pkgconfig\")
-    file(REMOVE_RECURSE \"\${TEMP_DIR}/usr/lib/pkgconfig\")
-    message(STATUS \"Removed: \${TEMP_DIR}/usr/lib/pkgconfig\")
-endif()
-
-# Remove examples from share
-if(EXISTS \"\${TEMP_DIR}/usr/share/kolosal/examples\")
-    file(REMOVE_RECURSE \"\${TEMP_DIR}/usr/share/kolosal/examples\")
-    message(STATUS \"Removed: \${TEMP_DIR}/usr/share/kolosal/examples\")
-endif()
-
-message(STATUS \"DEB cleanup complete\")
-")
-
-    # Add cleanup script to CPack configuration for DEB
-    set(CPACK_DEBIAN_PACKAGE_CONTROL_EXTRA "${CLEANUP_SCRIPT}")
 endif()
 
 include(CPack)
