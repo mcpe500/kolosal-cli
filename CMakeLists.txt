@@ -490,8 +490,9 @@ else()
     endif()
     
     # Set RPATH for runtime library search in the same directory and standard lib paths
+    # Ensure the executable prefers our private runtime lib dir as well (order matters)
     set_target_properties(kolosal PROPERTIES
-        INSTALL_RPATH "$ORIGIN:/usr/lib"
+        INSTALL_RPATH "$ORIGIN/../lib/kolosal:$ORIGIN/../lib:$ORIGIN:/usr/lib/kolosal:/usr/lib"
         BUILD_WITH_INSTALL_RPATH TRUE
         INSTALL_RPATH_USE_LINK_PATH TRUE
     )
@@ -1401,6 +1402,60 @@ elseif(UNIX)
         )
     endif()
     
+    # Bundle PoDoFo runtime dependencies so users don't need to install them
+    # We place them in a private directory and adjust RPATH to prefer it.
+    set(KOLOSAL_PRIVATE_LIBDIR "lib/kolosal")
+
+    # Candidate SONAMEs commonly used on Debian/Ubuntu
+    set(_KOLOSAL_PO_RUNTIME_SONAMES
+        libssl.so.3
+        libcrypto.so.3
+        libfreetype.so.6
+        libpng16.so.16
+        libtiff.so.6
+        libjpeg.so.8
+        libjpeg.so.9
+        libzstd.so.1
+        liblzma.so.5
+        libz.so.1
+        libxml2.so.2
+        libfontconfig.so.1
+    )
+
+    # Common library search roots across Debian/Ubuntu architectures
+    set(_KOLOSAL_LIB_ROOTS
+        /usr/lib
+        /lib
+        /usr/lib/x86_64-linux-gnu
+        /lib/x86_64-linux-gnu
+        /usr/lib/aarch64-linux-gnu
+        /lib/aarch64-linux-gnu
+        /usr/lib/arm-linux-gnueabihf
+        /lib/arm-linux-gnueabihf
+        /usr/lib/arm64-linux-gnu
+        /lib/arm64-linux-gnu
+    )
+
+    # Try to install each runtime library if present on the build system
+    foreach(_soname ${_KOLOSAL_PO_RUNTIME_SONAMES})
+        set(_found_path "")
+        foreach(_root ${_KOLOSAL_LIB_ROOTS})
+            if(EXISTS "${_root}/${_soname}")
+                set(_found_path "${_root}/${_soname}")
+                break()
+            endif()
+        endforeach()
+        if(_found_path)
+            message(STATUS "Bundling runtime library: ${_found_path}")
+            install(FILES "${_found_path}"
+                DESTINATION ${KOLOSAL_PRIVATE_LIBDIR}
+                PERMISSIONS OWNER_READ OWNER_WRITE GROUP_READ WORLD_READ
+                OPTIONAL)
+        else()
+            message(STATUS "Runtime library not found (skipping): ${_soname}")
+        endif()
+    endforeach()
+
     # Install additional inference engine shared libraries if they exist (regardless of build config)
     set(INFERENCE_SO_CANDIDATES
         "${CMAKE_BINARY_DIR}/lib/libllama-vulkan.so"
@@ -1887,6 +1942,8 @@ echo \"  kolosal-server --help\"
 
 exit 0
 ")
+    # Ensure our private lib dir is preferred at runtime by executables and shared libs
+    # The targets were built with INSTALL_RPATH including $ORIGIN/../lib/kolosal, so ld.so will find these first.
     configure_file(${POSTINST_SCRIPT_IN} ${POSTINST_SCRIPT} @ONLY)
     
     set(CPACK_DEBIAN_PACKAGE_CONTROL_EXTRA "${POSTINST_SCRIPT}")
