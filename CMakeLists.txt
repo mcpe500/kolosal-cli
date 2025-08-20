@@ -2055,7 +2055,7 @@ else()
 
     # When PoDoFo is enabled, ensure Debian package depends on PoDoFo and its core deps
     if(USE_PODOFO)
-        set(CPACK_DEBIAN_PACKAGE_DEPENDS "${CPACK_DEBIAN_PACKAGE_DEPENDS}, libpodofo (>= 0.9), libfreetype6, libjpeg62-turbo, libpng16-16, libtiff5, libxml2, libfontconfig1")
+    set(CPACK_DEBIAN_PACKAGE_DEPENDS "${CPACK_DEBIAN_PACKAGE_DEPENDS}, libpodofo (>= 0.9), libfreetype6, libjpeg62-turbo, libpng16-16, libtiff5, libxml2, libfontconfig1")
     endif()
     
     # Build suggests list properly

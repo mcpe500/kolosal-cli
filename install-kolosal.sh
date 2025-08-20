@@ -18,9 +18,6 @@ MOUNT_POINT=""
 HEADLESS=1
 FORCE_LAUNCH=0
 
-# Debian/Ubuntu runtime deps for PoDoFo features (installed automatically when using .deb)
-RUNTIME_DEB_PKGS="libpodofo libfreetype6 libjpeg62-turbo libpng16-16 libtiff5 libxml2 libfontconfig1"
-
 print_usage() {
   cat <<EOF
 ${SCRIPT_NAME} - Install Kolosal CLI (headless by default)
@@ -40,10 +37,6 @@ Environment overrides:
 Examples:
   curl -fsSL https://.../install-kolosal.sh | bash
   bash install-kolosal.sh --launch
-
-Notes:
-  - On Debian/Ubuntu, this script will also install required PoDoFo runtime libraries:
-    ${RUNTIME_DEB_PKGS}
 EOF
 }
 
@@ -126,16 +119,6 @@ download() {
   else
     echo "Error: need either curl or wget to download files." >&2
     exit 1
-  fi
-}
-
-# Best-effort: ensure PoDoFo runtime libs are present on Debian/Ubuntu
-install_debian_runtime_deps() {
-  if command -v apt-get >/dev/null 2>&1; then
-    echo "Ensuring PoDoFo runtime dependencies are present (${RUNTIME_DEB_PKGS}) ..."
-    # Don't hard fail if any package name differs by distro release; apt will resolve missing ones later
-    sudo apt-get update -y || true
-    sudo apt-get install -y ${RUNTIME_DEB_PKGS} || true
   fi
 }
 
@@ -258,8 +241,6 @@ install_deb() {
   echo "Downloading Kolosal (.deb)..."
   download "$URL_DEB" "$DOWNLOADED_FILE"
   ensure_sudo
-  # Pre-install runtime deps to avoid any manual steps
-  install_debian_runtime_deps || true
   echo "Installing .deb package..."
   if command -v apt-get >/dev/null 2>&1; then
     sudo apt-get update -y || true
