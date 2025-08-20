@@ -1489,10 +1489,10 @@ elseif(UNIX)
         DIRECTORY_PERMISSIONS OWNER_READ OWNER_WRITE OWNER_EXECUTE GROUP_READ GROUP_EXECUTE WORLD_READ WORLD_EXECUTE
     )
     
-    # Install systemd service file for kolosal-server if it exists
+    # Install systemd service file for kolosal-server if it exists (place under /etc, not /usr/etc)
     if(EXISTS "${CMAKE_CURRENT_SOURCE_DIR}/kolosal-server/kolosal-server.service")
         install(FILES kolosal-server/kolosal-server.service
-            DESTINATION etc/systemd/system
+            DESTINATION "/etc/systemd/system"
             OPTIONAL
         )
     endif()
@@ -1526,73 +1526,79 @@ Categories=Development;Science;
     # Prune development and example artifacts from the install tree before packaging
     install(CODE "
         message(STATUS \"Pruning non-runtime files from Linux package...\")
-        if(DEFINED ENV{DESTDIR})
-            set(ROOT \"$ENV{DESTDIR}${CMAKE_INSTALL_PREFIX}\")
-        else()
-            set(ROOT \"${CMAKE_INSTALL_PREFIX}\")
+        # Only prune during packaging when DESTDIR is present
+        if(NOT DEFINED ENV{DESTDIR})
+            message(STATUS \"DESTDIR not set; skipping prune (not a packaging install)\")
+            return()
         endif()
+
+        # Compute staging root for the install prefix (typically .../_CPack_Packages/.../usr)
+        set(PREFIX_ROOT \"$ENV{DESTDIR}${CMAKE_INSTALL_PREFIX}\")
+
+        # Safety: echo where we're pruning
+        message(STATUS \"Prune root: ${PREFIX_ROOT}\")
 
         # Remove extraneous binaries and examples
         file(REMOVE
-            \"${ROOT}/usr/bin/convert_hf_to_gguf.py\"
-            \"${ROOT}/usr/bin/inference_smoketest\"
+            \"${PREFIX_ROOT}/bin/convert_hf_to_gguf.py\"
+            \"${PREFIX_ROOT}/bin/inference_smoketest\"
         )
-        file(GLOB TEST_BINS \"${ROOT}/usr/bin/test_*\")
+        file(GLOB TEST_BINS \"${PREFIX_ROOT}/bin/test_*\")
         if(TEST_BINS)
             file(REMOVE ${TEST_BINS})
         endif()
-        if(EXISTS \"${ROOT}/usr/bin/examples\")
-            file(REMOVE_RECURSE \"${ROOT}/usr/bin/examples\")
+        if(EXISTS \"${PREFIX_ROOT}/bin/examples\")
+            file(REMOVE_RECURSE \"${PREFIX_ROOT}/bin/examples\")
         endif()
 
         # Remove development headers installed by inference subproject
         file(GLOB OUR_HDRS
-            \"${ROOT}/usr/include/ggml*.h\"
-            \"${ROOT}/usr/include/gguf.h\"
-            \"${ROOT}/usr/include/inference*.h\"
-            \"${ROOT}/usr/include/llama*.h\"
+            \"${PREFIX_ROOT}/include/ggml*.h\"
+            \"${PREFIX_ROOT}/include/gguf.h\"
+            \"${PREFIX_ROOT}/include/inference*.h\"
+            \"${PREFIX_ROOT}/include/llama*.h\"
         )
         if(OUR_HDRS)
             file(REMOVE ${OUR_HDRS})
         endif()
         # Clean up include dir if empty
-        if(EXISTS \"${ROOT}/usr/include\")
-            file(GLOB REMAIN_HDRS \"${ROOT}/usr/include/*\")
+        if(EXISTS \"${PREFIX_ROOT}/include\")
+            file(GLOB REMAIN_HDRS \"${PREFIX_ROOT}/include/*\")
             if(NOT REMAIN_HDRS)
-                file(REMOVE_RECURSE \"${ROOT}/usr/include\")
+                file(REMOVE_RECURSE \"${PREFIX_ROOT}/include\")
             endif()
         endif()
 
         # Remove CMake package metadata and pkgconfig files we don't ship
-        if(EXISTS \"${ROOT}/usr/lib/cmake/ggml\")
-            file(REMOVE_RECURSE \"${ROOT}/usr/lib/cmake/ggml\")
+        if(EXISTS \"${PREFIX_ROOT}/lib/cmake/ggml\")
+            file(REMOVE_RECURSE \"${PREFIX_ROOT}/lib/cmake/ggml\")
         endif()
-        if(EXISTS \"${ROOT}/usr/lib/cmake/llama\")
-            file(REMOVE_RECURSE \"${ROOT}/usr/lib/cmake/llama\")
+        if(EXISTS \"${PREFIX_ROOT}/lib/cmake/llama\")
+            file(REMOVE_RECURSE \"${PREFIX_ROOT}/lib/cmake/llama\")
         endif()
-        if(EXISTS \"${ROOT}/usr/lib/pkgconfig/llama.pc\")
-            file(REMOVE \"${ROOT}/usr/lib/pkgconfig/llama.pc\")
+        if(EXISTS \"${PREFIX_ROOT}/lib/pkgconfig/llama.pc\")
+            file(REMOVE \"${PREFIX_ROOT}/lib/pkgconfig/llama.pc\")
         endif()
         # Clean up pkgconfig dir if empty
-        if(EXISTS \"${ROOT}/usr/lib/pkgconfig\")
-            file(GLOB PKGCFG_LEFT \"${ROOT}/usr/lib/pkgconfig/*\")
+        if(EXISTS \"${PREFIX_ROOT}/lib/pkgconfig\")
+            file(GLOB PKGCFG_LEFT \"${PREFIX_ROOT}/lib/pkgconfig/*\")
             if(NOT PKGCFG_LEFT)
-                file(REMOVE_RECURSE \"${ROOT}/usr/lib/pkgconfig\")
+                file(REMOVE_RECURSE \"${PREFIX_ROOT}/lib/pkgconfig\")
             endif()
         endif()
 
         # Remove static libraries not required at runtime
         file(GLOB STATIC_LIBS
-            \"${ROOT}/usr/lib/libggml*.a\"
-            \"${ROOT}/usr/lib/libllama.a\"
+            \"${PREFIX_ROOT}/lib/libggml*.a\"
+            \"${PREFIX_ROOT}/lib/libllama.a\"
         )
         if(STATIC_LIBS)
             file(REMOVE ${STATIC_LIBS})
         endif()
 
         # Remove example sources/data under share
-        if(EXISTS \"${ROOT}/usr/share/kolosal/examples\")
-            file(REMOVE_RECURSE \"${ROOT}/usr/share/kolosal/examples\")
+        if(EXISTS \"${PREFIX_ROOT}/share/kolosal/examples\")
+            file(REMOVE_RECURSE \"${PREFIX_ROOT}/share/kolosal/examples\")
         endif()
 
         message(STATUS \"Prune complete.\")
