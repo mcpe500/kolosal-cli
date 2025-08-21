@@ -70,7 +70,6 @@ option(USE_MPI "Enable MPI support" OFF)
 option(USE_METAL "Enable Apple Metal support" OFF)
 option(ENABLE_NATIVE_OPTIMIZATION "Enable native CPU optimization (-march=native)" OFF)
 option(ENABLE_CODESIGN "Enable code signing on macOS" OFF)
-option(STRICT_CUDA_DEPENDS "If ON and building with CUDA, declare a hard DEB dependency on CUDA runtime; otherwise only recommend it" OFF)
 
 # Code signing configuration for macOS
 set(CODESIGN_IDENTITY "" CACHE STRING "Code signing identity (e.g., 'Developer ID Application: Your Name')")
@@ -1378,126 +1377,40 @@ elseif(APPLE)
     " COMPONENT Runtime)
 
 elseif(UNIX)
-    # Linux-specific installation
-    # Install the main executable (now named kolosal)
+    # Linux-specific installation - simplified
     install(TARGETS kolosal
         RUNTIME DESTINATION bin
+        COMPONENT Runtime
     )
     
-    # Install the kolosal server executable and library with proper destinations
     install(TARGETS kolosal_server_exe
         RUNTIME DESTINATION bin
+        COMPONENT Runtime
+        OPTIONAL
     )
     
     install(TARGETS kolosal_server
         LIBRARY DESTINATION lib
         ARCHIVE DESTINATION lib
+        COMPONENT Runtime
+        OPTIONAL
     )
     
-    # Install the inference engine shared library
     if(BUILD_INFERENCE_ENGINE)
         install(TARGETS ${INFERENCE_TARGET_NAME}
             LIBRARY DESTINATION lib
             ARCHIVE DESTINATION lib
+            COMPONENT Runtime
+            OPTIONAL
         )
     endif()
     
-    # Bundle PoDoFo runtime dependencies so users don't need to install them
-    # We place them in a private directory and adjust RPATH to prefer it.
-    set(KOLOSAL_PRIVATE_LIBDIR "lib/kolosal")
-
-    # Candidate SONAMEs commonly used on Debian/Ubuntu
-    set(_KOLOSAL_PO_RUNTIME_SONAMES
-        libssl.so.3
-        libcrypto.so.3
-        libfreetype.so.6
-        libpng16.so.16
-        libtiff.so.6
-        libjpeg.so.8
-        libjpeg.so.9
-        libzstd.so.1
-        liblzma.so.5
-        libz.so.1
-        libxml2.so.2
-        libfontconfig.so.1
-    )
-
-    # Common library search roots across Debian/Ubuntu architectures
-    set(_KOLOSAL_LIB_ROOTS
-        /usr/lib
-        /lib
-        /usr/lib/x86_64-linux-gnu
-        /lib/x86_64-linux-gnu
-        /usr/lib/aarch64-linux-gnu
-        /lib/aarch64-linux-gnu
-        /usr/lib/arm-linux-gnueabihf
-        /lib/arm-linux-gnueabihf
-        /usr/lib/arm64-linux-gnu
-        /lib/arm64-linux-gnu
-    )
-
-    # Try to install each runtime library if present on the build system
-    foreach(_soname ${_KOLOSAL_PO_RUNTIME_SONAMES})
-        set(_found_path "")
-        foreach(_root ${_KOLOSAL_LIB_ROOTS})
-            if(EXISTS "${_root}/${_soname}")
-                set(_found_path "${_root}/${_soname}")
-                break()
-            endif()
-        endforeach()
-        if(_found_path)
-            message(STATUS "Bundling runtime library: ${_found_path}")
-            install(FILES "${_found_path}"
-                DESTINATION ${KOLOSAL_PRIVATE_LIBDIR}
-                PERMISSIONS OWNER_READ OWNER_WRITE GROUP_READ WORLD_READ
-                OPTIONAL)
-        else()
-            message(STATUS "Runtime library not found (skipping): ${_soname}")
-        endif()
-    endforeach()
-
-    # Install additional inference engine shared libraries if they exist (regardless of build config)
-    set(INFERENCE_SO_CANDIDATES
-        "${CMAKE_BINARY_DIR}/lib/libllama-vulkan.so"
-        "${CMAKE_BINARY_DIR}/lib/libllama-cuda.so"
-        "${CMAKE_BINARY_DIR}/lib/libllama-cpu.so"
-        "${CMAKE_BINARY_DIR}/bin/libllama-vulkan.so"
-        "${CMAKE_BINARY_DIR}/bin/libllama-cuda.so"
-        "${CMAKE_BINARY_DIR}/bin/libllama-cpu.so"
-        "${CMAKE_BINARY_DIR}/kolosal-server/lib/libllama-vulkan.so"
-        "${CMAKE_BINARY_DIR}/kolosal-server/lib/libllama-cuda.so"
-        "${CMAKE_BINARY_DIR}/kolosal-server/lib/libllama-cpu.so"
-    )
-    
-    foreach(INFERENCE_SO_PATH ${INFERENCE_SO_CANDIDATES})
-        install(FILES "${INFERENCE_SO_PATH}"
-            DESTINATION lib
-            PERMISSIONS OWNER_READ OWNER_WRITE OWNER_EXECUTE GROUP_READ GROUP_EXECUTE WORLD_READ WORLD_EXECUTE
-            OPTIONAL
-        )
-    endforeach()
-    
-    # Install configuration file to etc/kolosal directory (use config.linux.yaml directly for reliable packaging)
-    install(FILES "${CMAKE_CURRENT_SOURCE_DIR}/config.linux.yaml"
-        DESTINATION /etc/kolosal
+    # Install configuration file
+    install(FILES config.linux.yaml
+        DESTINATION etc/kolosal
         RENAME config.yaml
-        PERMISSIONS OWNER_READ OWNER_WRITE GROUP_READ WORLD_READ
+        COMPONENT Runtime
     )
-    
-    # Create the kolosal configuration directory during install
-    install(DIRECTORY DESTINATION /etc/kolosal
-        DIRECTORY_PERMISSIONS OWNER_READ OWNER_WRITE OWNER_EXECUTE GROUP_READ GROUP_EXECUTE WORLD_READ WORLD_EXECUTE
-    )
-    
-    # Install systemd service file for kolosal-server if it exists
-    if(EXISTS "${CMAKE_CURRENT_SOURCE_DIR}/kolosal-server/kolosal-server.service")
-        install(FILES kolosal-server/kolosal-server.service
-            DESTINATION etc/systemd/system
-            OPTIONAL
-        )
-    endif()
-    
-    # Create a desktop entry (optional)
     set(DESKTOP_FILE "${CMAKE_CURRENT_BINARY_DIR}/kolosal-cli.desktop")
     file(WRITE ${DESKTOP_FILE}
 "[Desktop Entry]
@@ -1828,189 +1741,34 @@ endif()
     message(STATUS "• Double-clicking Kolosal.app will offer to add kolosal/kolosal-server to PATH")
     
 else()
-    # DEB package specific settings (Linux)
+    # Simplified DEB package configuration (Linux)
     set(CPACK_DEBIAN_PACKAGE_MAINTAINER "Kolosal Project <dev@kolosal.com>")
     set(CPACK_DEBIAN_PACKAGE_SECTION "devel")
     set(CPACK_DEBIAN_PACKAGE_PRIORITY "optional")
     
-    # Essential runtime dependencies based on ldd output
-    set(CPACK_DEBIAN_PACKAGE_DEPENDS "libc6 (>= 2.17), libgcc-s1, libstdc++6, libcurl4, libgomp1, libssl3 | libssl1.1, zlib1g")
-    
-    # Build suggests list properly
-    if(DEBIAN_SUGGESTS_LIST)
-        set(CPACK_DEBIAN_PACKAGE_SUGGESTS "${DEBIAN_SUGGESTS_LIST}")
-    else()
-        set(CPACK_DEBIAN_PACKAGE_SUGGESTS "")
-    endif()
+    # Essential runtime dependencies only
+    set(CPACK_DEBIAN_PACKAGE_DEPENDS "libc6, libgcc-s1, libstdc++6, libcurl4")
     
     set(CPACK_DEBIAN_FILE_NAME DEB-DEFAULT)
     
-    # Post-install script to set up library paths and permissions
-    set(POSTINST_SCRIPT_IN "${CMAKE_CURRENT_BINARY_DIR}/postinst.in")
+    # Simple post-install script for basic setup
     set(POSTINST_SCRIPT "${CMAKE_CURRENT_BINARY_DIR}/postinst")
-    file(WRITE ${POSTINST_SCRIPT_IN}
+    file(WRITE ${POSTINST_SCRIPT}
 "#!/bin/bash
-# Post-installation script for Kolosal CLI
-
-# Ensure the binaries have execute permissions
-chmod +x /usr/bin/kolosal
-chmod +x /usr/bin/kolosal-server
-
-# Create the kolosal configuration directory if it doesn't exist
-if [ ! -d /etc/kolosal ]; then
-    mkdir -p /etc/kolosal
-    chmod 755 /etc/kolosal
-fi
-
-# Ensure config file has proper permissions
-if [ -f /etc/kolosal/config.yaml ]; then
-    chmod 644 /etc/kolosal/config.yaml
-    echo \"Configuration file found at /etc/kolosal/config.yaml\"
-else
-    echo \"Warning: Configuration file not found at /etc/kolosal/config.yaml\"
-    echo \"This may indicate an installation issue.\"
-fi
-
-# Update library cache to include the new shared libraries
-if command -v ldconfig >/dev/null 2>&1; then
-    ldconfig
-fi
-
-# Create symbolic links for easier library discovery if needed
-if [ -f /usr/lib/libkolosal_server.so ] && [ ! -e /usr/lib/x86_64-linux-gnu/libkolosal_server.so ]; then
-    ln -sf /usr/lib/libkolosal_server.so /usr/lib/x86_64-linux-gnu/libkolosal_server.so 2>/dev/null || true
-fi
-
-# Handle inference engine library
-INFERENCE_LIB=\"/usr/lib/lib@INFERENCE_TARGET_NAME@.so\"
-if [ -f \"\$INFERENCE_LIB\" ] && [ ! -e \"/usr/lib/x86_64-linux-gnu/lib@INFERENCE_TARGET_NAME@.so\" ]; then
-    ln -sf \"\$INFERENCE_LIB\" \"/usr/lib/x86_64-linux-gnu/lib@INFERENCE_TARGET_NAME@.so\" 2>/dev/null || true
-fi
-
-# Handle additional inference engine libraries that may exist
-for inference_engine in llama-vulkan llama-cuda llama-cpu; do
-    INFERENCE_LIB_PATH=\"/usr/lib/lib\$inference_engine.so\"
-    if [ -f \"\$INFERENCE_LIB_PATH\" ] && [ ! -e \"/usr/lib/x86_64-linux-gnu/lib\$inference_engine.so\" ]; then
-        ln -sf \"\$INFERENCE_LIB_PATH\" \"/usr/lib/x86_64-linux-gnu/lib\$inference_engine.so\" 2>/dev/null || true
-        echo \"Created symlink for \$inference_engine\"
-    fi
-done
-
-# Create kolosal user and group if they don't exist (for systemd service)
-if ! id \"kolosal\" >/dev/null 2>&1; then
-    useradd --system --home-dir /var/lib/kolosal --shell /bin/false kolosal || true
-fi
-
-# Add current user to kolosal group if possible (for CLI access)
-if [ \"\$SUDO_USER\" ]; then
-    usermod -a -G kolosal \"\$SUDO_USER\" 2>/dev/null || true
-fi
-
-# Create kolosal directories
-if [ ! -d /var/lib/kolosal ]; then
-    mkdir -p /var/lib/kolosal
-    chmod 755 /var/lib/kolosal
-fi
-
-if [ ! -d /var/lib/kolosal/models ]; then
-    mkdir -p /var/lib/kolosal/models
-    chmod 755 /var/lib/kolosal/models
-fi
-
-# Set ownership and permissions
-if id \"kolosal\" >/dev/null 2>&1; then
-    chown kolosal:kolosal /var/lib/kolosal
-    chown kolosal:kolosal /var/lib/kolosal/models
-    chmod 775 /var/lib/kolosal
-    chmod 775 /var/lib/kolosal/models
-fi
-
-# Set up systemd service if available
-if command -v systemctl >/dev/null 2>&1 && [ -f /etc/systemd/system/kolosal-server.service ]; then
-    systemctl daemon-reload
-    systemctl enable kolosal-server 2>/dev/null || true
-    systemctl start kolosal-server 2>/dev/null || true
-fi
-
-echo \"Kolosal CLI installed successfully!\"
-echo \"Configuration: /etc/kolosal/config.yaml\"
-echo \"Data directory: /var/lib/kolosal\"
-echo \"\"
-echo \"Getting started:\"
-echo \"  kolosal --help\"
-echo \"  kolosal-server --help\"
-
-exit 0
-")
-    # Ensure our private lib dir is preferred at runtime by executables and shared libs
-    # The targets were built with INSTALL_RPATH including $ORIGIN/../lib/kolosal, so ld.so will find these first.
-    configure_file(${POSTINST_SCRIPT_IN} ${POSTINST_SCRIPT} @ONLY)
-    
-    set(CPACK_DEBIAN_PACKAGE_CONTROL_EXTRA "${POSTINST_SCRIPT}")
-    
-    # Pre-removal script for cleanup
-    set(PRERM_SCRIPT "${CMAKE_CURRENT_BINARY_DIR}/prerm")
-    file(WRITE ${PRERM_SCRIPT}
-"#!/bin/bash
-# Pre-removal script for Kolosal CLI
-
-# Stop kolosal-server service if it's running
-if command -v systemctl >/dev/null 2>&1; then
-    if systemctl is-active --quiet kolosal-server; then
-        echo \"Stopping kolosal-server service...\"
-        systemctl stop kolosal-server
-    fi
-    
-    if systemctl is-enabled --quiet kolosal-server 2>/dev/null; then
-        echo \"Disabling kolosal-server service...\"
-        systemctl disable kolosal-server
-    fi
-fi
-
-exit 0
-")
-    
-    set(CPACK_DEBIAN_PACKAGE_CONTROL_EXTRA "${POSTINST_SCRIPT};${PRERM_SCRIPT}")
-    
-    # Post-removal script for final cleanup
-    set(POSTRM_SCRIPT_IN "${CMAKE_CURRENT_BINARY_DIR}/postrm.in")
-    set(POSTRM_SCRIPT "${CMAKE_CURRENT_BINARY_DIR}/postrm")
-    file(WRITE ${POSTRM_SCRIPT_IN}
-"#!/bin/bash
-# Post-removal script for Kolosal CLI
-
-# Reload systemd daemon if systemctl is available
-if command -v systemctl >/dev/null 2>&1; then
-    systemctl daemon-reload
-fi
+# Simple post-installation script for Kolosal CLI
 
 # Update library cache
 if command -v ldconfig >/dev/null 2>&1; then
     ldconfig
 fi
 
-# Remove symbolic links we created
-rm -f /usr/lib/x86_64-linux-gnu/libkolosal_server.so 2>/dev/null || true
-rm -f \"/usr/lib/x86_64-linux-gnu/lib@INFERENCE_TARGET_NAME@.so\" 2>/dev/null || true
-
-# Remove additional inference engine symlinks
-for inference_engine in llama-vulkan llama-cuda llama-cpu; do
-    rm -f \"/usr/lib/x86_64-linux-gnu/lib\$inference_engine.so\" 2>/dev/null || true
-done
-
-echo \"Kolosal CLI has been removed.\"
-echo \"User data in /var/lib/kolosal has been preserved.\"
-echo \"To completely remove all data: sudo rm -rf /var/lib/kolosal /etc/kolosal && sudo userdel kolosal\"
+echo \"Kolosal CLI installed successfully!\"
+echo \"Run 'kolosal --help' to get started.\"
 
 exit 0
 ")
-    configure_file(${POSTRM_SCRIPT_IN} ${POSTRM_SCRIPT} @ONLY)
     
-    set(CPACK_DEBIAN_PACKAGE_CONTROL_EXTRA "${POSTINST_SCRIPT};${PRERM_SCRIPT};${POSTRM_SCRIPT}")
-    
-    # Ensure the package installs files correctly
-    set(CPACK_COMPONENTS_ALL Runtime)
-    set(CPACK_DEB_COMPONENT_INSTALL OFF)
+    set(CPACK_DEBIAN_PACKAGE_CONTROL_EXTRA "${POSTINST_SCRIPT}")
     
     # Architecture detection for Linux
     if(CMAKE_SYSTEM_PROCESSOR MATCHES "x86_64|AMD64")
@@ -2021,43 +1779,6 @@ exit 0
         set(CPACK_DEBIAN_PACKAGE_ARCHITECTURE "armhf")
     else()
         set(CPACK_DEBIAN_PACKAGE_ARCHITECTURE "all")
-    endif()
-    
-    # Add RPM support for RHEL/CentOS/Fedora
-    set(CPACK_RPM_PACKAGE_NAME "kolosal-cli")
-    set(CPACK_RPM_PACKAGE_VERSION "${PROJECT_VERSION}")
-    set(CPACK_RPM_PACKAGE_RELEASE "1")
-    set(CPACK_RPM_PACKAGE_LICENSE "MIT")
-    set(CPACK_RPM_PACKAGE_GROUP "Development/Tools")
-    set(CPACK_RPM_PACKAGE_VENDOR "Kolosal Project")
-    set(CPACK_RPM_PACKAGE_DESCRIPTION "${CPACK_PACKAGE_DESCRIPTION}")
-    
-    # Essential runtime dependencies based on ldd output
-    set(CPACK_RPM_PACKAGE_REQUIRES "glibc >= 2.17, libgcc, libstdc++, libcurl, libgomp, openssl-libs, zlib")
-    
-    # Add acceleration-specific dependencies
-    if(USE_CUDA)
-        set(CPACK_RPM_PACKAGE_REQUIRES "${CPACK_RPM_PACKAGE_REQUIRES}, cuda-runtime")
-        set(RPM_SUGGESTS_LIST "vulkan-loader")
-    elseif(USE_VULKAN)
-        set(CPACK_RPM_PACKAGE_REQUIRES "${CPACK_RPM_PACKAGE_REQUIRES}, vulkan-loader")
-        set(RPM_SUGGESTS_LIST "")
-    else()
-        # Always suggest vulkan runtime since we include vulkan inference engine by default
-        set(RPM_SUGGESTS_LIST "vulkan-loader")
-    endif()
-    
-    # Set RPM suggests (always include since we package all available inference engines)
-    set(CPACK_RPM_PACKAGE_SUGGESTS "${RPM_SUGGESTS_LIST}")
-    
-    # RPM post-install and pre-uninstall scripts
-    set(CPACK_RPM_POST_INSTALL_SCRIPT_FILE "${POSTINST_SCRIPT}")
-    set(CPACK_RPM_PRE_UNINSTALL_SCRIPT_FILE "${PRERM_SCRIPT}")
-    set(CPACK_RPM_POST_UNINSTALL_SCRIPT_FILE "${POSTRM_SCRIPT}")
-    
-    # Check if we should build RPM instead of DEB
-    if(EXISTS "/etc/redhat-release" OR EXISTS "/etc/fedora-release")
-        set(CPACK_GENERATOR "RPM")
     endif()
 endif()
 
