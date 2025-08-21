@@ -508,6 +508,8 @@ if(APPLE)
         COMMENT "Copying config.apple.yaml to output directory as config.yaml"
     )
 elseif(UNIX)
+    # Minimal DEB packaging places all runtime artifacts under bin and excludes system-level files
+    option(KOLOSAL_DEB_MINIMAL "If ON, Debian package includes only bin files and bundled runtime libs" ON)
     add_custom_command(TARGET kolosal POST_BUILD
         COMMAND ${CMAKE_COMMAND} -E make_directory "${CMAKE_BINARY_DIR}/bin"
         COMMAND ${CMAKE_COMMAND} -E copy_if_different
@@ -1389,22 +1391,39 @@ elseif(UNIX)
         RUNTIME DESTINATION bin
     )
     
-    install(TARGETS kolosal_server
-        LIBRARY DESTINATION lib
-        ARCHIVE DESTINATION lib
-    )
-    
-    # Install the inference engine shared library
-    if(BUILD_INFERENCE_ENGINE)
-        install(TARGETS ${INFERENCE_TARGET_NAME}
+    # In minimal DEB mode, ship the shared library in bin alongside executables (resolved via $ORIGIN)
+    if(KOLOSAL_DEB_MINIMAL)
+        install(TARGETS kolosal_server
+            LIBRARY DESTINATION bin
+        )
+    else()
+        install(TARGETS kolosal_server
             LIBRARY DESTINATION lib
             ARCHIVE DESTINATION lib
         )
     endif()
     
+    # Install the inference engine shared library
+    if(BUILD_INFERENCE_ENGINE)
+        if(KOLOSAL_DEB_MINIMAL)
+            install(TARGETS ${INFERENCE_TARGET_NAME}
+                LIBRARY DESTINATION bin
+            )
+        else()
+            install(TARGETS ${INFERENCE_TARGET_NAME}
+                LIBRARY DESTINATION lib
+                ARCHIVE DESTINATION lib
+            )
+        endif()
+    endif()
+    
     # Bundle PoDoFo runtime dependencies so users don't need to install them
-    # We place them in a private directory and adjust RPATH to prefer it.
-    set(KOLOSAL_PRIVATE_LIBDIR "lib/kolosal")
+    # In minimal DEB mode, place them directly in bin so only bin/ is packaged
+    if(KOLOSAL_DEB_MINIMAL)
+        set(KOLOSAL_PRIVATE_LIBDIR "bin")
+    else()
+        set(KOLOSAL_PRIVATE_LIBDIR "lib/kolosal")
+    endif()
 
     # Candidate SONAMEs commonly used on Debian/Ubuntu
     set(_KOLOSAL_PO_RUNTIME_SONAMES
@@ -1470,36 +1489,52 @@ elseif(UNIX)
     )
     
     foreach(INFERENCE_SO_PATH ${INFERENCE_SO_CANDIDATES})
+        if(KOLOSAL_DEB_MINIMAL)
+            set(_inference_dest bin)
+        else()
+            set(_inference_dest lib)
+        endif()
         install(FILES "${INFERENCE_SO_PATH}"
-            DESTINATION lib
+            DESTINATION ${_inference_dest}
             PERMISSIONS OWNER_READ OWNER_WRITE OWNER_EXECUTE GROUP_READ GROUP_EXECUTE WORLD_READ WORLD_EXECUTE
             OPTIONAL
         )
     endforeach()
     
-    # Install configuration file to etc/kolosal directory (use config.linux.yaml directly for reliable packaging)
-    install(FILES "${CMAKE_CURRENT_SOURCE_DIR}/config.linux.yaml"
-        DESTINATION /etc/kolosal
-        RENAME config.yaml
-        PERMISSIONS OWNER_READ OWNER_WRITE GROUP_READ WORLD_READ
-    )
-    
-    # Create the kolosal configuration directory during install
-    install(DIRECTORY DESTINATION /etc/kolosal
-        DIRECTORY_PERMISSIONS OWNER_READ OWNER_WRITE OWNER_EXECUTE GROUP_READ GROUP_EXECUTE WORLD_READ WORLD_EXECUTE
-    )
-    
-    # Install systemd service file for kolosal-server if it exists
-    if(EXISTS "${CMAKE_CURRENT_SOURCE_DIR}/kolosal-server/kolosal-server.service")
-        install(FILES kolosal-server/kolosal-server.service
-            DESTINATION etc/systemd/system
-            OPTIONAL
+    # Install configuration: in minimal mode, ship config.yaml next to binaries; otherwise use /etc
+    if(KOLOSAL_DEB_MINIMAL)
+        install(FILES "${CMAKE_CURRENT_SOURCE_DIR}/config.linux.yaml"
+            DESTINATION bin
+            RENAME config.yaml
+            PERMISSIONS OWNER_READ OWNER_WRITE GROUP_READ WORLD_READ
+        )
+    else()
+        # Install configuration file to etc/kolosal directory (use config.linux.yaml directly for reliable packaging)
+        install(FILES "${CMAKE_CURRENT_SOURCE_DIR}/config.linux.yaml"
+            DESTINATION /etc/kolosal
+            RENAME config.yaml
+            PERMISSIONS OWNER_READ OWNER_WRITE GROUP_READ WORLD_READ
+        )
+        # Create the kolosal configuration directory during install
+        install(DIRECTORY DESTINATION /etc/kolosal
+            DIRECTORY_PERMISSIONS OWNER_READ OWNER_WRITE OWNER_EXECUTE GROUP_READ GROUP_EXECUTE WORLD_READ WORLD_EXECUTE
         )
     endif()
     
+    # Install systemd service file for kolosal-server if it exists
+    if(NOT KOLOSAL_DEB_MINIMAL)
+        if(EXISTS "${CMAKE_CURRENT_SOURCE_DIR}/kolosal-server/kolosal-server.service")
+            install(FILES kolosal-server/kolosal-server.service
+                DESTINATION etc/systemd/system
+                OPTIONAL
+            )
+        endif()
+    endif()
+    
     # Create a desktop entry (optional)
-    set(DESKTOP_FILE "${CMAKE_CURRENT_BINARY_DIR}/kolosal-cli.desktop")
-    file(WRITE ${DESKTOP_FILE}
+    if(NOT KOLOSAL_DEB_MINIMAL)
+        set(DESKTOP_FILE "${CMAKE_CURRENT_BINARY_DIR}/kolosal-cli.desktop")
+        file(WRITE ${DESKTOP_FILE}
 "[Desktop Entry]
 Version=1.0
 Type=Application
@@ -1510,93 +1545,99 @@ Icon=kolosal
 Terminal=true
 Categories=Development;Science;
 ")
-    install(FILES ${DESKTOP_FILE}
-        DESTINATION share/applications
-        OPTIONAL
-    )
-    
-    # Install man page if it exists
-    if(EXISTS "${CMAKE_CURRENT_SOURCE_DIR}/docs/kolosal.1")
-        install(FILES docs/kolosal.1
-            DESTINATION share/man/man1
+        install(FILES ${DESKTOP_FILE}
+            DESTINATION share/applications
             OPTIONAL
         )
     endif()
+    
+    # Install man page if it exists
+    if(NOT KOLOSAL_DEB_MINIMAL)
+        if(EXISTS "${CMAKE_CURRENT_SOURCE_DIR}/docs/kolosal.1")
+            install(FILES docs/kolosal.1
+                DESTINATION share/man/man1
+                OPTIONAL
+            )
+        endif()
+    endif()
 
-    # Prune development and example artifacts from the install tree before packaging
-    install(CODE "
-        message(STATUS \"Pruning non-runtime files from Linux package...\")
-        if(DEFINED ENV{DESTDIR})
-            set(ROOT \"$ENV{DESTDIR}${CMAKE_INSTALL_PREFIX}\")
-        else()
-            set(ROOT \"${CMAKE_INSTALL_PREFIX}\")
-        endif()
-
-        # Remove extraneous binaries and examples
-        file(REMOVE
-            \"${ROOT}/usr/bin/convert_hf_to_gguf.py\"
-            \"${ROOT}/usr/bin/inference_smoketest\"
-        )
-        file(GLOB TEST_BINS \"${ROOT}/usr/bin/test_*\")
-        if(TEST_BINS)
-            file(REMOVE ${TEST_BINS})
-        endif()
-        if(EXISTS \"${ROOT}/usr/bin/examples\")
-            file(REMOVE_RECURSE \"${ROOT}/usr/bin/examples\")
-        endif()
-
-        # Remove development headers installed by inference subproject
-        file(GLOB OUR_HDRS
-            \"${ROOT}/usr/include/ggml*.h\"
-            \"${ROOT}/usr/include/gguf.h\"
-            \"${ROOT}/usr/include/inference*.h\"
-            \"${ROOT}/usr/include/llama*.h\"
-        )
-        if(OUR_HDRS)
-            file(REMOVE ${OUR_HDRS})
-        endif()
-        # Clean up include dir if empty
-        if(EXISTS \"${ROOT}/usr/include\")
-            file(GLOB REMAIN_HDRS \"${ROOT}/usr/include/*\")
-            if(NOT REMAIN_HDRS)
-                file(REMOVE_RECURSE \"${ROOT}/usr/include\")
+    # Prune step is unnecessary in minimal mode since we install only required files
+    if(NOT KOLOSAL_DEB_MINIMAL)
+        # Prune development and example artifacts from the install tree before packaging
+        install(CODE "
+            message(STATUS \"Pruning non-runtime files from Linux package...\")
+            if(DEFINED ENV{DESTDIR})
+                set(ROOT \"$ENV{DESTDIR}${CMAKE_INSTALL_PREFIX}\")
+            else()
+                set(ROOT \"${CMAKE_INSTALL_PREFIX}\")
             endif()
-        endif()
 
-        # Remove CMake package metadata and pkgconfig files we don't ship
-        if(EXISTS \"${ROOT}/usr/lib/cmake/ggml\")
-            file(REMOVE_RECURSE \"${ROOT}/usr/lib/cmake/ggml\")
-        endif()
-        if(EXISTS \"${ROOT}/usr/lib/cmake/llama\")
-            file(REMOVE_RECURSE \"${ROOT}/usr/lib/cmake/llama\")
-        endif()
-        if(EXISTS \"${ROOT}/usr/lib/pkgconfig/llama.pc\")
-            file(REMOVE \"${ROOT}/usr/lib/pkgconfig/llama.pc\")
-        endif()
-        # Clean up pkgconfig dir if empty
-        if(EXISTS \"${ROOT}/usr/lib/pkgconfig\")
-            file(GLOB PKGCFG_LEFT \"${ROOT}/usr/lib/pkgconfig/*\")
-            if(NOT PKGCFG_LEFT)
-                file(REMOVE_RECURSE \"${ROOT}/usr/lib/pkgconfig\")
+            # Remove extraneous binaries and examples
+            file(REMOVE
+                \"${ROOT}/usr/bin/convert_hf_to_gguf.py\"
+                \"${ROOT}/usr/bin/inference_smoketest\"
+            )
+            file(GLOB TEST_BINS \"${ROOT}/usr/bin/test_*\")
+            if(TEST_BINS)
+                file(REMOVE ${TEST_BINS})
             endif()
-        endif()
+            if(EXISTS \"${ROOT}/usr/bin/examples\")
+                file(REMOVE_RECURSE \"${ROOT}/usr/bin/examples\")
+            endif()
 
-        # Remove static libraries not required at runtime
-        file(GLOB STATIC_LIBS
-            \"${ROOT}/usr/lib/libggml*.a\"
-            \"${ROOT}/usr/lib/libllama.a\"
-        )
-        if(STATIC_LIBS)
-            file(REMOVE ${STATIC_LIBS})
-        endif()
+            # Remove development headers installed by inference subproject
+            file(GLOB OUR_HDRS
+                \"${ROOT}/usr/include/ggml*.h\"
+                \"${ROOT}/usr/include/gguf.h\"
+                \"${ROOT}/usr/include/inference*.h\"
+                \"${ROOT}/usr/include/llama*.h\"
+            )
+            if(OUR_HDRS)
+                file(REMOVE ${OUR_HDRS})
+            endif()
+            # Clean up include dir if empty
+            if(EXISTS \"${ROOT}/usr/include\")
+                file(GLOB REMAIN_HDRS \"${ROOT}/usr/include/*\")
+                if(NOT REMAIN_HDRS)
+                    file(REMOVE_RECURSE \"${ROOT}/usr/include\")
+                endif()
+            endif()
 
-        # Remove example sources/data under share
-        if(EXISTS \"${ROOT}/usr/share/kolosal/examples\")
-            file(REMOVE_RECURSE \"${ROOT}/usr/share/kolosal/examples\")
-        endif()
+            # Remove CMake package metadata and pkgconfig files we don't ship
+            if(EXISTS \"${ROOT}/usr/lib/cmake/ggml\")
+                file(REMOVE_RECURSE \"${ROOT}/usr/lib/cmake/ggml\")
+            endif()
+            if(EXISTS \"${ROOT}/usr/lib/cmake/llama\")
+                file(REMOVE_RECURSE \"${ROOT}/usr/lib/cmake/llama\")
+            endif()
+            if(EXISTS \"${ROOT}/usr/lib/pkgconfig/llama.pc\")
+                file(REMOVE \"${ROOT}/usr/lib/pkgconfig/llama.pc\")
+            endif()
+            # Clean up pkgconfig dir if empty
+            if(EXISTS \"${ROOT}/usr/lib/pkgconfig\")
+                file(GLOB PKGCFG_LEFT \"${ROOT}/usr/lib/pkgconfig/*\")
+                if(NOT PKGCFG_LEFT)
+                    file(REMOVE_RECURSE \"${ROOT}/usr/lib/pkgconfig\")
+                endif()
+            endif()
 
-        message(STATUS \"Prune complete.\")
-    ")
+            # Remove static libraries not required at runtime
+            file(GLOB STATIC_LIBS
+                \"${ROOT}/usr/lib/libggml*.a\"
+                \"${ROOT}/usr/lib/libllama.a\"
+            )
+            if(STATIC_LIBS)
+                file(REMOVE ${STATIC_LIBS})
+            endif()
+
+            # Remove example sources/data under share
+            if(EXISTS \"${ROOT}/usr/share/kolosal/examples\")
+                file(REMOVE_RECURSE \"${ROOT}/usr/share/kolosal/examples\")
+            endif()
+
+            message(STATUS \"Prune complete.\")
+        ")
+    endif()
 endif()
 
 # CPack configuration for packaging
@@ -1617,6 +1658,18 @@ set(CPACK_PACKAGE_DESCRIPTION "A Command Line Interface to use, deploy, and mana
 set(CPACK_PACKAGE_VENDOR "Kolosal Project")
 set(CPACK_PACKAGE_CONTACT "dev@kolosal.com")
 set(CPACK_PACKAGE_HOMEPAGE_URL "https://github.com/kolosalai/kolosal-cli")
+
+# Debian-specific: keep package lean in minimal mode
+if(UNIX AND NOT APPLE)
+    # Avoid pulling in system dpkg-shlibdeps scanning which can add many Depends
+    if(KOLOSAL_DEB_MINIMAL)
+        set(CPACK_DEBIAN_ENABLE_SHLIBDEPS OFF)
+        # Provide a conservative dependency baseline, or leave empty to let admins resolve
+        set(CPACK_DEBIAN_PACKAGE_DEPENDS "")
+        # Install under /usr for DEB; our rules already place files under bin/lib
+        set(CPACK_PACKAGING_INSTALL_PREFIX "/usr")
+    endif()
+endif()
 
 # Windows-specific NSIS settings
 if(WIN32)
