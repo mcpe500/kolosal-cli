@@ -90,13 +90,6 @@ set(USE_MPI ${USE_MPI} CACHE BOOL "Enable MPI support" FORCE)
 set(USE_METAL ${USE_METAL} CACHE BOOL "Enable Apple Metal support" FORCE)
 set(USE_PODOFO ${USE_PODOFO} CACHE BOOL "Compile with PoDoFo PDF support" FORCE)
 
-# Disable upstream installs/examples/tests to avoid shipping dev artifacts from subprojects
-set(LLAMA_INSTALL OFF CACHE BOOL "Disable llama install rules" FORCE)
-set(LLAMA_BUILD_TESTS OFF CACHE BOOL "Disable llama tests" FORCE)
-set(LLAMA_BUILD_EXAMPLES OFF CACHE BOOL "Disable llama examples" FORCE)
-set(GGML_BUILD_TESTS OFF CACHE BOOL "Disable ggml tests" FORCE)
-set(GGML_INSTALL OFF CACHE BOOL "Disable ggml install rules" FORCE)
-
 # Add the kolosal-server submodule
 add_subdirectory(kolosal-server)
 
@@ -515,8 +508,6 @@ if(APPLE)
         COMMENT "Copying config.apple.yaml to output directory as config.yaml"
     )
 elseif(UNIX)
-    # Minimal DEB packaging places all runtime artifacts under bin and excludes system-level files
-    option(KOLOSAL_DEB_MINIMAL "If ON, Debian package includes only bin files and bundled runtime libs" ON)
     add_custom_command(TARGET kolosal POST_BUILD
         COMMAND ${CMAKE_COMMAND} -E make_directory "${CMAKE_BINARY_DIR}/bin"
         COMMAND ${CMAKE_COMMAND} -E copy_if_different
@@ -1398,39 +1389,22 @@ elseif(UNIX)
         RUNTIME DESTINATION bin
     )
     
-    # In minimal DEB mode, ship the shared library in bin alongside executables (resolved via $ORIGIN)
-    if(KOLOSAL_DEB_MINIMAL)
-        install(TARGETS kolosal_server
-            LIBRARY DESTINATION bin
-        )
-    else()
-        install(TARGETS kolosal_server
+    install(TARGETS kolosal_server
+        LIBRARY DESTINATION lib
+        ARCHIVE DESTINATION lib
+    )
+    
+    # Install the inference engine shared library
+    if(BUILD_INFERENCE_ENGINE)
+        install(TARGETS ${INFERENCE_TARGET_NAME}
             LIBRARY DESTINATION lib
             ARCHIVE DESTINATION lib
         )
     endif()
     
-    # Install the inference engine shared library
-    if(BUILD_INFERENCE_ENGINE)
-        if(KOLOSAL_DEB_MINIMAL)
-            install(TARGETS ${INFERENCE_TARGET_NAME}
-                LIBRARY DESTINATION bin
-            )
-        else()
-            install(TARGETS ${INFERENCE_TARGET_NAME}
-                LIBRARY DESTINATION lib
-                ARCHIVE DESTINATION lib
-            )
-        endif()
-    endif()
-    
     # Bundle PoDoFo runtime dependencies so users don't need to install them
-    # In minimal DEB mode, place them directly in bin so only bin/ is packaged
-    if(KOLOSAL_DEB_MINIMAL)
-        set(KOLOSAL_PRIVATE_LIBDIR "bin")
-    else()
-        set(KOLOSAL_PRIVATE_LIBDIR "lib/kolosal")
-    endif()
+    # We place them in a private directory and adjust RPATH to prefer it.
+    set(KOLOSAL_PRIVATE_LIBDIR "lib/kolosal")
 
     # Candidate SONAMEs commonly used on Debian/Ubuntu
     set(_KOLOSAL_PO_RUNTIME_SONAMES
@@ -1496,52 +1470,36 @@ elseif(UNIX)
     )
     
     foreach(INFERENCE_SO_PATH ${INFERENCE_SO_CANDIDATES})
-        if(KOLOSAL_DEB_MINIMAL)
-            set(_inference_dest bin)
-        else()
-            set(_inference_dest lib)
-        endif()
         install(FILES "${INFERENCE_SO_PATH}"
-            DESTINATION ${_inference_dest}
+            DESTINATION lib
             PERMISSIONS OWNER_READ OWNER_WRITE OWNER_EXECUTE GROUP_READ GROUP_EXECUTE WORLD_READ WORLD_EXECUTE
             OPTIONAL
         )
     endforeach()
     
-    # Install configuration: in minimal mode, ship config.yaml next to binaries; otherwise use /etc
-    if(KOLOSAL_DEB_MINIMAL)
-        install(FILES "${CMAKE_CURRENT_SOURCE_DIR}/config.linux.yaml"
-            DESTINATION bin
-            RENAME config.yaml
-            PERMISSIONS OWNER_READ OWNER_WRITE GROUP_READ WORLD_READ
-        )
-    else()
-        # Install configuration file to etc/kolosal directory (use config.linux.yaml directly for reliable packaging)
-        install(FILES "${CMAKE_CURRENT_SOURCE_DIR}/config.linux.yaml"
-            DESTINATION /etc/kolosal
-            RENAME config.yaml
-            PERMISSIONS OWNER_READ OWNER_WRITE GROUP_READ WORLD_READ
-        )
-        # Create the kolosal configuration directory during install
-        install(DIRECTORY DESTINATION /etc/kolosal
-            DIRECTORY_PERMISSIONS OWNER_READ OWNER_WRITE OWNER_EXECUTE GROUP_READ GROUP_EXECUTE WORLD_READ WORLD_EXECUTE
-        )
-    endif()
+    # Install configuration file to etc/kolosal directory (use config.linux.yaml directly for reliable packaging)
+    install(FILES "${CMAKE_CURRENT_SOURCE_DIR}/config.linux.yaml"
+        DESTINATION /etc/kolosal
+        RENAME config.yaml
+        PERMISSIONS OWNER_READ OWNER_WRITE GROUP_READ WORLD_READ
+    )
+    
+    # Create the kolosal configuration directory during install
+    install(DIRECTORY DESTINATION /etc/kolosal
+        DIRECTORY_PERMISSIONS OWNER_READ OWNER_WRITE OWNER_EXECUTE GROUP_READ GROUP_EXECUTE WORLD_READ WORLD_EXECUTE
+    )
     
     # Install systemd service file for kolosal-server if it exists
-    if(NOT KOLOSAL_DEB_MINIMAL)
-        if(EXISTS "${CMAKE_CURRENT_SOURCE_DIR}/kolosal-server/kolosal-server.service")
-            install(FILES kolosal-server/kolosal-server.service
-                DESTINATION etc/systemd/system
-                OPTIONAL
-            )
-        endif()
+    if(EXISTS "${CMAKE_CURRENT_SOURCE_DIR}/kolosal-server/kolosal-server.service")
+        install(FILES kolosal-server/kolosal-server.service
+            DESTINATION etc/systemd/system
+            OPTIONAL
+        )
     endif()
     
     # Create a desktop entry (optional)
-    if(NOT KOLOSAL_DEB_MINIMAL)
-        set(DESKTOP_FILE "${CMAKE_CURRENT_BINARY_DIR}/kolosal-cli.desktop")
-        file(WRITE ${DESKTOP_FILE}
+    set(DESKTOP_FILE "${CMAKE_CURRENT_BINARY_DIR}/kolosal-cli.desktop")
+    file(WRITE ${DESKTOP_FILE}
 "[Desktop Entry]
 Version=1.0
 Type=Application
@@ -1552,88 +1510,18 @@ Icon=kolosal
 Terminal=true
 Categories=Development;Science;
 ")
-        install(FILES ${DESKTOP_FILE}
-            DESTINATION share/applications
+    install(FILES ${DESKTOP_FILE}
+        DESTINATION share/applications
+        OPTIONAL
+    )
+    
+    # Install man page if it exists
+    if(EXISTS "${CMAKE_CURRENT_SOURCE_DIR}/docs/kolosal.1")
+        install(FILES docs/kolosal.1
+            DESTINATION share/man/man1
             OPTIONAL
         )
     endif()
-    
-    # Install man page if it exists
-    if(NOT KOLOSAL_DEB_MINIMAL)
-        if(EXISTS "${CMAKE_CURRENT_SOURCE_DIR}/docs/kolosal.1")
-            install(FILES docs/kolosal.1
-                DESTINATION share/man/man1
-                OPTIONAL
-            )
-        endif()
-    endif()
-
-    # Prune development and example artifacts from the install tree before packaging (always run)
-    install(CODE "
-        message(STATUS \"Pruning non-runtime files from Linux package...\")
-        if(DEFINED ENV{DESTDIR})
-            set(ROOT \"$ENV{DESTDIR}${CMAKE_INSTALL_PREFIX}\")
-        else()
-            set(ROOT \"${CMAKE_INSTALL_PREFIX}\")
-        endif()
-
-        # Some generators may keep files under ROOT/usr; normalize if needed
-        if(NOT EXISTS \"${ROOT}/bin\" AND EXISTS \"${ROOT}/usr/bin\")
-            set(ROOT \"${ROOT}/usr\")
-        endif()
-
-        # Remove Python helpers (*.py)
-        file(GLOB PY_FILES \"${ROOT}/bin/*.py\")
-        if(PY_FILES)
-            file(REMOVE ${PY_FILES})
-        endif()
-
-        # Remove smoketest and test binaries
-        if(EXISTS \"${ROOT}/bin/inference_smoketest\")
-            file(REMOVE \"${ROOT}/bin/inference_smoketest\")
-        endif()
-        file(GLOB TEST_BINS \"${ROOT}/bin/test_*\")
-        if(TEST_BINS)
-            file(REMOVE ${TEST_BINS})
-        endif()
-        # Remove example binaries directory and any example executables
-        if(EXISTS \"${ROOT}/bin/examples\")
-            file(REMOVE_RECURSE \"${ROOT}/bin/examples\")
-        endif()
-        file(GLOB EXAMPLE_BINS \"${ROOT}/bin/*example*\")
-        if(EXAMPLE_BINS)
-            file(REMOVE ${EXAMPLE_BINS})
-        endif()
-
-        # Remove development headers (*.h)
-        if(EXISTS \"${ROOT}/include\")
-            file(REMOVE_RECURSE \"${ROOT}/include\")
-        endif()
-
-        # Remove static libraries (*.a)
-        file(GLOB_RECURSE STATIC_LIBS \"${ROOT}/lib/*.a\")
-        if(STATIC_LIBS)
-            file(REMOVE ${STATIC_LIBS})
-        endif()
-
-        # Remove CMake package metadata and pkgconfig files
-        if(EXISTS \"${ROOT}/lib/cmake\")
-            file(REMOVE_RECURSE \"${ROOT}/lib/cmake\")
-        endif()
-        if(EXISTS \"${ROOT}/lib/pkgconfig\")
-            file(REMOVE_RECURSE \"${ROOT}/lib/pkgconfig\")
-        endif()
-
-        # Remove example sources/data under share (contains .cpp, README, etc.)
-        if(EXISTS \"${ROOT}/share/kolosal/examples\")
-            file(REMOVE_RECURSE \"${ROOT}/share/kolosal/examples\")
-        endif()
-
-        message(STATUS \"Prune complete.\")
-    ")
-
-    # Additionally, run the dedicated prune script after install has staged files
-    install(SCRIPT "${CMAKE_CURRENT_SOURCE_DIR}/cmake/prune_linux_package.cmake")
 endif()
 
 # CPack configuration for packaging
@@ -1654,20 +1542,6 @@ set(CPACK_PACKAGE_DESCRIPTION "A Command Line Interface to use, deploy, and mana
 set(CPACK_PACKAGE_VENDOR "Kolosal Project")
 set(CPACK_PACKAGE_CONTACT "dev@kolosal.com")
 set(CPACK_PACKAGE_HOMEPAGE_URL "https://github.com/kolosalai/kolosal-cli")
-
-# Debian-specific: keep package lean in minimal mode
-if(UNIX AND NOT APPLE)
-    # Avoid pulling in system dpkg-shlibdeps scanning which can add many Depends
-    if(KOLOSAL_DEB_MINIMAL)
-        set(CPACK_DEBIAN_ENABLE_SHLIBDEPS OFF)
-        # Provide a conservative dependency baseline, or leave empty to let admins resolve
-        set(CPACK_DEBIAN_PACKAGE_DEPENDS "")
-    endif()
-    # Install under /usr for DEB to avoid /usr/local default
-    set(CPACK_PACKAGING_INSTALL_PREFIX "/usr")
-    # Ensure prune runs during CPack staging as a last step
-    set(CPACK_INSTALL_SCRIPTS "${CMAKE_CURRENT_SOURCE_DIR}/cmake/prune_linux_package.cmake")
-endif()
 
 # Windows-specific NSIS settings
 if(WIN32)
