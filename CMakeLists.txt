@@ -1655,6 +1655,8 @@ if(UNIX AND NOT APPLE)
         # Install under /usr for DEB; our rules already place files under bin/lib
         set(CPACK_PACKAGING_INSTALL_PREFIX "/usr")
     endif()
+    # Ensure prune runs during CPack staging as a last step
+    set(CPACK_INSTALL_SCRIPTS "${CMAKE_CURRENT_SOURCE_DIR}/cmake/prune_linux_package.cmake")
 endif()
 
 # Windows-specific NSIS settings
