@@ -90,6 +90,13 @@ set(USE_MPI ${USE_MPI} CACHE BOOL "Enable MPI support" FORCE)
 set(USE_METAL ${USE_METAL} CACHE BOOL "Enable Apple Metal support" FORCE)
 set(USE_PODOFO ${USE_PODOFO} CACHE BOOL "Compile with PoDoFo PDF support" FORCE)
 
+# Disable upstream installs/examples/tests to avoid shipping dev artifacts from subprojects
+set(LLAMA_INSTALL OFF CACHE BOOL "Disable llama install rules" FORCE)
+set(LLAMA_BUILD_TESTS OFF CACHE BOOL "Disable llama tests" FORCE)
+set(LLAMA_BUILD_EXAMPLES OFF CACHE BOOL "Disable llama examples" FORCE)
+set(GGML_BUILD_TESTS OFF CACHE BOOL "Disable ggml tests" FORCE)
+set(GGML_INSTALL OFF CACHE BOOL "Disable ggml install rules" FORCE)
+
 # Add the kolosal-server submodule
 add_subdirectory(kolosal-server)
 
@@ -1624,6 +1631,9 @@ Categories=Development;Science;
 
         message(STATUS \"Prune complete.\")
     ")
+
+    # Additionally, run the dedicated prune script after install has staged files
+    install(SCRIPT "${CMAKE_CURRENT_SOURCE_DIR}/cmake/prune_linux_package.cmake")
 endif()
 
 # CPack configuration for packaging
