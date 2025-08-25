@@ -20,8 +20,7 @@ public:
      * @brief Initialize the application
      */
     void initialize();
-    
-    /**
+      /**
      * @brief Run the main application loop
      * @param repoId Optional Hugging Face repository URL or ID
      * @return Exit code (0 for success, non-zero for error)
@@ -154,12 +153,6 @@ private:
      * @return Vector of sample ModelFile objects
      */
     std::vector<ModelFile> generateSampleFiles(const std::string& modelId);
-
-    /**
-     * @brief Show the main model source selection menu
-     * @return Selected source ("huggingface", "ollama", or empty string if cancelled)
-     */
-    std::string showSourceSelectionMenu();
 
 private:
     std::unique_ptr<KolosalServerClient> m_serverClient;

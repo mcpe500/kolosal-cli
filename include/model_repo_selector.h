@@ -53,12 +53,6 @@ public:
      * @return True if it's a direct GGUF file URL, false otherwise
      */
     bool isDirectGGUFUrl(const std::string& input);
-    
-    /**
-     * @brief Show Ollama model selection menu
-     * @return Selected model ID, or empty string if cancelled
-     */
-    std::string selectOllamaModel();
 };
 
 #endif // MODEL_REPO_SELECTOR_H
