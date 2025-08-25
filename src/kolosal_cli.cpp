@@ -1044,6 +1044,26 @@ int KolosalCLI::run(const std::string &repoId)
             return 0;
         }
 
+        // Check if it's an Ollama model
+        if (selectedModel.find("OLLAMA:") == 0)
+        {
+            std::string modelId = selectedModel.substr(7); // Remove "OLLAMA:" prefix
+            
+            // Ensure server connection
+            if (!ensureServerConnection())
+            {
+                std::cerr << "Unable to connect to Kolosal server." << std::endl;
+                return 1;
+            }
+            
+            std::cout << "Using Ollama model: " << modelId << std::endl;
+            
+            // For Ollama models, we don't need to download anything as they're managed by Ollama
+            // We just need to start the chat interface with the Ollama model
+            startChatInterface("ollama:" + modelId);
+            return 0;
+        }
+
         // Check if it's a local model from config
         if (selectedModel.find("LOCAL:") == 0)
         {
@@ -1397,6 +1417,23 @@ int KolosalCLI::runServe(const std::string &repoId)
         if (selectedModel.empty())
         {
             std::cout << "Model selection cancelled." << std::endl;
+            return 0;
+        }
+
+        // Check if it's an Ollama model
+        if (selectedModel.find("OLLAMA:") == 0)
+        {
+            std::string modelId = selectedModel.substr(7); // Remove "OLLAMA:" prefix
+            
+            // Ensure server connection
+            if (!ensureServerConnection())
+            {
+                std::cerr << "Unable to connect to Kolosal server." << std::endl;
+                return 1;
+            }
+            
+            std::cout << "✅ Ollama model '" << modelId << "' is ready to use!" << std::endl;
+            std::cout << "You can now use this model with the Kolosal server." << std::endl;
             return 0;
         }
 

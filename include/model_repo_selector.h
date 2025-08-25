@@ -4,10 +4,17 @@
 #include <string>
 #include <vector>
 
+// Forward declarations
+class OllamaClient;
+class UnifiedModelSelector;
+
 /**
  * @brief UI class for handling model repository selection
  */
 class ModelRepoSelector {
+private:
+    OllamaClient* ollamaClient;
+
 public:
     /**
      * @brief Constructor
@@ -53,6 +60,15 @@ public:
      * @return True if it's a direct GGUF file URL, false otherwise
      */
     bool isDirectGGUFUrl(const std::string& input);
+    
+private:
+    /**
+     * @brief Show unified model selection interface with both Hugging Face and Ollama models
+     * @param configModels Vector of model IDs available in config
+     * @param downloadedModels Vector of model IDs downloaded on the server (used for fallback only)
+     * @return Selected model ID, or empty string if cancelled
+     */
+    std::string selectUnifiedModel(const std::vector<std::string>& configModels, const std::vector<std::string>& downloadedModels);
 };
 
 #endif // MODEL_REPO_SELECTOR_H
