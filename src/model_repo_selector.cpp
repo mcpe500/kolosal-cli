@@ -1,5 +1,6 @@
 #include "model_repo_selector.h"
 #include "hugging_face_client.h"
+#include "ollama_client.h"
 #include "interactive_list.h"
 #include <iostream>
 #include <regex>
@@ -194,6 +195,47 @@ std::string ModelRepoSelector::selectModel(const std::vector<std::string>& confi
         }
         
         return selectedModel;
+    }
+
+    return ""; // Cancelled or back to main menu
+}
+
+std::string ModelRepoSelector::selectOllamaModel() {
+    std::cout << "Browsing Ollama models...\n\n";
+
+    // Check if Ollama server is running
+    if (!OllamaClient::isServerRunning()) {
+        std::cout << "Ollama server is not running. Please start Ollama first.\n";
+        std::cout << "You can download and install Ollama from: https://ollama.com/\n\n";
+        return ""; // Return empty if server is not running
+    }
+
+    // Fetch models from Ollama API
+    std::vector<OllamaModel> ollamaModels = OllamaClient::listLocalModels();
+    std::vector<std::string> models;
+    
+    // Convert Ollama models to string representations
+    for (const auto& model : ollamaModels) {
+        models.push_back(model.name + " (" + model.getFormattedSize() + ")");
+    }
+    
+    if (models.empty()) {
+        std::cout << "No Ollama models found locally.\n";
+        std::cout << "You can pull models using: ollama pull <model-name>\n";
+        std::cout << "Or visit https://ollama.com/library to browse available models.\n\n";
+        return ""; // Return empty if no models found
+    }
+
+    // Add navigation option
+    models.push_back("Back to Main Menu");
+
+    InteractiveList menu(models);
+    int result = menu.run();
+
+    if (result >= 0 && result < static_cast<int>(models.size()) - 1) {
+        // Return the model name without the size information
+        std::string selectedModel = ollamaModels[result].name;
+        return "OLLAMA:" + selectedModel; // Special prefix to indicate it's an Ollama model
     }
 
     return ""; // Cancelled or back to main menu

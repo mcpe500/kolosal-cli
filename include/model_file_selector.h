@@ -57,6 +57,13 @@ public:
      * @param modelFile The selected model file
      */
     void showSelectionResult(const std::string& modelId, const ModelFile& modelFile);
+    
+    /**
+     * @brief Handle Ollama model selection
+     * @param modelName The Ollama model name
+     * @return ModelFile object representing the Ollama model
+     */
+    ModelFile handleOllamaModel(const std::string& modelName);
 
 private:
     /**

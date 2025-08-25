@@ -135,6 +135,31 @@ ModelFile ModelFileSelector::handleDirectGGUFUrl(const std::string& url) {
     return modelFile;
 }
 
+ModelFile ModelFileSelector::handleOllamaModel(const std::string& modelName) {
+    std::cout << "Processing Ollama model: " << modelName << std::endl;
+    
+    // Create a ModelFile object for the Ollama model
+    ModelFile modelFile;
+    modelFile.filename = modelName + ".gguf";
+    modelFile.modelId = "ollama/" + modelName;
+    modelFile.downloadUrl = "ollama://" + modelName;
+    
+    // Extract quantization info from model name if possible
+    modelFile.quant = ModelFileUtils::detectQuantization(modelName);
+    
+    // For Ollama models, we don't have a way to calculate memory usage since they're 
+    // managed by Ollama, so we'll set a placeholder
+    modelFile.memoryUsage.hasEstimate = false;
+    modelFile.memoryUsage.displayString = "Managed by Ollama";
+    
+    std::cout << "Model: " << modelName << std::endl;
+    std::cout << "Quantization: " << modelFile.quant.type << " - " << modelFile.quant.description << std::endl;
+    std::cout << "Source: Ollama (local)" << std::endl;
+    std::cout << std::endl;
+    
+    return modelFile;
+}
+
 void ModelFileSelector::showSelectionResult(const std::string& modelId, const ModelFile& modelFile) {
     std::cout << "Selected file: " << modelFile.filename << std::endl;
     std::cout << "Quantization: " << modelFile.quant.type << " - " << modelFile.quant.description << std::endl;
