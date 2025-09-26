@@ -28,7 +28,7 @@ echo "All required dependencies found."
 # Check for required libraries
 echo "Checking for required libraries..."
 for lib in libcurl openssl zlib; do
-    if ! pkg list-installed | grep -q "^$lib"; then
+    if ! pkg list-installed | grep -q "^$lib/"; then
         echo "Warning: Library '$lib' not found. Installing..."
         pkg install $lib -y
     fi
@@ -38,7 +38,7 @@ echo "All required libraries are available."
 
 # Initialize and update main submodules if needed
 echo "Initializing and updating submodules..."
-if [ ! -d "kolosal-server" ] || [ ! -f "kolosal-server/.git" ]; then
+if [ ! -d "kolosal-server" ] || [ ! -d "kolosal-server/.git" ]; then
     echo "Initializing main submodules..."
     git submodule init
     git submodule update

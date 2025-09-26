@@ -7,7 +7,7 @@ set -u
 # Note: pipefail is not available in dash, so we'll handle pipe errors manually where needed
 
 VERSION="1.0.0"
-RELEASE_TAG="v0.1-pre"
+RELEASE_TAG="v${VERSION}"
 
 URL_WIN="https://github.com/KolosalAI/kolosal-cli/releases/download/${RELEASE_TAG}/kolosal-1.0.0-win64.exe"
 URL_DEB="https://github.com/KolosalAI/kolosal-cli/releases/download/${RELEASE_TAG}/kolosal_1.0.0_amd64.deb"
@@ -146,7 +146,14 @@ download() {
 install_termux() {
   echo "Installing Kolosal CLI on Termux..."
 
-  # Check if we're in the correct directory
+  # Check if we're in the project root directory by looking for key project files
+  if [ ! -f "CMakeLists.txt" ] || [ ! -f "install-kolosal-termux.sh" ]; then
+    echo "Error: This script must be run from the project root directory."
+    echo "Please navigate to the project root and run this script again."
+    exit 1
+  fi
+
+  # Check if the build exists
   if [ ! -f "build/bin/kolosal" ]; then
     echo "Error: Kolosal CLI not built yet. Please build it first with:"
     echo "  mkdir -p build && cd build && cmake .. -DCMAKE_BUILD_TYPE=Release && make -j4"
@@ -158,11 +165,25 @@ install_termux() {
 
   # Copy executables to Termux bin directory
   echo "Copying executables to $PREFIX/bin..."
-  cp build/bin/kolosal "$PREFIX/bin/"
-  cp build/bin/kolosal-server "$PREFIX/bin/"
+  if [ -f "build/bin/kolosal" ]; then
+    cp build/bin/kolosal "$PREFIX/bin/"
+  else
+    echo "Warning: build/bin/kolosal not found, skipping..." >&2
+  fi
+  
+  if [ -f "build/bin/kolosal-server" ]; then
+    cp build/bin/kolosal-server "$PREFIX/bin/"
+  else
+    echo "Warning: build/bin/kolosal-server not found, skipping..." >&2
+  fi
 
-  # Make sure they're executable
-  chmod +x "$PREFIX/bin/kolosal" "$PREFIX/bin/kolosal-server"
+  # Make sure they're executable (only if they exist)
+  if [ -f "$PREFIX/bin/kolosal" ]; then
+    chmod +x "$PREFIX/bin/kolosal"
+  fi
+  if [ -f "$PREFIX/bin/kolosal-server" ]; then
+    chmod +x "$PREFIX/bin/kolosal-server"
+  fi
 
   echo "Kolosal CLI installed successfully in Termux!"
   echo "You can now run it with: kolosal"
