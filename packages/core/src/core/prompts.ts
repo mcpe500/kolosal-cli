@@ -692,6 +692,7 @@ I found the following 'app.config' files:
 To help you check their settings, I can read their contents. Which one would you like to start with, or should I read all of them?
 </example>
 `.trim();
+
 const qwenVlToolCallExamples = `
 # Examples (Illustrating Tone and Workflow)
 <example>
