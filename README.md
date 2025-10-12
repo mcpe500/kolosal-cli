@@ -176,6 +176,27 @@ npm run build:mac:pkg
 
 Creates `dist/mac/KolosalCode-macos-signed.pkg` - a self-contained package that requires no Node.js installation.
 
+### Linux Packages
+
+Build Linux packages (`.deb`, `.rpm`, and `.tar.gz`):
+
+```bash
+# Build all formats
+npm run build:linux
+
+# Build specific format
+npm run build:linux:deb      # Debian/Ubuntu package
+npm run build:linux:rpm      # Red Hat/Fedora package  
+npm run build:linux:tar      # Universal tarball
+
+# Or use the convenience script
+bash scripts/clean-build-linux.sh [all|deb|rpm|tar]
+```
+
+Creates packages in `dist/linux/` with bundled Node.js - no separate runtime installation needed.
+
+See [docs/LINUX-PACKAGING.md](docs/LINUX-PACKAGING.md) for detailed Linux packaging documentation.
+
 ## Acknowledgments
 
 Kolosal CLI is built upon and adapted from the Qwen Code project, which is licensed under the Apache License, Version 2.0. We acknowledge and appreciate the excellent work of the Qwen development team.

@@ -19,7 +19,9 @@ const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const rootDir = path.resolve(__dirname, '..');
 const kolosalServerDir = path.join(rootDir, 'kolosal-server');
 const isMac = process.platform === 'darwin';
-const inferenceLibName = isMac ? 'libllama-metal.dylib' : 'libllama-cpu.dylib';
+const isLinux = process.platform === 'linux';
+const inferenceLibName = isMac ? 'libllama-metal.dylib' : 'libllama-cpu.so';
+const libExtension = isMac ? '.dylib' : '.so';
 
 async function buildKolosalServer() {
   console.log('🔨 Building kolosal-server...\n');
@@ -75,7 +77,7 @@ async function buildKolosalServer() {
   // Verify build artifacts exist
   const expectedFiles = [
     'kolosal-server',
-    'libkolosal_server.dylib',
+    `libkolosal_server${libExtension}`,
     inferenceLibName
   ];
   
@@ -96,10 +98,19 @@ async function buildKolosalServer() {
 async function copyToDistribution(sourceDir) {
   console.log('\n📦 Copying kolosal-server to distribution directory...\n');
   
-  const distDir = path.join(rootDir, 'dist', 'mac', 'kolosal-app');
+  // Detect platform and set appropriate dist directory
+  const platformDir = isMac ? 'mac' : isLinux ? 'linux' : 'unknown';
+  if (platformDir === 'unknown') {
+    throw new Error(`Unsupported platform: ${process.platform}`);
+  }
+  
+  const distDir = path.join(rootDir, 'dist', platformDir, 'kolosal-app');
   const binDir = path.join(distDir, 'bin');
   const libDir = path.join(distDir, 'lib');
   const resourcesDir = path.join(distDir, 'Resources');
+  
+  console.log(`   Platform: ${platformDir}`);
+  console.log(`   Target: ${distDir}`);
   
   // Create directories if they don't exist
   await fs.mkdir(binDir, { recursive: true });
@@ -113,7 +124,7 @@ async function copyToDistribution(sourceDir) {
   
   // Files to copy to lib directory  
   const libraryFiles = [
-    'libkolosal_server.dylib',
+    `libkolosal_server${libExtension}`,
     inferenceLibName
   ];
   
@@ -158,6 +169,16 @@ async function copyToDistribution(sourceDir) {
     } catch (error) {
       console.warn(`   ⚠️  Unable to copy default config: ${error.message}`);
     }
+  } else if (isLinux) {
+    const linuxConfigTemplate = path.join(rootDir, 'kolosal-server', 'configs', 'config.yaml');
+    const configDest = path.join(resourcesDir, 'config.yaml');
+
+    try {
+      await fs.copyFile(linuxConfigTemplate, configDest);
+      console.log('   ✓ config.yaml → Resources/config.yaml');
+    } catch (error) {
+      console.warn(`   ⚠️  Unable to copy default config: ${error.message}`);
+    }
   }
   
   // Verify copied files
@@ -191,14 +212,12 @@ async function copyToDistribution(sourceDir) {
   }
   
   // Check config template
-  if (isMac) {
-    const configPath = path.join(resourcesDir, 'config.yaml');
-    try {
-      await fs.access(configPath);
-      console.log(`   ✓ ${path.relative(distDir, configPath)}`);
-    } catch {
-      console.warn(`   ⚠️  Missing default config at ${configPath}`);
-    }
+  const configPath = path.join(resourcesDir, 'config.yaml');
+  try {
+    await fs.access(configPath);
+    console.log(`   ✓ ${path.relative(distDir, configPath)}`);
+  } catch {
+    console.warn(`   ⚠️  Missing default config at ${configPath}`);
   }
   
   console.log('\n✅ kolosal-server successfully integrated into distribution package!');
@@ -215,19 +234,17 @@ async function testKolosalServer(binDir, libDir, resourcesDir) {
   const executablePath = path.join(binDir, 'kolosal-server');
   const env = { ...process.env };
   const delimiter = process.platform === 'win32' ? ';' : ':';
-  const libEnvKey = process.platform === 'darwin' ? 'DYLD_LIBRARY_PATH' : process.platform === 'win32' ? 'PATH' : 'LD_LIBRARY_PATH';
+  const libEnvKey = isMac ? 'DYLD_LIBRARY_PATH' : process.platform === 'win32' ? 'PATH' : 'LD_LIBRARY_PATH';
   if (libDir) {
     env[libEnvKey] = libDir + (env[libEnvKey] ? `${delimiter}${env[libEnvKey]}` : '');
   }
 
-  if (resourcesDir && process.platform === 'darwin') {
-    const bundledConfig = path.join(resourcesDir, 'config.yaml');
-    try {
-      await fs.access(bundledConfig);
-      console.log(`   Found bundled config at ${bundledConfig}`);
-    } catch {
-      // ignore missing config
-    }
+  const bundledConfig = path.join(resourcesDir, 'config.yaml');
+  try {
+    await fs.access(bundledConfig);
+    console.log(`   Found bundled config at ${bundledConfig}`);
+  } catch {
+    // ignore missing config
   }
 
   const args = ['--version'];
@@ -296,10 +313,21 @@ async function main() {
     // Test the executable
   await testKolosalServer(binDir, libDir, resourcesDir);
     
+    // Analyze shared library dependencies (for Linux)
+    if (isLinux) {
+      console.log('\n📚 Analyzing shared library dependencies...');
+      try {
+        await execAsync('node scripts/bundle_shared_libs.js', { cwd: rootDir });
+        console.log('✅ Dependency analysis complete');
+      } catch (error) {
+        console.warn(`⚠️  Dependency analysis failed: ${error.message}`);
+      }
+    }
+    
     console.log('\n🎉 Build and integration completed successfully!');
     console.log('\n📋 Summary:');
   console.log(`   • Executable: ${path.join(binDir, 'kolosal-server')}`);
-  console.log(`   • Libraries: ${path.join(libDir, 'libkolosal_server.dylib')}, ${path.join(libDir, inferenceLibName)}`);
+  console.log(`   • Libraries: ${path.join(libDir, `libkolosal_server${libExtension}`)}, ${path.join(libDir, inferenceLibName)}`);
     console.log(`   • Ready for packaging and distribution`);
     
   } catch (error) {
