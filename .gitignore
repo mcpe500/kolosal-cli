@@ -70,3 +70,4 @@ gha-creds-*.json
 KOLOSAL.md
 
 .pkgroot/
+.debroot/
