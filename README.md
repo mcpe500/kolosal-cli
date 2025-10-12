@@ -24,25 +24,74 @@ Kolosal CLI is a powerful command-line AI workflow tool that enhances your devel
 
 ## Installation
 
-### Prerequisites
+### Quick Install (Recommended)
 
-Ensure you have [Node.js version 20](https://nodejs.org/en/download) or higher installed.
+Install KolosalCode with a single command:
 
-### Install from npm
+```bash
+# macOS or Linux
+curl -fsSL https://raw.githubusercontent.com/KolosalAI/kolosal-cli/main/install.sh | bash
+
+# Linux (with sudo)
+curl -fsSL https://raw.githubusercontent.com/KolosalAI/kolosal-cli/main/install.sh | sudo bash
+```
+
+The installer automatically detects your operating system and installs the appropriate package.
+
+### Alternative Installation Methods
+
+<details>
+<summary>Install from npm</summary>
+
+Requires [Node.js version 20](https://nodejs.org/en/download) or higher.
 
 ```bash
 npm install -g @kolosal-ai/kolosal-ai@latest
 kolosal --version
 ```
+</details>
 
-### Install from source
+<details>
+<summary>Manual Download</summary>
+
+**macOS:**
+```bash
+# Download and install the .pkg
+curl -LO https://github.com/KolosalAI/kolosal-cli/releases/download/v0.1.0-pre/KolosalCode-macos-signed.pkg
+sudo installer -pkg KolosalCode-macos-signed.pkg -target /
+```
+
+**Linux (Debian/Ubuntu):**
+```bash
+# Download and install the .deb
+wget https://github.com/KolosalAI/kolosal-cli/releases/download/v0.1.0-pre/kolosal-code_0.0.14_amd64.deb
+sudo dpkg -i kolosal-code_0.0.14_amd64.deb
+sudo apt-get install -f  # Fix dependencies if needed
+```
+</details>
+
+<details>
+<summary>Build from source</summary>
 
 ```bash
-git clone <your repo url>
-cd kolosal-code
+git clone https://github.com/KolosalAI/kolosal-cli.git
+cd kolosal-cli
 npm install
-npm install -g .
+npm run build
+npm link  # Optional: install globally
 ```
+
+See [CONTRIBUTING.md](CONTRIBUTING.md) for detailed build instructions.
+</details>
+
+### Verify Installation
+
+```bash
+kolosal --version
+kolosal --help
+```
+
+For detailed installation instructions and troubleshooting, see [docs/INSTALLATION.md](docs/INSTALLATION.md).
 
 ### Homebrew (Coming Soon)
 
