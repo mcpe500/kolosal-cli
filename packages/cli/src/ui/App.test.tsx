@@ -462,7 +462,7 @@ describe('App UI', () => {
           current: '1.0.0',
           type: 'major' as const,
         },
-        message: 'Kolosal Code update available!',
+        message: 'Kolosal Cli update available!',
       };
       mockedCheckForUpdates.mockResolvedValue(info);
       const { spawn } = await import('node:child_process');

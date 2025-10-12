@@ -1,4 +1,4 @@
-# Contributing to Kolosal Code
+# Contributing to Kolosal Cli
 
 Thanks for your interest in contributing! This guide explains how to set up your environment, make changes, and submit a pull request.
 
@@ -19,7 +19,7 @@ Thanks for your interest in contributing! This guide explains how to set up your
 - [License](#license)
 
 ## Project Overview
-Kolosal Code is a command-line AI workflow tool supporting OpenAI-compatible APIs and Hugging Face models. It is derived from Qwen Code and other Apache 2.0 licensed tooling. Our focus is on reliable developer experience, code-aware prompting, and multi-model support.
+Kolosal Cli is a command-line AI workflow tool supporting OpenAI-compatible APIs and Hugging Face models. It is derived from Qwen Code and other Apache 2.0 licensed tooling. Our focus is on reliable developer experience, code-aware prompting, and multi-model support.
 
 ## Prerequisites
 - Node.js >= 20.x (verify with `node -v`)
@@ -143,4 +143,4 @@ If you discover a vulnerability, DO NOT open a public issue. Instead, email the 
 By contributing, you agree that your contributions are licensed under the Apache License, Version 2.0. See `LICENSE` and `NOTICE` for attribution requirements.
 
 ---
-Thanks for helping improve Kolosal Code! 🚀
+Thanks for helping improve Kolosal Cli! 🚀

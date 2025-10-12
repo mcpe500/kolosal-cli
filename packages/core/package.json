@@ -1,7 +1,7 @@
 {
   "name": "@kolosal-ai/kolosal-ai-core",
   "version": "0.0.14",
-  "description": "Kolosal Code Core",
+  "description": "Kolosal Cli Core",
   "repository": {
     "type": "git",
     "url": "git+https://github.com/KolosalAI/kolosal-cli.git"

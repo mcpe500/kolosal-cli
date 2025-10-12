@@ -89,7 +89,7 @@ export function IdeIntegrationNudge({
       <Box marginBottom={1} flexDirection="column">
         <Text>
           <Text color="yellow">{'> '}</Text>
-          {`Do you want to connect ${ideName ?? 'your editor'} to Kolosal Code?`}
+          {`Do you want to connect ${ideName ?? 'your editor'} to Kolosal Cli?`}
         </Text>
         <Text dimColor>{installText}</Text>
       </Box>

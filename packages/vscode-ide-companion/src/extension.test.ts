@@ -81,7 +81,7 @@ describe('activate', () => {
     vi.mocked(context.globalState.get).mockReturnValue(undefined);
     await activate(context);
     expect(showInformationMessageMock).toHaveBeenCalledWith(
-  'Kolosal Code Companion extension successfully installed.',
+  'Kolosal Cli Companion extension successfully installed.',
     );
   });
 
@@ -91,10 +91,10 @@ describe('activate', () => {
     expect(vscode.window.showInformationMessage).not.toHaveBeenCalled();
   });
 
-  it('should launch Kolosal Code when the user clicks the button', async () => {
+  it('should launch Kolosal Cli when the user clicks the button', async () => {
     const showInformationMessageMock = vi
       .mocked(vscode.window.showInformationMessage)
-  .mockResolvedValue('Run Kolosal Code' as never);
+  .mockResolvedValue('Run Kolosal Cli' as never);
     vi.mocked(context.globalState.get).mockReturnValue(undefined);
     await activate(context);
     expect(showInformationMessageMock).toHaveBeenCalled();

@@ -41,7 +41,7 @@ Includes: Complete Node.js runtime + application
 ```bash
 gh release create v0.0.14 \
   dist/mac/KolosalCode-macos-signed.pkg \
-  --title "Kolosal Code v0.0.14" \
+  --title "Kolosal Cli v0.0.14" \
   --notes "macOS universal installer (37 MB, fully standalone - no dependencies!)"
 ```
 

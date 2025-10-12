@@ -1,9 +1,9 @@
-# Kolosal Code Go + Bubble Tea Reimplementation Plan
+# Kolosal Cli Go + Bubble Tea Reimplementation Plan
 
 _Last updated: 2025-10-08_
 
 ## Objectives & Success Criteria
-- Deliver a first-class terminal experience that mirrors current Kolosal Code features while feeling native to Go and Bubble Tea.
+- Deliver a first-class terminal experience that mirrors current Kolosal Cli features while feeling native to Go and Bubble Tea.
 - Preserve multi-provider AI capabilities (OpenAI-compatible, Hugging Face, local inference) with clear extension points.
 - Maintain strong ergonomics for large-repo navigation, code editing assistance, and workflow automation.
 - Achieve fast startup (<200ms cold start) and responsive interactions (<100ms UI updates for local actions).

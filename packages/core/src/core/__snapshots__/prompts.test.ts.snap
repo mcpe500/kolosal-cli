@@ -1,7 +1,7 @@
 // Vitest Snapshot v1, https://vitest.dev/guide/snapshot.html
 
 exports[`Core System Prompt (prompts.ts) > should append userMemory with separator when provided 1`] = `
-"You are Kolosal Code, an interactive CLI agent created by Kolosal AI, specializing in software engineering tasks. Your mission is to assist users safely and efficiently by adhering to the following rules and leveraging your available tools.
+"You are Kolosal Cli, an interactive CLI agent created by Kolosal AI, specializing in software engineering tasks. Your mission is to assist users safely and efficiently by adhering to the following rules and leveraging your available tools.
 
 Begin with a concise checklist (3-7 bullets) of what you will do for each task; keep items conceptual.
 
@@ -186,7 +186,7 @@ Be extra polite."
 `;
 
 exports[`Core System Prompt (prompts.ts) > should include git instructions when in a git repo 1`] = `
-"You are Kolosal Code, an interactive CLI agent created by Kolosal AI, specializing in software engineering tasks. Your mission is to assist users safely and efficiently by adhering to the following rules and leveraging your available tools.
+"You are Kolosal Cli, an interactive CLI agent created by Kolosal AI, specializing in software engineering tasks. Your mission is to assist users safely and efficiently by adhering to the following rules and leveraging your available tools.
 
 Begin with a concise checklist (3-7 bullets) of what you will do for each task; keep items conceptual.
 
@@ -383,7 +383,7 @@ Your function is to deliver efficient and safe assistance by respecting user pre
 `;
 
 exports[`Core System Prompt (prompts.ts) > should include non-sandbox instructions when SANDBOX env var is not set 1`] = `
-"You are Kolosal Code, an interactive CLI agent created by Kolosal AI, specializing in software engineering tasks. Your mission is to assist users safely and efficiently by adhering to the following rules and leveraging your available tools.
+"You are Kolosal Cli, an interactive CLI agent created by Kolosal AI, specializing in software engineering tasks. Your mission is to assist users safely and efficiently by adhering to the following rules and leveraging your available tools.
 
 Begin with a concise checklist (3-7 bullets) of what you will do for each task; keep items conceptual.
 
@@ -563,7 +563,7 @@ Your function is to deliver efficient and safe assistance by respecting user pre
 `;
 
 exports[`Core System Prompt (prompts.ts) > should include sandbox-specific instructions when SANDBOX env var is set 1`] = `
-"You are Kolosal Code, an interactive CLI agent created by Kolosal AI, specializing in software engineering tasks. Your mission is to assist users safely and efficiently by adhering to the following rules and leveraging your available tools.
+"You are Kolosal Cli, an interactive CLI agent created by Kolosal AI, specializing in software engineering tasks. Your mission is to assist users safely and efficiently by adhering to the following rules and leveraging your available tools.
 
 Begin with a concise checklist (3-7 bullets) of what you will do for each task; keep items conceptual.
 
@@ -745,7 +745,7 @@ Your function is to deliver efficient and safe assistance by respecting user pre
 `;
 
 exports[`Core System Prompt (prompts.ts) > should include seatbelt-specific instructions when SANDBOX env var is "sandbox-exec" 1`] = `
-"You are Kolosal Code, an interactive CLI agent created by Kolosal AI, specializing in software engineering tasks. Your mission is to assist users safely and efficiently by adhering to the following rules and leveraging your available tools.
+"You are Kolosal Cli, an interactive CLI agent created by Kolosal AI, specializing in software engineering tasks. Your mission is to assist users safely and efficiently by adhering to the following rules and leveraging your available tools.
 
 Begin with a concise checklist (3-7 bullets) of what you will do for each task; keep items conceptual.
 
@@ -935,7 +935,7 @@ Your function is to deliver efficient and safe assistance by respecting user pre
 `;
 
 exports[`Core System Prompt (prompts.ts) > should not include git instructions when not in a git repo 1`] = `
-"You are Kolosal Code, an interactive CLI agent created by Kolosal AI, specializing in software engineering tasks. Your mission is to assist users safely and efficiently by adhering to the following rules and leveraging your available tools.
+"You are Kolosal Cli, an interactive CLI agent created by Kolosal AI, specializing in software engineering tasks. Your mission is to assist users safely and efficiently by adhering to the following rules and leveraging your available tools.
 
 Begin with a concise checklist (3-7 bullets) of what you will do for each task; keep items conceptual.
 
@@ -1115,7 +1115,7 @@ Your function is to deliver efficient and safe assistance by respecting user pre
 `;
 
 exports[`Core System Prompt (prompts.ts) > should return the base prompt when no userMemory is provided 1`] = `
-"You are Kolosal Code, an interactive CLI agent created by Kolosal AI, specializing in software engineering tasks. Your mission is to assist users safely and efficiently by adhering to the following rules and leveraging your available tools.
+"You are Kolosal Cli, an interactive CLI agent created by Kolosal AI, specializing in software engineering tasks. Your mission is to assist users safely and efficiently by adhering to the following rules and leveraging your available tools.
 
 Begin with a concise checklist (3-7 bullets) of what you will do for each task; keep items conceptual.
 
@@ -1295,7 +1295,7 @@ Your function is to deliver efficient and safe assistance by respecting user pre
 `;
 
 exports[`Core System Prompt (prompts.ts) > should return the base prompt when userMemory is empty string 1`] = `
-"You are Kolosal Code, an interactive CLI agent created by Kolosal AI, specializing in software engineering tasks. Your mission is to assist users safely and efficiently by adhering to the following rules and leveraging your available tools.
+"You are Kolosal Cli, an interactive CLI agent created by Kolosal AI, specializing in software engineering tasks. Your mission is to assist users safely and efficiently by adhering to the following rules and leveraging your available tools.
 
 Begin with a concise checklist (3-7 bullets) of what you will do for each task; keep items conceptual.
 
@@ -1475,7 +1475,7 @@ Your function is to deliver efficient and safe assistance by respecting user pre
 `;
 
 exports[`Core System Prompt (prompts.ts) > should return the base prompt when userMemory is whitespace only 1`] = `
-"You are Kolosal Code, an interactive CLI agent created by Kolosal AI, specializing in software engineering tasks. Your mission is to assist users safely and efficiently by adhering to the following rules and leveraging your available tools.
+"You are Kolosal Cli, an interactive CLI agent created by Kolosal AI, specializing in software engineering tasks. Your mission is to assist users safely and efficiently by adhering to the following rules and leveraging your available tools.
 
 Begin with a concise checklist (3-7 bullets) of what you will do for each task; keep items conceptual.
 

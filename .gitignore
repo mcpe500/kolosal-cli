@@ -48,7 +48,7 @@ packages/vscode-ide-companion/*.vsix
 packages/desktop/src-tauri/target/
 packages/desktop/src-tauri/Cargo.lock
 
-# Kolosal Code Configs
+# Kolosal Cli Configs
 .kolosal/
 logs/
 # GHA credentials

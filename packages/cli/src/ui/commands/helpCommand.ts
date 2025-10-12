@@ -12,7 +12,7 @@ export const helpCommand: SlashCommand = {
   name: 'help',
   altNames: ['?'],
   kind: CommandKind.BUILT_IN,
-  description: 'for help on Kolosal Code',
+  description: 'for help on Kolosal Cli',
   action: async (context) => {
     const helpItem: Omit<HistoryItemHelp, 'id'> = {
       type: MessageType.HELP,

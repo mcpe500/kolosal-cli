@@ -105,7 +105,7 @@ describe('OpenRouterOpenAICompatibleProvider', () => {
       expect(headers).toEqual({
         'User-Agent': `QwenCode/1.0.0 (${process.platform}; ${process.arch})`,
         'HTTP-Referer': 'https://github.com/KolosalAI/kolosal-cli.git',
-        'X-Title': 'Kolosal Code',
+        'X-Title': 'Kolosal Cli',
       });
     });
 
@@ -125,7 +125,7 @@ describe('OpenRouterOpenAICompatibleProvider', () => {
       expect(headers).toEqual({
         'User-Agent': 'ParentAgent/1.0.0',
         'HTTP-Referer': 'https://github.com/KolosalAI/kolosal-cli.git', // OpenRouter-specific value should override
-        'X-Title': 'Kolosal Code',
+        'X-Title': 'Kolosal Cli',
       });
 
       parentBuildHeaders.mockRestore();
@@ -142,7 +142,7 @@ describe('OpenRouterOpenAICompatibleProvider', () => {
       expect(headers['HTTP-Referer']).toBe(
         'https://github.com/KolosalAI/kolosal-cli.git',
       );
-      expect(headers['X-Title']).toBe('Kolosal Code');
+      expect(headers['X-Title']).toBe('Kolosal Cli');
     });
   });
 
@@ -215,7 +215,7 @@ describe('OpenRouterOpenAICompatibleProvider', () => {
       expect(headers['HTTP-Referer']).toBe(
         'https://github.com/KolosalAI/kolosal-cli.git',
       ); // OpenRouter-specific
-      expect(headers['X-Title']).toBe('Kolosal Code'); // OpenRouter-specific
+      expect(headers['X-Title']).toBe('Kolosal Cli'); // OpenRouter-specific
     });
   });
 });

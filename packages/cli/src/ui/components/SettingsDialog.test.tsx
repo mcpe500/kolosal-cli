@@ -683,7 +683,7 @@ describe('SettingsDialog', () => {
 
       // Should not show restart prompt initially
       expect(lastFrame()).not.toContain(
-        'To see changes, Kolosal Code must be restarted',
+        'To see changes, Kolosal Cli must be restarted',
       );
 
       unmount();

@@ -1,4 +1,4 @@
-# Kolosal Code - macOS Distribution Guide
+# Kolosal Cli - macOS Distribution Guide
 
 ## ✅ YES - Distribute ONLY the .pkg file!
 
@@ -48,7 +48,7 @@ Host the `.pkg` file on:
 # Create a release with the .pkg
 gh release create v0.0.14 \
   dist/mac/KolosalCode-macos.pkg \
-  --title "Kolosal Code v0.0.14" \
+  --title "Kolosal Cli v0.0.14" \
   --notes "macOS installer package"
 ```
 
@@ -60,7 +60,7 @@ Simply provide a download link to the `.pkg` file.
 Share these instructions with your users:
 
 ```markdown
-## Installing Kolosal Code on macOS
+## Installing Kolosal Cli on macOS
 
 ### Step 1: Download
 Download `KolosalCode-macos.pkg`
@@ -126,7 +126,7 @@ For production distribution, consider:
 ## 📝 Sample Release Notes Template
 
 ```markdown
-## Kolosal Code v0.0.14 - macOS Installer
+## Kolosal Cli v0.0.14 - macOS Installer
 
 ### Installation
 

@@ -124,9 +124,9 @@ export async function parseArguments(settings: Settings): Promise<CliArgs> {
     .locale('en')
     .scriptName('kolosal')
     .usage(
-      'Usage: kolosal [options] [command]\n\nKolosal Code - Launch an interactive CLI, use -p/--prompt for non-interactive mode',
+      'Usage: kolosal [options] [command]\n\nKolosal Cli - Launch an interactive CLI, use -p/--prompt for non-interactive mode',
     )
-    .command('$0', 'Launch Kolosal Code', (yargsInstance) =>
+    .command('$0', 'Launch Kolosal Cli', (yargsInstance) =>
       yargsInstance
         .option('model', {
           alias: 'm',

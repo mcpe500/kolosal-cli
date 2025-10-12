@@ -1,7 +1,7 @@
 {
   "name": "kolosal-ai-vscode-ide-companion",
-  "displayName": "Kolosal Code Companion",
-  "description": "Enable Kolosal Code with direct access to your VS Code workspace.",
+  "displayName": "Kolosal Cli Companion",
+  "description": "Enable Kolosal Cli with direct access to your VS Code workspace.",
   "version": "0.0.14",
   "publisher": "qwenlm",
   "icon": "assets/icon.png",
@@ -20,9 +20,9 @@
   ],
   "keywords": [
     "kolosal-ai",
-    "kolosal code",
+    "Kolosal Cli",
     "kolosal",
-    "kolosal code",
+    "Kolosal Cli",
     "cli",
     "ide integration",
     "ide companion"
@@ -39,21 +39,21 @@
     "commands": [
       {
         "command": "kolosal.diff.accept",
-  "title": "Kolosal Code: Accept Current Diff",
+  "title": "Kolosal Cli: Accept Current Diff",
         "icon": "$(check)"
       },
       {
         "command": "kolosal.diff.cancel",
-  "title": "Kolosal Code: Close Diff Editor",
+  "title": "Kolosal Cli: Close Diff Editor",
         "icon": "$(close)"
       },
       {
         "command": "kolosal-ai.runQwenCode",
-  "title": "Kolosal Code: Run"
+  "title": "Kolosal Cli: Run"
       },
       {
         "command": "kolosal-ai.showNotices",
-  "title": "Kolosal Code: View Third-Party Notices"
+  "title": "Kolosal Cli: View Third-Party Notices"
       }
     ],
     "menus": {

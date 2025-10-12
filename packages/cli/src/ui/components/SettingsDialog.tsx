@@ -791,7 +791,7 @@ export function SettingsDialog({
         </Text>
         {showRestartPrompt && (
           <Text color={Colors.AccentYellow}>
-            To see changes, Kolosal Code must be restarted. Press r to exit and
+            To see changes, Kolosal Cli must be restarted. Press r to exit and
             apply changes now.
           </Text>
         )}

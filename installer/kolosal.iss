@@ -1,11 +1,11 @@
-; Kolosal Code Inno Setup Script
+; Kolosal Cli Inno Setup Script
 ; Build on Windows with: iscc installer/kolosal.iss
 
 [Setup]
-AppName=Kolosal Code
+AppName=Kolosal Cli
 AppVersion=0.0.14
 AppPublisher=KolosalAI
-DefaultDirName={pf64}\KolosalAI\Kolosal Code
+DefaultDirName={pf64}\KolosalAI\Kolosal Cli
 DefaultGroupName=KolosalAI
 OutputBaseFilename=KolosalCodeSetup
 Compression=lzma
@@ -18,7 +18,7 @@ WizardStyle=modern
 Source: "dist\\win\\kolosal.exe"; DestDir: "{app}"; Flags: ignoreversion
 
 [Icons]
-Name: "{group}\\Kolosal Code"; Filename: "{app}\\kolosal.exe"
+Name: "{group}\\Kolosal Cli"; Filename: "{app}\\kolosal.exe"
 
 [Run]
 Filename: "{app}\\kolosal.exe"; Description: "Run Kolosal from installer"; Flags: nowait postinstall skipifsilent
@@ -27,4 +27,4 @@ Filename: "{app}\\kolosal.exe"; Description: "Run Kolosal from installer"; Flags
 Name: desktopicon; Description: "Create a &desktop icon"; GroupDescription: "Additional icons:"; Flags: unchecked
 
 [Icons]
-Name: "{commondesktop}\\Kolosal Code"; Filename: "{app}\\kolosal.exe"; Tasks: desktopicon
+Name: "{commondesktop}\\Kolosal Cli"; Filename: "{app}\\kolosal.exe"; Tasks: desktopicon

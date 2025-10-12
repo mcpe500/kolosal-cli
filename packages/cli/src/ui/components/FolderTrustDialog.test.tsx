@@ -34,7 +34,7 @@ describe('FolderTrustDialog', () => {
 
     expect(lastFrame()).toContain('Do you trust this folder?');
     expect(lastFrame()).toContain(
-      'Trusting a folder allows Kolosal Code to execute commands it suggests.',
+      'Trusting a folder allows Kolosal Cli to execute commands it suggests.',
     );
   });
 
@@ -44,7 +44,7 @@ describe('FolderTrustDialog', () => {
     );
 
     expect(lastFrame()).toContain(
-      'To see changes, Kolosal Code must be restarted',
+      'To see changes, Kolosal Cli must be restarted',
     );
   });
 

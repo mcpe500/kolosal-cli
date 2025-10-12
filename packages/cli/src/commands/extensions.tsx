@@ -14,7 +14,7 @@ import { enableCommand } from './extensions/enable.js';
 
 export const extensionsCommand: CommandModule = {
   command: 'extensions <command>',
-  describe: 'Manage Kolosal Code extensions.',
+  describe: 'Manage Kolosal Cli extensions.',
   builder: (yargs) =>
     yargs
       .command(installCommand)

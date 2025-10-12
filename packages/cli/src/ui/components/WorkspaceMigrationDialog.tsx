@@ -53,7 +53,7 @@ export function WorkspaceMigrationDialog(props: {
           <>
             <Text>
               The following extensions failed to migrate. Please try installing
-              them manually. To see other changes, Kolosal Code must be restarted.
+              them manually. To see other changes, Kolosal Cli must be restarted.
               Press {"'q'"} to quit.
             </Text>
             <Box flexDirection="column" marginTop={1} marginLeft={2}>
@@ -64,7 +64,7 @@ export function WorkspaceMigrationDialog(props: {
           </>
         ) : (
           <Text>
-            Migration complete. To see changes, Kolosal Code must be restarted.
+            Migration complete. To see changes, Kolosal Cli must be restarted.
             Press {"'q'"} to quit.
           </Text>
         )}

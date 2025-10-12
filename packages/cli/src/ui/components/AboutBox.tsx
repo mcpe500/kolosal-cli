@@ -44,7 +44,7 @@ export const AboutBox: React.FC<AboutBoxProps> = ({
   >
     <Box marginBottom={1}>
       <Text bold color={Colors.AccentPurple}>
-        About Kolosal Code
+        About Kolosal Cli
       </Text>
     </Box>
     <Box flexDirection="row">

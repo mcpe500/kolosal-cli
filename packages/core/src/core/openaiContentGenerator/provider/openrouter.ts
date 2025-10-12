@@ -25,7 +25,7 @@ export class OpenRouterOpenAICompatibleProvider extends DefaultOpenAICompatibleP
     return {
       ...baseHeaders,
       'HTTP-Referer': 'https://github.com/KolosalAI/kolosal-cli.git',
-      'X-Title': 'Kolosal Code',
+      'X-Title': 'Kolosal Cli',
     };
   }
 }

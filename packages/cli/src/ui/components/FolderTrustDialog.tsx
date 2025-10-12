@@ -79,7 +79,7 @@ export const FolderTrustDialog: React.FC<FolderTrustDialogProps> = ({
         <Box flexDirection="column" marginBottom={1}>
           <Text bold>Do you trust this folder?</Text>
           <Text>
-            Trusting a folder allows Kolosal Code to execute commands it suggests.
+            Trusting a folder allows Kolosal Cli to execute commands it suggests.
             This is a security feature to prevent accidental execution in
             untrusted directories.
           </Text>
@@ -94,7 +94,7 @@ export const FolderTrustDialog: React.FC<FolderTrustDialogProps> = ({
       {isRestarting && (
         <Box marginLeft={1} marginTop={1}>
           <Text color={Colors.AccentYellow}>
-            To see changes, Kolosal Code must be restarted. Press r to exit and
+            To see changes, Kolosal Cli must be restarted. Press r to exit and
             apply changes now.
           </Text>
         </Box>

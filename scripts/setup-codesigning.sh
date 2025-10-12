@@ -5,7 +5,7 @@
 
 set -e
 
-echo "🔐 Code Signing Setup for Kolosal Code"
+echo "🔐 Code Signing Setup for Kolosal Cli"
 echo "========================================"
 echo ""
 
@@ -95,7 +95,7 @@ else
     fi
   else
     echo "" >> "$SHELL_RC"
-    echo "# Kolosal Code Signing Identity" >> "$SHELL_RC"
+    echo "# Kolosal Cli Signing Identity" >> "$SHELL_RC"
     echo "export CODESIGN_IDENTITY=\"$SELECTED_IDENTITY\"" >> "$SHELL_RC"
     echo "✅ Added to $SHELL_RC"
   fi

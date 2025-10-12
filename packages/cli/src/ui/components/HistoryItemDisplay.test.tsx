@@ -80,7 +80,7 @@ describe('<HistoryItemDisplay />', () => {
     const { lastFrame } = render(
       <HistoryItemDisplay {...baseItem} item={item} />,
     );
-    expect(lastFrame()).toContain('About Kolosal Code');
+    expect(lastFrame()).toContain('About Kolosal Cli');
   });
 
   it('renders ModelStatsDisplay for "model_stats" type', () => {

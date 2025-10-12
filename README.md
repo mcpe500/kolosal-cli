@@ -1,4 +1,4 @@
-# Kolosal Code
+# Kolosal CLI
 
 <div align="center">
 
@@ -12,7 +12,7 @@
 
 </div>
 
-Kolosal Code is a powerful command-line AI workflow tool that enhances your development workflow with advanced code understanding, automated tasks, and intelligent assistance. Based on Qwen Code models, it provides seamless integration with your existing development environment.
+Kolosal CLI is a powerful command-line AI workflow tool that enhances your development workflow with advanced code understanding, automated tasks, and intelligent assistance. Based on Qwen Code models, it provides seamless integration with your existing development environment.
 
 ## Features
 
@@ -53,7 +53,7 @@ brew install kolosal-ai
 ## Quick Start
 
 ```bash
-# Start Kolosal Code
+# Start Kolosal CLI
 kolosal
 
 # Example commands
@@ -83,7 +83,7 @@ export HF_TOKEN="your_huggingface_token"
 export HF_MODEL="your_model_name"
 ```
 
-> **Note**: Kolosal Code may issue multiple API calls per cycle, which can result in higher token usage. We're actively optimizing API efficiency.
+> **Note**: Kolosal CLI may issue multiple API calls per cycle, which can result in higher token usage. We're actively optimizing API efficiency.
 
 ### Configuration
 
@@ -99,7 +99,7 @@ Configure token limits in `.kolosal/settings.json`:
 
 #### Vision Models
 
-Kolosal Code automatically detects images and switches to vision-capable models. Configure the behavior:
+Kolosal CLI automatically detects images and switches to vision-capable models. Configure the behavior:
 
 ```json
 {
@@ -143,7 +143,7 @@ Kolosal Code automatically detects images and switches to vision-capable models.
 - `/clear` - Clear conversation history  
 - `/compress` - Compress history to save tokens
 - `/stats` - Show current session information
-- `/exit` or `/quit` - Exit Kolosal Code
+- `/exit` or `/quit` - Exit Kolosal CLI
 
 ### Keyboard Shortcuts
 - `Ctrl+C` - Cancel current operation
@@ -178,7 +178,7 @@ Creates `dist/mac/KolosalCode-macos-signed.pkg` - a self-contained package that 
 
 ## Acknowledgments
 
-Kolosal Code is built upon and adapted from the Qwen Code project, which is licensed under the Apache License, Version 2.0. We acknowledge and appreciate the excellent work of the Qwen development team.
+Kolosal CLI is built upon and adapted from the Qwen Code project, which is licensed under the Apache License, Version 2.0. We acknowledge and appreciate the excellent work of the Qwen development team.
 
 This project also incorporates concepts and approaches from [Google Gemini CLI](https://github.com/google-gemini/gemini-cli). We appreciate the foundational work that made this project possible.
 

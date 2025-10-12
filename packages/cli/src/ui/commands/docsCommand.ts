@@ -15,7 +15,7 @@ import { MessageType } from '../types.js';
 
 export const docsCommand: SlashCommand = {
   name: 'docs',
-  description: 'open full Kolosal Code documentation in your browser',
+  description: 'open full Kolosal Cli documentation in your browser',
   kind: CommandKind.BUILT_IN,
   action: async (context: CommandContext): Promise<void> => {
     const docsUrl = 'https://qwenlm.github.io/kolosal-ai-docs/en';

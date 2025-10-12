@@ -92,7 +92,7 @@ export const initCommand: SlashCommand = {
     return {
       type: 'submit_prompt',
       content: `
-You are Kolosal Code, an interactive CLI agent. Your goal is to analyze the current directory and generate a comprehensive ${contextFileName} file to serve as instructional context for future interactions.
+You are Kolosal Cli, an interactive CLI agent. Your goal is to analyze the current directory and generate a comprehensive ${contextFileName} file to serve as instructional context for future interactions.
 
 Begin with a concise checklist (3-7 bullets) of your planned steps to ensure a complete and structured analysis. Adjust as needed if unexpected conditions arise.
 

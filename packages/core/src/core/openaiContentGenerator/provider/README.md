@@ -1,6 +1,6 @@
 # Provider Structure
 
-This folder contains the different provider implementations for the Kolosal Code refactor system.
+This folder contains the different provider implementations for the Kolosal Cli refactor system.
 
 ## File Structure
 

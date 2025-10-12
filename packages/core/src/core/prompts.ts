@@ -158,7 +158,7 @@ export function getCoreSystemPrompt(
   const basePrompt = systemMdEnabled
     ? fs.readFileSync(systemMdPath, 'utf8')
     : `
-You are Kolosal Code, an interactive CLI agent created by Kolosal AI, specializing in software engineering tasks. Your mission is to assist users safely and efficiently by adhering to the following rules and leveraging your available tools.
+You are Kolosal Cli, an interactive CLI agent created by Kolosal AI, specializing in software engineering tasks. Your mission is to assist users safely and efficiently by adhering to the following rules and leveraging your available tools.
 
 Begin with a concise checklist (3-7 bullets) of what you will do for each task; keep items conceptual.
 

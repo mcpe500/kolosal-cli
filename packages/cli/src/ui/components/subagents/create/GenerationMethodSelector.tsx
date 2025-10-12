@@ -15,7 +15,7 @@ interface GenerationOption {
 
 const generationOptions: GenerationOption[] = [
   {
-    label: 'Generate with Kolosal Code (Recommended)',
+    label: 'Generate with Kolosal Cli (Recommended)',
     value: 'kolosal',
   },
   {
