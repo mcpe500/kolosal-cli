@@ -36,15 +36,30 @@ fi
 
 echo "🔐 Setting up code signing identities..."
 
-# Set code signing identities
-export CODESIGN_IDENTITY_APP="Developer ID Application: Rifky Bujana Bisri (SNW8GV8C24)"
-export CODESIGN_IDENTITY="Developer ID Installer: Rifky Bujana Bisri (SNW8GV8C24)"
+# Use environment variables if already set, otherwise leave empty (will skip signing)
+# To enable signing, set these environment variables before running this script:
+#   export CODESIGN_IDENTITY_APP="Developer ID Application: Your Name (TEAM_ID)"
+#   export CODESIGN_IDENTITY="Developer ID Installer: Your Name (TEAM_ID)"
+#   export NOTARIZE=1
+
+export CODESIGN_IDENTITY_APP="${CODESIGN_IDENTITY_APP:-}"
+export CODESIGN_IDENTITY="${CODESIGN_IDENTITY:-}"
 
 # Enable notarization (set to 0 to skip)
-export NOTARIZE="${NOTARIZE:-1}"
+export NOTARIZE="${NOTARIZE:-0}"
 
-echo "   Application cert: $CODESIGN_IDENTITY_APP"
-echo "   Installer cert: $CODESIGN_IDENTITY"
+if [ -n "$CODESIGN_IDENTITY_APP" ]; then
+    echo "   Application cert: $CODESIGN_IDENTITY_APP"
+else
+    echo "   Application cert: Not set (binaries will not be signed)"
+fi
+
+if [ -n "$CODESIGN_IDENTITY" ]; then
+    echo "   Installer cert: $CODESIGN_IDENTITY"
+else
+    echo "   Installer cert: Not set (package will not be signed)"
+fi
+
 echo "   Notarization: $([ "$NOTARIZE" = "1" ] && echo "enabled" || echo "disabled")"
 
 # Build the package

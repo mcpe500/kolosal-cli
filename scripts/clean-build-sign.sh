@@ -76,30 +76,53 @@ echo ""
 
 # Step 4: Set up code signing identities
 print_step "Setting up code signing..."
-export CODESIGN_IDENTITY_APP="Developer ID Application: Rifky Bujana Bisri (SNW8GV8C24)"
-export CODESIGN_IDENTITY="Developer ID Installer: Rifky Bujana Bisri (SNW8GV8C24)"
-export NOTARIZE="${NOTARIZE:-1}"
 
-echo "   Application cert: $CODESIGN_IDENTITY_APP"
-echo "   Installer cert: $CODESIGN_IDENTITY"
+# Use environment variables if set, otherwise empty (will skip signing)
+export CODESIGN_IDENTITY_APP="${CODESIGN_IDENTITY_APP:-}"
+export CODESIGN_IDENTITY="${CODESIGN_IDENTITY:-}"
+export NOTARIZE="${NOTARIZE:-0}"
+
+if [ -n "$CODESIGN_IDENTITY_APP" ]; then
+    echo "   Application cert: $CODESIGN_IDENTITY_APP"
+else
+    echo "   Application cert: Not set (binaries will not be signed)"
+fi
+
+if [ -n "$CODESIGN_IDENTITY" ]; then
+    echo "   Installer cert: $CODESIGN_IDENTITY"
+else
+    echo "   Installer cert: Not set (package will not be signed)"
+fi
+
 echo "   Notarization: $([ "$NOTARIZE" = "1" ] && echo "enabled" || echo "disabled")"
 echo ""
 
 # Step 5: Verify certificates are available
 print_step "Verifying certificates..."
-if ! security find-identity -v -p codesigning | grep -q "Developer ID Application"; then
-    print_error "Developer ID Application certificate not found!"
-    echo "   Run: security find-identity -v -p codesigning"
-    exit 1
+
+if [ -n "$CODESIGN_IDENTITY_APP" ]; then
+    if ! security find-identity -v -p codesigning | grep -q "Developer ID Application"; then
+        print_warning "Developer ID Application certificate not found in keychain!"
+        echo "   The specified identity may not be available"
+        echo "   Run: security find-identity -v -p codesigning"
+    else
+        echo "   ✓ Application certificate found"
+    fi
+else
+    print_warning "No application signing identity specified"
+    echo "   Binaries will not be signed"
 fi
 
-echo "   ✓ Application certificate found"
-
-if security find-identity -v -p codesigning | grep -q "Developer ID Installer"; then
-    echo "   ✓ Installer certificate found"
+if [ -n "$CODESIGN_IDENTITY" ]; then
+    if security find-identity -v -p codesigning | grep -q "Developer ID Installer"; then
+        echo "   ✓ Installer certificate found"
+    else
+        print_warning "Installer certificate not found (package won't be signed)"
+        echo "   The .pkg will be created but not signed for distribution"
+    fi
 else
-    print_warning "Installer certificate not found (package won't be signed)"
-    echo "   The .pkg will be created but not signed for distribution"
+    print_warning "No installer signing identity specified"
+    echo "   Package will not be signed"
 fi
 
 echo ""
