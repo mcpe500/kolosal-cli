@@ -1,80 +1,191 @@
 # Kolosal CLI
 
-A cross-platform command-line interface for discovering, downloading, and running language models from Hugging Face.
+<div align="center">
 
-![Kolosal CLI Demo](https://raw.githubusercontent.com/KolosalAI/kolosal-cli/main/docs/kolosal-cli-demo.gif)
+[![npm version](https://img.shields.io/npm/v/@kolosal-ai/kolosal-ai.svg)](https://www.npmjs.com/package/@kolosal-ai/kolosal-ai)
+[![License](https://img.shields.io/badge/license-Apache_2.0-blue.svg)](./LICENSE)
+[![Node.js Version](https://img.shields.io/badge/node-%3E%3D20.0.0-brightgreen.svg)](https://nodejs.org/)
 
-## Key Features
+**AI-powered command-line workflow tool for developers**
 
-- **Model Discovery**: Fetch and browse Kolosal models directly from Hugging Face.
-- **Interactive TUI**: Navigate, search, and select models with an easy-to-use terminal interface.
-- **Download & Run**: Download GGUF models and run them locally with a built-in inference server.
-- **Chat Interface**: Interact directly with loaded models through a command-line chat.
-- **Smart Caching**: Reduces API calls and improves performance with intelligent caching.
-- **Cross-Platform**: Fully supported on Windows, macOS, and Linux.
+[Installation](#installation) • [Quick Start](#quick-start) • [Features](#features) • [Documentation](./docs/) • [Contributing](./CONTRIBUTING.md)
 
-## Getting Started
+</div>
 
-The easiest way to get started is to download a pre-built binary for your operating system from the [**Releases**](https://github.com/KolosalAI/kolosal-cli/releases) page.
+Kolosal CLI is a powerful command-line AI workflow tool that enhances your development workflow with advanced code understanding, automated tasks, and intelligent assistance. Based on Qwen Code models, it provides seamless integration with your existing development environment.
 
-### macOS App Bundle
+## Features
 
-On macOS, Kolosal is distributed as a `.dmg` file containing a `Kolosal.app` bundle. When you double-click the app:
+- **Code Understanding & Editing** - Query and edit large codebases beyond traditional context window limits
+- **Workflow Automation** - Automate operational tasks like handling pull requests and complex rebases
+- **Enhanced Parser** - Optimized specifically for code-oriented models
+- **Vision Model Support** - Automatic detection and multimodal analysis of images in your input
+- **Flexible Model Support** - Works with OpenAI-compatible APIs and Hugging Face models
 
-1. **First Launch**: The app will offer to set up command line access by creating symlinks in `/usr/local/bin`
-2. **Subsequent Launches**: If already set up, it will show status and optionally open Terminal
-3. **Manual Setup**: If you decline automatic setup, the app provides instructions for manual PATH configuration
+## Installation
 
-This allows you to use `kolosal` and `kolosal-server` commands from any Terminal window after setup.
+### Prerequisites
 
-### Quick Start
+Ensure you have [Node.js version 20](https://nodejs.org/en/download) or higher installed.
 
-Once installed, you can run the application from your terminal:
-
-```bash
-# Launch the interactive model browser
-kolosal-cli
-
-# Stop the background inference server
-kolosal-cli --stop-server
-```
-
-## Building from Source
-
-If you prefer to build from source, ensure you have CMake (3.14+) and a C++17 compiler installed.
-
-### 1. Clone the Repository
+### Install from npm
 
 ```bash
-git clone https://github.com/KolosalAI/kolosal-cli.git
-cd kolosal-cli
+npm install -g @kolosal-ai/kolosal-ai@latest
+kolosal --version
 ```
 
-### 2. Build the Project
+### Install from source
 
-- **Linux / macOS**:
-  ```bash
-  mkdir build && cd build
-  cmake .. -DCMAKE_BUILD_TYPE=Release
-  make -j$(nproc) # Linux
-  # make -j$(sysctl -n hw.ncpu) # macOS
-  ```
+```bash
+git clone <your repo url>
+cd kolosal-code
+npm install
+npm install -g .
+```
 
-- **Windows**:
-  ```powershell
-  mkdir build; cd build
-  cmake ..
-  cmake --build . --config Release
-  ```
+### Homebrew (Coming Soon)
 
-### 3. Run the Application
+```bash
+brew install kolosal-ai
+```
 
-- **Linux / macOS**:
-  ```bash
-  ./kolosal-cli
-  ```
+## Quick Start
 
-- **Windows**:
-  ```powershell
-  .\Release\kolosal-cli.exe
-  ```
+```bash
+# Start Kolosal CLI
+kolosal
+
+# Example commands
+> Explain this codebase structure
+> Help me refactor this function
+> Generate unit tests for this module
+```
+
+### Authentication Options
+
+#### 1. OpenAI Compatible API
+
+Set environment variables or create a `.env` file:
+
+```bash
+export OPENAI_API_KEY="your_api_key_here"
+export OPENAI_BASE_URL="your_api_endpoint" 
+export OPENAI_MODEL="your_model_choice"
+```
+
+#### 2. Hugging Face LLM Models
+
+Configure Hugging Face models for local or API-based inference:
+
+```bash
+export HF_TOKEN="your_huggingface_token"
+export HF_MODEL="your_model_name"
+```
+
+> **Note**: Kolosal CLI may issue multiple API calls per cycle, which can result in higher token usage. We're actively optimizing API efficiency.
+
+### Configuration
+
+#### Session Management
+
+Configure token limits in `.kolosal/settings.json`:
+
+```json
+{
+  "sessionTokenLimit": 32000
+}
+```
+
+#### Vision Models
+
+Kolosal CLI automatically detects images and switches to vision-capable models. Configure the behavior:
+
+```json
+{
+  "experimental": {
+    "vlmSwitchMode": "once",  // "once", "session", "persist"
+    "visionModelPreview": true
+  }
+}
+```
+
+## Usage Examples
+
+### Code Analysis & Understanding
+```bash
+> Explain this codebase architecture
+> What are the key dependencies and how do they interact?
+> Find all API endpoints and their authentication methods
+> Generate a dependency graph for this module
+```
+
+### Code Development & Refactoring
+```bash
+> Refactor this function to improve readability and performance
+> Convert this class to use dependency injection
+> Generate unit tests for the authentication module
+> Add error handling to all database operations
+```
+
+### Workflow Automation
+```bash
+> Analyze git commits from the last 7 days, grouped by feature
+> Create a changelog from recent commits
+> Find and remove all console.log statements
+> Check for potential SQL injection vulnerabilities
+```
+
+## Commands & Shortcuts
+
+### Session Commands
+- `/help` - Display available commands
+- `/clear` - Clear conversation history  
+- `/compress` - Compress history to save tokens
+- `/stats` - Show current session information
+- `/exit` or `/quit` - Exit Kolosal CLI
+
+### Keyboard Shortcuts
+- `Ctrl+C` - Cancel current operation
+- `Ctrl+D` - Exit (on empty line)
+- `Up/Down` - Navigate command history
+
+## Development & Contributing
+
+See [CONTRIBUTING.md](./CONTRIBUTING.md) to learn how to contribute to the project.
+
+## Distribution
+
+### Windows Package
+
+Build a single executable and installer:
+
+```bash
+npm run bundle               # builds bundle/gemini.js
+npm run build:win:exe        # creates dist/win/kolosal.exe
+iscc installer/kolosal.iss   # creates installer
+```
+
+### macOS Package
+
+Build a standalone `.pkg` installer with bundled Node.js:
+
+```bash
+npm run build:mac:pkg
+```
+
+Creates `dist/mac/KolosalCode-macos-signed.pkg` - a self-contained package that requires no Node.js installation.
+
+## Acknowledgments
+
+Kolosal CLI is built upon and adapted from the Qwen Code project, which is licensed under the Apache License, Version 2.0. We acknowledge and appreciate the excellent work of the Qwen development team.
+
+This project also incorporates concepts and approaches from [Google Gemini CLI](https://github.com/google-gemini/gemini-cli). We appreciate the foundational work that made this project possible.
+
+## License
+
+Licensed under the Apache License, Version 2.0. See [LICENSE](./LICENSE) for the full license text.
+
+This product includes software developed from the Qwen Code project, which is also licensed under the Apache License, Version 2.0.
+
+

@@ -1,57 +1,59 @@
-# Prerequisites
-*.d
+# API keys and secrets
+.env
+.env~
 
-# Compiled Object files
-*.slo
-*.lo
-*.o
-*.obj
+# gemini-cli settings
+.gemini/
+!gemini/config.yaml
 
-# Precompiled Headers
-*.gch
-*.pch
+# Note: .gemini-clipboard/ is NOT in gitignore so Gemini can access pasted images
 
-# Fortran module files
-*.mod
-*.smod
+# Dependency directory
+node_modules
+bower_components
 
-# Build directories
-build/
-Build/
-out/
-build*/
+# Editors
+.idea
+*.iml
+.cursor
 
-# Model files
-*.gguf
-
-# IDE files
-.vs/
-.vscode/
-*.vcxproj.user
-.idea/
-
-# Linux specific
-kolosal-cli
-kolosal-server
-*.so
-*.so.*
-
-# Windows specific  
-*.exe
-*.dll
-*.pdb
-*.ilk
-
-# Logs
-*.log
-
-# Cache files
-.cache/
-
-install/
-
+# OS metadata
 .DS_Store
+Thumbs.db
 
-*.dmg
+# TypeScript build info files
+*.tsbuildinfo
 
-cert/
+# Ignore built ts files
+dist
+dist-ssr
+*.local
+
+# Docker folder to help skip auth refreshes
+.docker
+
+bundle
+
+# Test report files
+junit.xml
+packages/*/coverage/
+
+# Generated files
+packages/cli/src/generated/
+packages/core/src/generated/
+.integration-tests/
+packages/vscode-ide-companion/*.vsix
+
+# Desktop app (Tauri) build artifacts
+packages/desktop/src-tauri/target/
+packages/desktop/src-tauri/Cargo.lock
+
+# Kolosal Cli Configs
+.kolosal/
+logs/
+# GHA credentials
+gha-creds-*.json
+
+KOLOSAL.md
+
+.pkgroot/
