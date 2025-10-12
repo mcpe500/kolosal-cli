@@ -145,6 +145,9 @@ exec "$NODE_BINARY" "$APP_DIR/lib/bundle/gemini.js" "$@"
   
   console.log('✅ Standalone app created at:', appDir);
   
+  // Bundle Homebrew dependencies
+  await bundleHomebrewLibraries(libDir);
+  
   // Sign native binaries if signing identity is available
   await signNativeBinaries(appDir);
   
@@ -159,6 +162,173 @@ exec "$NODE_BINARY" "$APP_DIR/lib/bundle/gemini.js" "$@"
   }
   
   return appDir;
+}
+
+async function bundleHomebrewLibraries(libDir) {
+  console.log('\n📚 Bundling Homebrew dependencies...');
+  
+  // List of Homebrew libraries that need to be bundled
+  const homebrewLibs = [
+    { name: 'openssl@3', lib: 'libssl.3.dylib' },
+    { name: 'openssl@3', lib: 'libcrypto.3.dylib' },
+    { name: 'fontconfig', lib: 'libfontconfig.1.dylib' },
+    { name: 'freetype', lib: 'libfreetype.6.dylib' },
+    { name: 'libpng', lib: 'libpng16.16.dylib' },
+    { name: 'libtiff', lib: 'libtiff.6.dylib' },
+    { name: 'jpeg-turbo', lib: 'libjpeg.8.dylib' },
+    { name: 'libomp', lib: 'libomp.dylib' },
+    { name: 'zstd', lib: 'libzstd.1.dylib' },
+    { name: 'xz', lib: 'liblzma.5.dylib' },
+  ];
+  
+  // Detect Homebrew prefix
+  let homebrewPrefix = '/opt/homebrew';
+  try {
+    const { stdout } = await execAsync('brew --prefix');
+    homebrewPrefix = stdout.trim();
+    console.log(`   Using Homebrew prefix: ${homebrewPrefix}`);
+  } catch {
+    console.log(`   Using default Homebrew prefix: ${homebrewPrefix}`);
+  }
+  
+  let copiedCount = 0;
+  let skippedCount = 0;
+  
+  for (const { name, lib } of homebrewLibs) {
+    const srcPath = path.join(homebrewPrefix, 'opt', name, 'lib', lib);
+    const destPath = path.join(libDir, lib);
+    
+    try {
+      // Check if source exists
+      await fs.access(srcPath);
+      
+      // Copy the library
+      await execAsync(`cp "${srcPath}" "${destPath}"`);
+      
+      // Make it writable so we can modify it later
+      await fs.chmod(destPath, 0o755);
+      
+      console.log(`   ✓ Copied: ${lib}`);
+      copiedCount++;
+    } catch (error) {
+      console.warn(`   ⚠️  Skipped ${lib}: not found at ${srcPath}`);
+      skippedCount++;
+    }
+  }
+  
+  console.log(`\n   Summary: ${copiedCount} libraries copied, ${skippedCount} skipped`);
+  
+  // Now update the install names to use @rpath
+  console.log('\n🔧 Updating library install names...');
+  
+  // Get all dylib files in the lib directory
+  try {
+    const { stdout } = await execAsync(`find "${libDir}" -name "*.dylib" -type f`);
+    const dylibFiles = stdout.trim().split('\n').filter(Boolean);
+    
+    for (const dylibFile of dylibFiles) {
+      const dylibName = path.basename(dylibFile);
+      
+      // Update the install name (ID) to use @rpath
+      try {
+        await execAsync(`install_name_tool -id "@rpath/${dylibName}" "${dylibFile}"`);
+      } catch (error) {
+        // Might fail if already set, that's okay
+      }
+      
+      // Find all dependencies and update them to use @rpath
+      try {
+        const { stdout: otoolOutput } = await execAsync(`otool -L "${dylibFile}"`);
+        const lines = otoolOutput.split('\n').slice(1); // Skip first line (the file itself)
+        
+        for (const line of lines) {
+          const match = line.trim().match(/^(.+?)\s+\(/);
+          if (!match) continue;
+          
+          const depPath = match[1];
+          
+          // If it's a Homebrew path, update it to @rpath
+          if (depPath.includes('/opt/homebrew/') || depPath.includes('/usr/local/')) {
+            const depName = path.basename(depPath);
+            
+            // Check if this dependency exists in our lib directory
+            const localDepPath = path.join(libDir, depName);
+            try {
+              await fs.access(localDepPath);
+              // Update the reference to use @rpath
+              await execAsync(`install_name_tool -change "${depPath}" "@rpath/${depName}" "${dylibFile}"`);
+              console.log(`   ✓ Updated ${dylibName}: ${depName} -> @rpath`);
+            } catch {
+              // Dependency not bundled, skip
+            }
+          }
+        }
+      } catch (error) {
+        console.warn(`   ⚠️  Could not analyze dependencies for ${dylibName}`);
+      }
+    }
+    
+    // Also update the main kolosal-server binary and libkolosal_server.dylib if they exist
+    const kolosalServer = path.join(path.dirname(libDir), 'bin', 'kolosal-server');
+    const libKolosalServer = path.join(libDir, 'libkolosal_server.dylib');
+    const libLlamaMetal = path.join(libDir, 'libllama-metal.dylib');
+    
+    for (const binary of [kolosalServer, libKolosalServer, libLlamaMetal]) {
+      try {
+        await fs.access(binary);
+        const binaryName = path.basename(binary);
+        
+        // Add @rpath to search in ../lib (relative to bin/)
+        const isInBin = binary.includes('/bin/');
+        if (isInBin) {
+          try {
+            await execAsync(`install_name_tool -add_rpath "@executable_path/../lib" "${binary}"`);
+            console.log(`   ✓ Added @rpath to ${binaryName}`);
+          } catch {
+            // rpath might already exist
+          }
+        } else {
+          // For libraries, set rpath relative to themselves
+          try {
+            await execAsync(`install_name_tool -add_rpath "@loader_path" "${binary}"`);
+            console.log(`   ✓ Added @rpath to ${binaryName}`);
+          } catch {
+            // rpath might already exist
+          }
+        }
+        
+        // Update Homebrew dependencies to use @rpath
+        const { stdout: otoolOutput } = await execAsync(`otool -L "${binary}"`);
+        const lines = otoolOutput.split('\n').slice(1);
+        
+        for (const line of lines) {
+          const match = line.trim().match(/^(.+?)\s+\(/);
+          if (!match) continue;
+          
+          const depPath = match[1];
+          
+          if (depPath.includes('/opt/homebrew/') || depPath.includes('/usr/local/')) {
+            const depName = path.basename(depPath);
+            const localDepPath = path.join(libDir, depName);
+            
+            try {
+              await fs.access(localDepPath);
+              await execAsync(`install_name_tool -change "${depPath}" "@rpath/${depName}" "${binary}"`);
+              console.log(`   ✓ Updated ${binaryName}: ${depName} -> @rpath`);
+            } catch {
+              // Dependency not bundled
+            }
+          }
+        }
+      } catch {
+        // Binary doesn't exist, skip
+      }
+    }
+    
+    console.log('✅ Library install names updated');
+  } catch (error) {
+    console.warn(`⚠️  Error updating install names: ${error.message}`);
+  }
 }
 
 async function signNativeBinaries(appDir) {
