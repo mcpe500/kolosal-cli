@@ -1,6 +1,19 @@
 # API keys and secrets
 .env
 .env~
+.env.local
+.env.*.local
+
+# Code signing certificates and keys (NEVER commit these!)
+*.p12
+*.cer
+*.certSigningRequest
+*.key
+*.pem
+*.keychain
+*.keychain-db
+*.mobileprovision
+*.provisionprofile
 
 # gemini-cli settings
 .gemini/
