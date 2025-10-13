@@ -89,7 +89,7 @@ kolosal --version
 ### Linux Package (Debian/Ubuntu)
 ```bash
 # Download
-wget https://github.com/KolosalAI/kolosal-cli/releases/download/v0.1.0-pre/kolosal-code_0.1.1-pre_amd64.deb
+wget https://github.com/KolosalAI/kolosal-cli/releases/download/v0.1.1-pre/kolosal-code_0.1.1-pre_amd64.deb
 
 # Install
 sudo dpkg -i kolosal-code_0.1.1-pre_amd64.deb
