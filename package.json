@@ -1,6 +1,6 @@
 {
   "name": "@kolosal-code/kolosal-code",
-  "version": "0.0.14",
+  "version": "0.1.1-pre",
   "engines": {
     "node": ">=20.0.0"
   },
@@ -13,7 +13,7 @@
     "url": "git+https://github.com/KolosalAI/kolosal-code.git"
   },
   "config": {
-    "sandboxImageUri": "ghcr.io/KolosalAI/kolosal-code:0.0.14"
+    "sandboxImageUri": "ghcr.io/KolosalAI/kolosal-code:0.1.1-pre"
   },
   "scripts": {
     "start": "node scripts/start.js",

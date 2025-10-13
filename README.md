@@ -64,8 +64,8 @@ sudo installer -pkg KolosalCode-macos-signed.pkg -target /
 **Linux (Debian/Ubuntu):**
 ```bash
 # Download and install the .deb
-wget https://github.com/KolosalAI/kolosal-cli/releases/download/v0.1.0-pre/kolosal-code_0.0.14_amd64.deb
-sudo dpkg -i kolosal-code_0.0.14_amd64.deb
+wget https://github.com/KolosalAI/kolosal-cli/releases/download/v0.1.0-pre/kolosal-code_0.1.1_amd64.deb
+sudo dpkg -i kolosal-code_0.1.1_amd64.deb
 sudo apt-get install -f  # Fix dependencies if needed
 ```
 </details>

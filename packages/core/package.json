@@ -1,6 +1,6 @@
 {
   "name": "@kolosal-ai/kolosal-ai-core",
-  "version": "0.0.14",
+  "version": "0.1.1-pre",
   "description": "Kolosal Cli Core",
   "repository": {
     "type": "git",
