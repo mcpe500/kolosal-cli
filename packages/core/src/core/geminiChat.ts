@@ -792,24 +792,46 @@ export class GeminiChat {
           const consolidatedParts: Part[] = [];
           for (const part of turn.parts) {
             const lastPart = consolidatedParts[consolidatedParts.length - 1];
-            if (
-              lastPart &&
-              // Ensure lastPart is a pure text part
-              typeof lastPart.text === 'string' &&
-              !lastPart.functionCall &&
-              !lastPart.functionResponse &&
-              !lastPart.inlineData &&
-              !lastPart.fileData &&
-              !lastPart.thought &&
-              // Ensure current part is a pure text part
+            const isCurrentTextPart =
               typeof part.text === 'string' &&
               !part.functionCall &&
               !part.functionResponse &&
               !part.inlineData &&
               !part.fileData &&
-              !part.thought
-            ) {
-              lastPart.text += part.text;
+              !part.thought;
+
+            const isLastTextPart =
+              lastPart &&
+              typeof lastPart.text === 'string' &&
+              !lastPart.functionCall &&
+              !lastPart.functionResponse &&
+              !lastPart.inlineData &&
+              !lastPart.fileData &&
+              !lastPart.thought;
+
+            if (isCurrentTextPart && isLastTextPart) {
+              if ((lastPart.text as string) === part.text) {
+                continue;
+              }
+              lastPart.text = `${lastPart.text as string}${part.text as string}`;
+            } else if (isCurrentTextPart) {
+              const previousTextPart = [...consolidatedParts]
+                .reverse()
+                .find(
+                  (candidate) =>
+                    typeof candidate.text === 'string' &&
+                    !candidate.functionCall &&
+                    !candidate.functionResponse &&
+                    !candidate.inlineData &&
+                    !candidate.fileData &&
+                    !candidate.thought,
+                );
+
+              if ((previousTextPart?.text as string | undefined) === part.text) {
+                continue;
+              }
+
+              consolidatedParts.push({ ...part });
             } else {
               consolidatedParts.push({ ...part });
             }

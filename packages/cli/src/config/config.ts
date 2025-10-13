@@ -638,11 +638,7 @@ export async function loadCliConfig(
         : argv.openaiLogging) ?? false,
     systemPromptMappings: (settings.systemPromptMappings ?? [
       {
-        baseUrls: [
-          'https://dashscope.aliyuncs.com/compatible-mode/v1/',
-          'https://dashscope-intl.aliyuncs.com/compatible-mode/v1/',
-        ],
-        modelNames: ['qwen3-coder-plus'],
+        // Apply qwen3_coder template to all models by omitting baseUrls and modelNames
         template:
           'SYSTEM_TEMPLATE:{"name":"qwen3_coder","params":{"is_git_repository":{RUNTIME_VARS_IS_GIT_REPO},"sandbox":"{RUNTIME_VARS_SANDBOX}"}}',
       },

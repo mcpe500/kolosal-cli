@@ -22,6 +22,7 @@ import { GenerateContentResponse, FinishReason } from '@google/genai';
 import type OpenAI from 'openai';
 import { safeJsonParse } from '../../utils/safeJsonParse.js';
 import { StreamingToolCallParser } from './streamingToolCallParser.js';
+import { XmlStyleToolCallParser } from './xmlStyleToolCallParser.js';
 
 /**
  * Tool call accumulator for streaming responses
@@ -54,6 +55,28 @@ export class OpenAIContentConverter {
   private model: string;
   private streamingToolCallParser: StreamingToolCallParser =
     new StreamingToolCallParser();
+  private xmlStyleToolCallParser: XmlStyleToolCallParser =
+    new XmlStyleToolCallParser();
+  /** Buffer for text content during streaming to handle cross-chunk tool calls */
+  private streamingTextBuffer: string = '';
+  /** Buffer for text content that has already been emitted during streaming */
+  private streamingEmittedTextBuffer: string = '';
+  /** Buffer for completed XML tool calls during streaming - only emit at finish_reason */
+  private streamingXmlToolCalls: Array<{
+    id?: string;
+    name: string;
+    args: Record<string, unknown>;
+  }> = [];
+  /** Buffer for cleaned text content from XML parsing during streaming */
+  private streamingXmlTextContent: string = '';
+  /** Queue of normalized tool call IDs grouped by original identifier for pairing with responses */
+  private toolCallIdQueues: Map<string, string[]> = new Map();
+  /** Tracks suffix counters for generated tool call IDs to guarantee uniqueness */
+  private toolCallIdSuffixCounters: Map<string, number> = new Map();
+  /** Set of tool call IDs that have already been assigned in the current conversion */
+  private usedToolCallIds: Set<string> = new Set();
+  /** Sequencer for auto-generated tool call bases when the source ID is missing */
+  private autoToolCallIdCounter = 0;
 
   constructor(model: string) {
     this.model = model;
@@ -66,6 +89,19 @@ export class OpenAIContentConverter {
    */
   resetStreamingToolCalls(): void {
     this.streamingToolCallParser.reset();
+    this.xmlStyleToolCallParser.reset();
+    this.streamingTextBuffer = '';
+    this.streamingEmittedTextBuffer = '';
+    this.streamingXmlToolCalls = [];
+    this.streamingXmlTextContent = '';
+    this.resetToolCallIdState();
+  }
+
+  private resetToolCallIdState(): void {
+    this.toolCallIdQueues.clear();
+    this.toolCallIdSuffixCounters.clear();
+    this.usedToolCallIds.clear();
+    this.autoToolCallIdCounter = 0;
   }
 
   /**
@@ -203,6 +239,8 @@ export class OpenAIContentConverter {
   ): OpenAI.Chat.ChatCompletionMessageParam[] {
     const messages: OpenAI.Chat.ChatCompletionMessageParam[] = [];
 
+    this.resetToolCallIdState();
+
     // Handle system instruction from config
     this.addSystemInstructionMessage(request, messages);
 
@@ -247,7 +285,31 @@ export class OpenAIContentConverter {
   ): void {
     if (Array.isArray(contents)) {
       for (const content of contents) {
-        this.processContent(content, messages);
+        // Defensive check: if content is a bare array of Parts without role, 
+        // it's malformed - this is likely tool responses that should have been wrapped properly
+        if (Array.isArray(content)) {
+          console.warn('[OpenAIContentConverter] Detected bare Part[] array in conversation history - processing as parts without role wrapper');
+          // Check if these are function responses (tool results)
+          const hasFunctionResponse = content.some(part => 
+            typeof part === 'object' && part !== null && 'functionResponse' in part
+          );
+          
+          if (hasFunctionResponse) {
+            // Process as a temporary user content to extract tool messages
+            this.processContent({
+              role: 'user',
+              parts: content
+            } as Content, messages);
+          } else {
+            // For other types of parts, wrap as user message
+            this.processContent({
+              role: 'user',
+              parts: content
+            } as Content, messages);
+          }
+        } else {
+          this.processContent(content, messages);
+        }
       }
     } else if (contents) {
       this.processContent(contents, messages);
@@ -266,6 +328,36 @@ export class OpenAIContentConverter {
       return;
     }
 
+    // Handle case where content is an array of Parts (malformed conversation history)
+    if (Array.isArray(content)) {
+      // Convert PartUnion[] to Part[] by filtering out strings and handling them
+      const parts: Part[] = [];
+      for (const part of content) {
+        if (typeof part === 'string') {
+          parts.push({ text: part });
+        } else {
+          parts.push(part);
+        }
+      }
+      
+      const parsedParts = this.parseParts(parts);
+      
+      // Handle function responses (tool results) first
+      if (parsedParts.functionResponses.length > 0) {
+        for (const funcResponse of parsedParts.functionResponses) {
+          messages.push({
+            role: 'tool' as const,
+            tool_call_id: this.consumeToolCallId(funcResponse.id),
+            content:
+              typeof funcResponse.response === 'string'
+                ? funcResponse.response
+                : JSON.stringify(funcResponse.response),
+          });
+        }
+      }
+      return;
+    }
+
     if (!this.isContentObject(content)) return;
 
     const parsedParts = this.parseParts(content.parts || []);
@@ -275,7 +367,7 @@ export class OpenAIContentConverter {
       for (const funcResponse of parsedParts.functionResponses) {
         messages.push({
           role: 'tool' as const,
-          tool_call_id: funcResponse.id || '',
+          tool_call_id: this.consumeToolCallId(funcResponse.id),
           content:
             typeof funcResponse.response === 'string'
               ? funcResponse.response
@@ -288,7 +380,7 @@ export class OpenAIContentConverter {
     // Handle model messages with function calls
     if (content.role === 'model' && parsedParts.functionCalls.length > 0) {
       const toolCalls = parsedParts.functionCalls.map((fc, index) => ({
-        id: fc.id || `call_${index}`,
+        id: this.assignToolCallId(fc.id),
         type: 'function' as const,
         function: {
           name: fc.name || '',
@@ -296,9 +388,17 @@ export class OpenAIContentConverter {
         },
       }));
 
+      const dedupedTextParts = this.deduplicateSequentialStrings(
+        parsedParts.textParts,
+      );
+
+      // For OpenAI-compatible APIs that don't support null content with tool calls,
+      // use empty string instead of null when there are tool calls present
+      const contentText = dedupedTextParts.join('');
+      
       messages.push({
         role: 'assistant' as const,
-        content: parsedParts.textParts.join('') || null,
+        content: contentText || '',
         tool_calls: toolCalls,
       });
       return;
@@ -430,6 +530,85 @@ export class OpenAIContentConverter {
     return contentArray.length > 0
       ? { role: 'user' as const, content: contentArray }
       : null;
+  }
+
+  private assignToolCallId(originalId?: string | null): string {
+    const normalizedOriginal = this.normalizeToolCallId(originalId);
+    const base = normalizedOriginal ?? this.generateAutoToolCallBase();
+    const candidate = this.getUniqueToolCallId(base);
+    const queueKey = this.getToolCallTrackingKey(originalId);
+    const queue = this.toolCallIdQueues.get(queueKey) ?? [];
+    queue.push(candidate);
+    this.toolCallIdQueues.set(queueKey, queue);
+    return candidate;
+  }
+
+  private consumeToolCallId(originalId?: string | null): string {
+    const queueKey = this.getToolCallTrackingKey(originalId);
+    const queue = this.toolCallIdQueues.get(queueKey);
+
+    if (queue && queue.length > 0) {
+      const id = queue.shift()!;
+      if (queue.length === 0) {
+        this.toolCallIdQueues.delete(queueKey);
+      } else {
+        this.toolCallIdQueues.set(queueKey, queue);
+      }
+      return id;
+    }
+
+    const normalizedOriginal = this.normalizeToolCallId(originalId);
+    if (normalizedOriginal) {
+      return this.getUniqueToolCallId(normalizedOriginal);
+    }
+
+    return this.getUniqueToolCallId('unmatched_tool_response');
+  }
+
+  private getUniqueToolCallId(base: string): string {
+    let suffix = this.toolCallIdSuffixCounters.get(base) ?? 0;
+    let candidate = suffix === 0 ? base : `${base}__${suffix}`;
+
+    while (this.usedToolCallIds.has(candidate)) {
+      suffix += 1;
+      candidate = `${base}__${suffix}`;
+    }
+
+    this.toolCallIdSuffixCounters.set(base, suffix + 1);
+    this.usedToolCallIds.add(candidate);
+    return candidate;
+  }
+
+  private getToolCallTrackingKey(originalId?: string | null): string {
+    const normalized = this.normalizeToolCallId(originalId);
+    return normalized ?? '__undefined__';
+  }
+
+  private normalizeToolCallId(originalId?: string | null): string | undefined {
+    if (originalId === undefined || originalId === null) {
+      return undefined;
+    }
+    const trimmed = `${originalId}`.trim();
+    return trimmed.length > 0 ? trimmed : undefined;
+  }
+
+  private generateAutoToolCallBase(): string {
+    const base = `auto_tool_call_${this.autoToolCallIdCounter}`;
+    this.autoToolCallIdCounter += 1;
+    return base;
+  }
+
+  /**
+   * Remove exact duplicate strings that appear sequentially in an array while preserving order
+   */
+  private deduplicateSequentialStrings(values: string[]): string[] {
+    const deduped: string[] = [];
+    for (const value of values) {
+      if (deduped.length === 0 || deduped[deduped.length - 1] !== value) {
+        deduped.push(value);
+      }
+    }
+    return deduped;
   }
 
   /**
@@ -591,10 +770,53 @@ export class OpenAIContentConverter {
     if (choice) {
       const parts: Part[] = [];
 
-      // Handle text content
+      // Handle text content with buffering to prevent tool call leakage
       if (choice.delta?.content) {
         if (typeof choice.delta.content === 'string') {
-          parts.push({ text: choice.delta.content });
+          // Add content to buffer for later processing
+          this.streamingTextBuffer += choice.delta.content;
+          
+          // Try to process content through XML parser to handle streaming
+          const xmlResult = this.xmlStyleToolCallParser.addChunk(choice.delta.content);
+          
+          if (xmlResult.complete && xmlResult.toolCalls) {
+            // XML tool call is complete, buffer it until finish_reason
+            this.streamingXmlToolCalls.push(...xmlResult.toolCalls);
+            if (xmlResult.textContent) {
+              this.streamingXmlTextContent += xmlResult.textContent;
+            }
+            // Clear the buffer since we've processed and buffered the content
+            this.streamingTextBuffer = '';
+          } else if (xmlResult.error) {
+            // Log XML parsing error for debugging but continue processing
+            console.warn('XML tool call parsing error:', xmlResult.error);
+            
+            // Reset the XML parser to clear any corrupted state
+            this.xmlStyleToolCallParser.reset();
+            
+            // Check if buffered content contains tool call markers (possible cross-chunk)
+            if (XmlStyleToolCallParser.containsXmlToolCallMarkers(this.streamingTextBuffer)) {
+              // Don't emit buffered text since it likely contains tool call markers
+              // Keep buffering until stream completes
+            } else {
+              // Safe to emit the current content
+              parts.push({ text: choice.delta.content });
+              this.streamingEmittedTextBuffer += choice.delta.content;
+            }
+          } else {
+            // XML parsing not complete yet
+            // Be conservative: if we ever detect tool call markers in the buffer, 
+            // don't emit any text until the stream completes to prevent cross-chunk leakage
+            if (XmlStyleToolCallParser.containsXmlToolCallMarkers(this.streamingTextBuffer)) {
+              // Buffer contains tool call markers - suppress all text emission until stream completes
+              // This prevents the cross-chunk tool call leakage issue
+              // Don't add text to parts - keep buffering until stream completes
+            } else {
+              // No tool call markers detected anywhere, safe to stream this chunk
+              parts.push({ text: choice.delta.content });
+              this.streamingEmittedTextBuffer += choice.delta.content;
+            }
+          }
         }
       }
 
@@ -625,6 +847,7 @@ export class OpenAIContentConverter {
 
       // Only emit function calls when streaming is complete (finish_reason is present)
       if (choice.finish_reason) {
+        // Handle JSON-style tool calls (OpenAI format)
         const completedToolCalls =
           this.streamingToolCallParser.getCompletedToolCalls();
 
@@ -642,8 +865,74 @@ export class OpenAIContentConverter {
           }
         }
 
-        // Clear the parser for the next stream
+        // Handle buffered XML-style tool calls (completed during streaming)
+        for (const toolCall of this.streamingXmlToolCalls) {
+          parts.push({
+            functionCall: {
+              id: toolCall.id || `xml_call_${Date.now()}_${Math.random().toString(36).substring(2, 9)}`,
+              name: toolCall.name,
+              args: toolCall.args,
+            },
+          });
+        }
+
+        // Handle XML-style tool calls (if any remaining in parser)
+        const xmlCompletedToolCalls = this.xmlStyleToolCallParser.getCompletedToolCalls();
+        for (const toolCall of xmlCompletedToolCalls) {
+          parts.push({
+            functionCall: {
+              id: toolCall.id || `xml_call_${Date.now()}_${Math.random().toString(36).substring(2, 9)}`,
+              name: toolCall.name,
+              args: toolCall.args,
+            },
+          });
+        }
+
+        // Add buffered XML text content (already cleaned) - only if not already emitted
+        if (this.streamingXmlTextContent.trim() && this.streamingEmittedTextBuffer.length === 0) {
+          parts.push({ text: this.streamingXmlTextContent });
+        }
+
+        // Process any remaining buffered text content that hasn't been emitted yet
+        // Only emit text that wasn't already streamed to prevent duplication
+        const unemittedTextBuffer = this.streamingTextBuffer.slice(this.streamingEmittedTextBuffer.length);
+        if (unemittedTextBuffer.trim()) {
+          // Try one final processing of the unemitted buffered content
+          const tempParser = new XmlStyleToolCallParser();
+          const finalResult = tempParser.addChunk(unemittedTextBuffer);
+          
+          if (finalResult.complete && finalResult.textContent) {
+            // Use the cleaned text content with tool calls removed
+            parts.push({ text: finalResult.textContent });
+          } else if (finalResult.toolCalls && finalResult.toolCalls.length > 0) {
+            // Found additional tool calls in the buffer
+            for (const toolCall of finalResult.toolCalls) {
+              parts.push({
+                functionCall: {
+                  id: toolCall.id || `final_xml_call_${Date.now()}_${Math.random().toString(36).substring(2, 9)}`,
+                  name: toolCall.name,
+                  args: toolCall.args,
+                },
+              });
+            }
+            // Add cleaned text if available
+            if (finalResult.textContent) {
+              parts.push({ text: finalResult.textContent });
+            }
+          } else if (!XmlStyleToolCallParser.containsXmlToolCallMarkers(unemittedTextBuffer)) {
+            // No tool call markers found, safe to emit as regular text
+            parts.push({ text: unemittedTextBuffer });
+          }
+          // If buffer contains tool call markers but parsing failed, we don't emit it
+        }
+
+        // Clear both parsers and buffers for the next stream
         this.streamingToolCallParser.reset();
+        this.xmlStyleToolCallParser.reset();
+        this.streamingTextBuffer = '';
+        this.streamingEmittedTextBuffer = '';
+        this.streamingXmlToolCalls = [];
+        this.streamingXmlTextContent = '';
       }
 
       // Only include finishReason key if finish_reason is present

@@ -34,6 +34,7 @@ interface HistoryItemDisplayProps {
   config: Config;
   isFocused?: boolean;
   commands?: readonly SlashCommand[];
+  isFirstAssistantMessage?: boolean;
 }
 
 const HistoryItemDisplayComponent: React.FC<HistoryItemDisplayProps> = ({
@@ -44,25 +45,28 @@ const HistoryItemDisplayComponent: React.FC<HistoryItemDisplayProps> = ({
   config,
   commands,
   isFocused = true,
+  isFirstAssistantMessage = false,
 }) => (
   <Box flexDirection="column" key={item.id}>
     {/* Render standard message types */}
     {item.type === 'user' && <UserMessage text={item.text} />}
     {item.type === 'user_shell' && <UserShellMessage text={item.text} />}
-    {item.type === 'gemini' && (
+    {item.type === 'gemini' && item.text.trim() && (
       <GeminiMessage
         text={item.text}
         isPending={isPending}
         availableTerminalHeight={availableTerminalHeight}
         terminalWidth={terminalWidth}
+        isFirstAssistantMessage={isFirstAssistantMessage}
       />
     )}
-    {item.type === 'gemini_content' && (
+    {item.type === 'gemini_content' && item.text.trim() && (
       <GeminiMessageContent
         text={item.text}
         isPending={isPending}
         availableTerminalHeight={availableTerminalHeight}
         terminalWidth={terminalWidth}
+        isFirstAssistantMessage={isFirstAssistantMessage}
       />
     )}
     {item.type === 'info' && <InfoMessage text={item.text} />}

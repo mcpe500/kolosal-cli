@@ -2911,17 +2911,28 @@ const App = ({ config, settings, startupWarnings = [], version }: AppProps) => {
                 settings.merged.ui?.hideBanner || config.getScreenReader()
               ) && <Header version={version} nightly={nightly} />}
             </Box>,
-            ...history.map((h) => (
-              <HistoryItemDisplay
-                terminalWidth={mainAreaWidth}
-                availableTerminalHeight={staticAreaMaxItemHeight}
-                key={h.id}
-                item={h}
-                isPending={false}
-                config={config}
-                commands={slashCommands}
-              />
-            )),
+            ...history.map((h, index) => {
+              // Find the first assistant message in the history
+              const firstAssistantMessageIndex = history.findIndex(
+                (item) => item.type === 'gemini' || item.type === 'gemini_content'
+              );
+              const isFirstAssistantMessage = 
+                (h.type === 'gemini' || h.type === 'gemini_content') && 
+                index === firstAssistantMessageIndex;
+
+              return (
+                <HistoryItemDisplay
+                  terminalWidth={mainAreaWidth}
+                  availableTerminalHeight={staticAreaMaxItemHeight}
+                  key={h.id}
+                  item={h}
+                  isPending={false}
+                  config={config}
+                  commands={slashCommands}
+                  isFirstAssistantMessage={isFirstAssistantMessage}
+                />
+              );
+            }),
           ]}
         >
           {(item) => item}

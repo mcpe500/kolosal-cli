@@ -23,7 +23,6 @@ import type {
 } from '@kolosal-ai/kolosal-ai-core';
 import { AgentExecutionDisplay } from '../subagents/index.js';
 import { PlanSummaryDisplay } from '../PlanSummaryDisplay.js';
-import { LeftBorderPanel } from '../shared/LeftBorderPanel.js';
 
 const STATIC_HEIGHT = 1;
 const RESERVED_LINE_COUNT = 5; // for tool name, status, padding etc.
@@ -239,19 +238,8 @@ export const ToolMessage: React.FC<ToolMessageProps> = ({
   // Use the custom hook to determine the display type
   const displayRenderer = useResultDisplayRenderer(resultDisplay);
 
-  const borderColor = Colors.AccentBlue;
-
   return (
-    <LeftBorderPanel
-      accentColor={borderColor}
-      ruleMarginRight={1}
-      contentProps={{
-        paddingLeft: 1,
-        paddingTop: 0,
-        paddingBottom: 0,
-        flexDirection: 'column',
-      }}
-    >
+    <Box flexDirection="column">
       <Box minHeight={1}>
         <ToolStatusIndicator status={status} />
         <ToolInfo
@@ -263,7 +251,7 @@ export const ToolMessage: React.FC<ToolMessageProps> = ({
         {emphasis === 'high' && <TrailingIndicator />}
       </Box>
       {displayRenderer.type !== 'none' && (
-        <Box paddingLeft={STATUS_INDICATOR_WIDTH} width="100%" marginTop={1}>
+        <Box paddingLeft={STATUS_INDICATOR_WIDTH - 1} width="100%" marginTop={1}>
           <Box flexDirection="column">
             {displayRenderer.type === 'todo' && (
               <TodoResultRenderer data={displayRenderer.data} />
@@ -301,7 +289,7 @@ export const ToolMessage: React.FC<ToolMessageProps> = ({
           </Box>
         </Box>
       )}
-    </LeftBorderPanel>
+    </Box>
   );
 };
 
@@ -312,7 +300,7 @@ type ToolStatusIndicatorProps = {
 const ToolStatusIndicator: React.FC<ToolStatusIndicatorProps> = ({
   status,
 }) => (
-  <Box minWidth={STATUS_INDICATOR_WIDTH}>
+  <Box minWidth={2}>
     {status === ToolCallStatus.Pending && (
       <Text color={Colors.AccentGreen}>{TOOL_STATUS.PENDING}</Text>
     )}
