@@ -11,11 +11,7 @@ import type { IndividualToolCallDisplay } from '../../types.js';
 import { ToolCallStatus } from '../../types.js';
 import { ToolMessage } from './ToolMessage.js';
 import { ToolConfirmationMessage } from './ToolConfirmationMessage.js';
-import { Colors } from '../../colors.js';
 import type { Config } from '@kolosal-ai/kolosal-ai-core';
-import { SHELL_COMMAND_NAME } from '../../constants.js';
-import { LeftBorderPanel } from '../shared/LeftBorderPanel.js';
-import { getDimmerPanelBackgroundColor } from '../shared/panelStyles.js';
 
 interface ToolGroupMessageProps {
   groupId: number;
@@ -34,13 +30,6 @@ export const ToolGroupMessage: React.FC<ToolGroupMessageProps> = ({
   config,
   isFocused = true,
 }) => {
-  const hasPending = !toolCalls.every(
-    (t) => t.status === ToolCallStatus.Success,
-  );
-  const isShellCommand = toolCalls.some((t) => t.name === SHELL_COMMAND_NAME);
-  const borderColor =
-    hasPending || isShellCommand ? Colors.AccentYellow : Colors.Gray;
-
   const staticHeight = /* border */ 2 + /* marginBottom */ 1;
   // This is a bit of a magic number, but it accounts for the border and
   // marginLeft.
@@ -71,17 +60,15 @@ export const ToolGroupMessage: React.FC<ToolGroupMessageProps> = ({
     : undefined;
 
   return (
-    <LeftBorderPanel
-      accentColor={borderColor}
-      backgroundColor={getDimmerPanelBackgroundColor()}
+    <Box
+      flexDirection="column"
       width="100%"
-      marginLeft={1}
+      marginLeft={0}
       marginTop={1}
-      marginBottom={1}
-      contentProps={{
-        flexDirection: 'column',
-        padding: 1,
-      }}
+      paddingTop={1}
+      paddingLeft={0}
+      paddingRight={1}
+      paddingBottom={0}
     >
       {toolCalls.map((tool) => {
         const isConfirming = toolAwaitingApproval?.callId === tool.callId;
@@ -124,6 +111,6 @@ export const ToolGroupMessage: React.FC<ToolGroupMessageProps> = ({
           </Box>
         );
       })}
-    </LeftBorderPanel>
+    </Box>
   );
 };

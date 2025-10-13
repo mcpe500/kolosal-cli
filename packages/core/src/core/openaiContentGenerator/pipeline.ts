@@ -242,6 +242,66 @@ export class ContentGenerationPipeline {
   ): Promise<OpenAI.Chat.ChatCompletionCreateParams> {
     const rawMessages = this.converter.convertGeminiRequestToOpenAI(request);
     const messages = normalizeOpenAIMessages(rawMessages);
+    
+    // Debug logging: check for duplicate tool call IDs and message structure
+    const assistantMsgs = messages.filter(m => m.role === 'assistant' && 'tool_calls' in m);
+    const toolMsgs = messages.filter(m => m.role === 'tool');
+    if (assistantMsgs.length > 0 && toolMsgs.length > 0) {
+      const toolCallIds = assistantMsgs.flatMap(m => (m as any).tool_calls?.map((tc: any) => tc.id) || []);
+      const toolResponseIds = toolMsgs.map(m => (m as any).tool_call_id);
+      console.log('[DEBUG] Tool call IDs:', toolCallIds);
+      console.log('[DEBUG] Tool response IDs:', toolResponseIds);
+      
+      // Log full message structure to understand ordering
+      const roleSequence = messages.map((m, i) => {
+        if (m.role === 'assistant' && 'tool_calls' in m) {
+          return `assistant[calls:${(m as any).tool_calls?.length || 0}]`;
+        } else if (m.role === 'tool') {
+          return `tool[${(m as any).tool_call_id}]`;
+        }
+        return m.role;
+      }).join(' -> ');
+      console.log('[DEBUG] Message sequence:', roleSequence);
+      
+      // Check for duplicate IDs
+      if (toolCallIds.length !== new Set(toolCallIds).size) {
+        console.error('[ERROR] Duplicate tool_call IDs detected!', toolCallIds);
+      }
+      
+      // Check for orphaned tool responses
+      const toolCallIdSet = new Set(toolCallIds);
+      const orphanedResponses = toolResponseIds.filter(id => !toolCallIdSet.has(id));
+      if (orphanedResponses.length > 0) {
+        console.error('[ERROR] Orphaned tool responses (no matching call):', orphanedResponses);
+      }
+      
+      // Check for missing tool responses
+      const toolResponseIdSet = new Set(toolResponseIds);
+      const missingResponses = toolCallIds.filter(id => !toolResponseIdSet.has(id));
+      if (missingResponses.length > 0) {
+        console.error('[ERROR] Missing tool responses (call without response):', missingResponses);
+      }
+      
+      // Log a sample of messages with tool interactions for debugging
+      const toolRelatedMsgs = messages.filter(m => 
+        m.role === 'assistant' && 'tool_calls' in m || m.role === 'tool'
+      );
+      console.log('[DEBUG] Tool interaction messages:', JSON.stringify(toolRelatedMsgs.map(m => ({
+        role: m.role,
+        content: m.role === 'assistant' ? (m as any).content : undefined,
+        tool_calls: m.role === 'assistant' ? (m as any).tool_calls?.map((tc: any) => ({ id: tc.id, name: tc.function.name })) : undefined,
+        tool_call_id: m.role === 'tool' ? (m as any).tool_call_id : undefined
+      })), null, 2));
+      
+      // Also write to a temp file for easier debugging
+      try {
+        const fs = require('fs');
+        fs.writeFileSync('/tmp/kolosal-debug-messages.json', JSON.stringify(messages, null, 2));
+        console.log('[DEBUG] Full messages written to /tmp/kolosal-debug-messages.json');
+      } catch (e) {
+        // Ignore write errors
+      }
+    }
 
     // Apply provider-specific enhancements
     const baseRequest: OpenAI.Chat.ChatCompletionCreateParams = {

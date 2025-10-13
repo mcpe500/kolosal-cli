@@ -79,9 +79,8 @@ export function LeftBorderPanel({
       <Box
         ref={contentRef}
         flexDirection={contentFlexDirection ?? 'column'}
-  flexGrow={contentFlexGrow ?? 1}
-  minWidth={0}
-        backgroundColor={backgroundColor}
+        flexGrow={contentFlexGrow ?? 1}
+        minWidth={0}
         minHeight={0}
         {...restContentProps}
       >

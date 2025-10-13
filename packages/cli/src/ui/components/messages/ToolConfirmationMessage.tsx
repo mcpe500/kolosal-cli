@@ -92,7 +92,7 @@ export const ToolConfirmationMessage: React.FC<
     ];
 
     return (
-      <Box flexDirection="column">
+      <Box flexDirection="column" paddingLeft={1}>
         <Box>
           <Text wrap="truncate">Do you want to proceed?</Text>
         </Box>
@@ -340,7 +340,7 @@ export const ToolConfirmationMessage: React.FC<
   }
 
   return (
-    <Box flexDirection="column" padding={1} width={childWidth}>
+    <Box flexDirection="column" padding={1} paddingLeft={2} width={childWidth}>
       {/* Body Content (Diff Renderer or Command Info) */}
       {/* No separate context display here anymore for edits */}
       <Box flexGrow={1} flexShrink={1} overflow="hidden" marginBottom={1}>
