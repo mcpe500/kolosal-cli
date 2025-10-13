@@ -888,13 +888,30 @@ export class OpenAIContentConverter {
           });
         }
 
-        // Add buffered XML text content (already cleaned) - only if not already emitted
-        if (this.streamingXmlTextContent.trim() && this.streamingEmittedTextBuffer.length === 0) {
-          parts.push({ text: this.streamingXmlTextContent });
+        // BUGFIX: Add buffered XML text content (already cleaned by parser to remove tool call markers)
+        // The parser extracts ALL text from chunks it processed, including text that may have been
+        // emitted before tool call markers were detected. To avoid duplication, only emit the
+        // additional text that wasn't already streamed.
+        if (this.streamingXmlTextContent.trim()) {
+          // If some text was already emitted before tool markers appeared, XML text includes it
+          // Only emit if we haven't already emitted this text or if there's additional text
+          if (this.streamingEmittedTextBuffer.length === 0) {
+            // No text was emitted yet, emit all XML text
+            parts.push({ text: this.streamingXmlTextContent });
+          } else if (this.streamingXmlTextContent.startsWith(this.streamingEmittedTextBuffer)) {
+            // XML text includes the already-emitted text, only emit the additional part
+            const additionalText = this.streamingXmlTextContent.slice(this.streamingEmittedTextBuffer.length);
+            if (additionalText.trim()) {
+              parts.push({ text: additionalText });
+            }
+          } else {
+            // XML text is completely different (shouldn't happen, but handle it)
+            parts.push({ text: this.streamingXmlTextContent });
+          }
         }
 
         // Process any remaining buffered text content that hasn't been emitted yet
-        // Only emit text that wasn't already streamed to prevent duplication
+        // This handles cases where text contains tool call markers but XML parsing didn't complete
         const unemittedTextBuffer = this.streamingTextBuffer.slice(this.streamingEmittedTextBuffer.length);
         if (unemittedTextBuffer.trim()) {
           // Try one final processing of the unemitted buffered content
