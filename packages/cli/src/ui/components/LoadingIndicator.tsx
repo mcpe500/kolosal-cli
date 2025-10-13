@@ -44,7 +44,7 @@ export const LoadingIndicator: React.FC<LoadingIndicatorProps> = ({
       : null;
 
   return (
-    <Box paddingLeft={0} flexDirection="column">
+    <Box paddingLeft={0} flexDirection="column" marginTop={1}>
       {/* Main loading line */}
       <Box
         width="100%"
