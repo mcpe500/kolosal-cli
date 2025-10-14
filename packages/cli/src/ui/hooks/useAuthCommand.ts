@@ -6,12 +6,11 @@
 
 import { useState, useCallback, useEffect } from 'react';
 import type { LoadedSettings, SettingScope } from '../../config/settings.js';
-import { AuthType, type Config } from '@kolosal-ai/kolosal-ai-core';
+import type { AuthType, Config } from '@kolosal-ai/kolosal-ai-core';
 import {
   clearCachedCredentialFile,
   getErrorMessage,
 } from '@kolosal-ai/kolosal-ai-core';
-import { runExitCleanup } from '../../utils/cleanup.js';
 import { 
   getCurrentModelAuthType,
   type SavedModelEntry 
@@ -59,30 +58,16 @@ export const useAuthCommand = (
   }, [isAuthDialogOpen, currentAuthType, config, setAuthError, openAuthDialog]);
 
   const handleAuthSelect = useCallback(
-    async (authType: AuthType | undefined, scope: SettingScope) => {
+    async (authType: AuthType | undefined, _scope: SettingScope) => {
       if (authType) {
         await clearCachedCredentialFile();
 
         // Note: We don't save selectedAuthType anymore - authType is per-model
-        if (
-          authType === AuthType.USE_OPENAI &&
-          config.isBrowserLaunchSuppressed()
-        ) {
-          runExitCleanup();
-          console.log(
-            `
-----------------------------------------------------------------
-Logging in with Google... Please restart Gemini CLI to continue.
-----------------------------------------------------------------
-            `,
-          );
-          process.exit(0);
-        }
       }
       setIsAuthDialogOpen(false);
       setAuthError(null);
     },
-    [setAuthError, config],
+    [setAuthError],
   );
 
   const cancelAuthentication = useCallback(() => {
