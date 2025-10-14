@@ -13,7 +13,7 @@
 set -e
 
 # Version to install
-VERSION="${VERSION:-0.1.0-pre}"
+VERSION="${VERSION:-0.1.1-pre}"
 PACKAGE_VERSION="0.1.1"
 
 # GitHub release URLs
