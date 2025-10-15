@@ -192,6 +192,11 @@ export function KeypressProvider({
     };
 
     const handleKeypress = (_: unknown, key: Key) => {
+      // On Linux, ignore input immediately after initialization to prevent spurious keypresses
+      if (process.platform === 'linux' && !initializationDelayComplete) {
+        return;
+      }
+      
       if (key.name === 'paste-start') {
         isPaste = true;
         return;
@@ -438,8 +443,24 @@ export function KeypressProvider({
       clearRawFlushTimeout();
     };
 
+    let initializationDelayComplete = false;
+    
+    // On Linux, add a small delay to avoid processing spurious input immediately after terminal initialization
+    if (process.platform === 'linux') {
+      setTimeout(() => {
+        initializationDelayComplete = true;
+      }, 200);
+    } else {
+      initializationDelayComplete = true;
+    }
+
     const handleRawKeypress = (_data: Buffer) => {
       const data = Buffer.isBuffer(_data) ? _data : Buffer.from(_data, 'utf8');
+
+      // On Linux, ignore input immediately after initialization to prevent spurious keypresses
+      if (process.platform === 'linux' && !initializationDelayComplete) {
+        return;
+      }
 
       // Buffer the incoming data
       rawDataBuffer = Buffer.concat([rawDataBuffer, data]);
@@ -449,9 +470,10 @@ export function KeypressProvider({
       // On some Windows terminals, during a paste, the terminal might send a
       // single return character chunk. In this case, we need to wait a time period
       // to know if it is part of a paste or just a return character.
+      // However, on Linux this can cause spurious return events that auto-trigger dialogs.
       const isReturnChar =
         rawDataBuffer.length <= 2 && rawDataBuffer.includes(0x0d);
-      if (isReturnChar) {
+      if (isReturnChar && process.platform === 'win32') {
         rawFlushTimeout = setTimeout(flushRawBuffer, 100);
       } else {
         flushRawBuffer();
