@@ -6,7 +6,8 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import { spawn, ChildProcess } from 'node:child_process';
+import { spawn } from 'node:child_process';
+import type { ChildProcess } from 'node:child_process';
 import { existsSync } from 'node:fs';
 import { join, dirname } from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -86,14 +87,17 @@ export class KolosalServerManager {
    * Find the kolosal-server executable in the distribution
    */
   private findServerExecutable(): string {
+    // Determine platform-specific directory
+    const platform = process.platform === 'darwin' ? 'mac' : 'linux';
+    
     // Check if we're in development or production
     const possiblePaths = [
       // From CLI package dist to main project dist
-      join(__dirname, '..', '..', '..', '..', '..', 'dist', 'mac', 'kolosal-app', 'bin', 'kolosal-server'),
+      join(__dirname, '..', '..', '..', '..', '..', 'dist', platform, 'kolosal-app', 'bin', 'kolosal-server'),
       // From CLI package to main project dist (development)
-      join(__dirname, '..', '..', '..', '..', 'dist', 'mac', 'kolosal-app', 'bin', 'kolosal-server'),
+      join(__dirname, '..', '..', '..', '..', 'dist', platform, 'kolosal-app', 'bin', 'kolosal-server'),
       // Direct paths for development
-      join(__dirname, '..', '..', '..', 'dist', 'mac', 'kolosal-app', 'bin', 'kolosal-server'),
+      join(__dirname, '..', '..', '..', 'dist', platform, 'kolosal-app', 'bin', 'kolosal-server'),
       // Production paths (in packaged app)
       join(__dirname, '..', '..', 'bin', 'kolosal-server'),
       join(__dirname, '..', 'bin', 'kolosal-server'),
@@ -262,10 +266,10 @@ export class KolosalServerManager {
    */
   private async spawnServerProcess(): Promise<void> {
     const args = [
-      '--port', this.config.port.toString(),
-      '--host', this.config.host,
       '--log-level', this.config.debug ? 'DEBUG' : 'INFO',
       ...this.resolveConfigArgs(),
+      '--port', this.config.port.toString(),
+      '--host', this.config.host,
       ...this.config.serverArgs
     ];
 
@@ -334,7 +338,7 @@ export class KolosalServerManager {
         if (isReady) {
           return;
         }
-      } catch (error) {
+      } catch (_error) {
         // Expected during startup
       }
 

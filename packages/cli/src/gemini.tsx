@@ -25,6 +25,7 @@ import { basename } from 'node:path';
 import v8 from 'node:v8';
 import React from 'react';
 import { validateAuthMethod } from './config/auth.js';
+import type { SavedModelEntry } from './config/savedModels.js';
 import { loadCliConfig, parseArguments } from './config/config.js';
 import { loadExtensions } from './config/extension.js';
 import type { DnsResolutionOrder, LoadedSettings } from './config/settings.js';
@@ -37,7 +38,11 @@ import { themeManager } from './ui/themes/theme-manager.js';
 import { ConsolePatcher } from './ui/utils/ConsolePatcher.js';
 import { detectAndEnableKittyProtocol } from './ui/utils/kittyProtocolDetector.js';
 import { checkForUpdates } from './ui/utils/updateCheck.js';
-import { cleanupCheckpoints, registerCleanup } from './utils/cleanup.js';
+import {
+  cleanupCheckpoints,
+  registerCleanup,
+  runExitCleanup,
+} from './utils/cleanup.js';
 import { AppEvent, appEvents } from './utils/events.js';
 import { handleAutoUpdate } from './utils/handleAutoUpdate.js';
 import { readStdin } from './utils/readStdin.js';
@@ -131,10 +136,59 @@ ${reason.stack}`
   });
 }
 
-function ensureDefaultAuthType(settings: LoadedSettings) {
+function ensureDefaultAuthType(_settings: LoadedSettings) {
   // Note: authType is now per-model in savedModels, not a global setting
   // This function is kept for backward compatibility but does nothing
   return;
+}
+
+let cleanupHandlersInstalled = false;
+
+function setupProcessExitHandlers(): void {
+  if (cleanupHandlersInstalled) {
+    return;
+  }
+  cleanupHandlersInstalled = true;
+
+  const nativeExit = process.exit.bind(process);
+  let cleanupInFlight = false;
+
+  const triggerCleanup = (code?: number | string) => {
+    if (cleanupInFlight) {
+      const immediateCode =
+        typeof code === 'number' ? code : process.exitCode ?? 0;
+      nativeExit(immediateCode);
+      return;
+    }
+
+    cleanupInFlight = true;
+    const exitCode =
+      typeof code === 'number' ? code : process.exitCode ?? 0;
+
+    void runExitCleanup()
+      .catch(() => {
+        // Swallow cleanup errors; exiting regardless.
+      })
+      .finally(() => {
+        nativeExit(exitCode);
+      });
+  };
+
+  process.exit = ((code?: number | string) => {
+    triggerCleanup(code);
+    return undefined as never;
+  }) as typeof process.exit;
+
+  const handleSignal = (signal: NodeJS.Signals) => {
+    const code = signal === 'SIGINT' ? 130 : signal === 'SIGTERM' ? 143 : process.exitCode ?? 0;
+    triggerCleanup(code);
+  };
+
+  process.once('SIGINT', () => handleSignal('SIGINT'));
+  process.once('SIGTERM', () => handleSignal('SIGTERM'));
+  process.once('beforeExit', (code) => {
+    triggerCleanup(code);
+  });
 }
 
 export async function startInteractiveUI(
@@ -176,6 +230,7 @@ export async function startInteractiveUI(
 }
 
 export async function main() {
+  setupProcessExitHandlers();
   setupUnhandledRejectionHandler();
   const workspaceRoot = process.cwd();
   const settings = loadSettings(workspaceRoot);
@@ -273,10 +328,17 @@ export async function main() {
   }
 
   // Get authType from current model (used in multiple places below)
-  const { getCurrentModelAuthType } = await import('./config/savedModels.js');
+  const { getCurrentModelAuthType, getSavedModelEntry } = await import('./config/savedModels.js');
   const currentModelName = settings.merged.model?.name;
-  const savedModels = settings.merged.model?.savedModels ?? [];
-  const currentAuthType = getCurrentModelAuthType(currentModelName, savedModels as any);
+  const savedModels = (settings.merged.model?.savedModels ?? []) as SavedModelEntry[];
+  const currentAuthType = getCurrentModelAuthType(currentModelName, savedModels);
+  const currentModelEntry = getSavedModelEntry(currentModelName, savedModels);
+  const hasStoredApiKey = Boolean(currentModelEntry?.apiKey?.trim());
+  const hasPersistedKolosalToken = Boolean(
+    typeof settings.merged.kolosalOAuthToken === 'string' &&
+      settings.merged.kolosalOAuthToken.trim(),
+  );
+  const usesOpenAICompatibleProvider = currentModelEntry?.provider === 'openai-compatible';
 
   // hop into sandbox if we are outside and sandboxing is enabled
   if (!process.env['SANDBOX']) {
@@ -343,11 +405,15 @@ export async function main() {
     }
   }
 
-  if (
+  const shouldPreAuthenticate =
     currentAuthType === AuthType.USE_OPENAI &&
-    config.isBrowserLaunchSuppressed()
-  ) {
-    // Do oauth before app renders to make copying the link possible.
+    config.isBrowserLaunchSuppressed() &&
+    !hasStoredApiKey &&
+    !hasPersistedKolosalToken &&
+    !usesOpenAICompatibleProvider;
+
+  if (shouldPreAuthenticate) {
+    // Legacy Google OAuth flow: keep existing behaviour when no compatible API key is available.
     await getOauthClient(currentAuthType, config);
   }
 

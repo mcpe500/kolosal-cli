@@ -65,7 +65,6 @@ export const ToolGroupMessage: React.FC<ToolGroupMessageProps> = ({
       width="100%"
       marginLeft={0}
       marginTop={1}
-      paddingTop={1}
       paddingLeft={0}
       paddingRight={1}
       paddingBottom={0}

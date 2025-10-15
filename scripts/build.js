@@ -37,8 +37,8 @@ execSync('npm run build --workspaces', { stdio: 'inherit', cwd: root });
 // build the bundle (creates bundle/gemini.js for distribution)
 execSync('npm run bundle', { stdio: 'inherit', cwd: root });
 
-// build kolosal-server and integrate into distribution (macOS only for now)
-if (process.platform === 'darwin') {
+// build kolosal-server and integrate into distribution (macOS and Linux)
+if (process.platform === 'darwin' || process.platform === 'linux') {
   try {
     console.log('\n🔨 Building kolosal-server...');
     execSync('node scripts/build_kolosal_server.js', { stdio: 'inherit', cwd: root });

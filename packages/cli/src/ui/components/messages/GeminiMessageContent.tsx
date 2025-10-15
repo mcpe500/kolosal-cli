@@ -35,7 +35,7 @@ export const GeminiMessageContent: React.FC<GeminiMessageContentProps> = ({
   return (
     <Box 
       flexDirection="row" 
-      marginTop={isFirstAssistantMessage ? 0 : 1}
+      marginTop={1}
     >
       <Box width={prefixWidth}>
         {/* Empty space to align with the prefix from GeminiMessage */}

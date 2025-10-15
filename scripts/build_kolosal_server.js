@@ -170,12 +170,12 @@ async function copyToDistribution(sourceDir) {
       console.warn(`   ⚠️  Unable to copy default config: ${error.message}`);
     }
   } else if (isLinux) {
-    const linuxConfigTemplate = path.join(rootDir, 'kolosal-server', 'configs', 'config.yaml');
+    const linuxConfigTemplate = path.join(rootDir, 'kolosal-server', 'configs', 'config.linux.yaml');
     const configDest = path.join(resourcesDir, 'config.yaml');
 
     try {
       await fs.copyFile(linuxConfigTemplate, configDest);
-      console.log('   ✓ config.yaml → Resources/config.yaml');
+      console.log('   ✓ config.linux.yaml → Resources/config.yaml');
     } catch (error) {
       console.warn(`   ⚠️  Unable to copy default config: ${error.message}`);
     }
