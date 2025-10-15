@@ -70,6 +70,41 @@ async function getDependencies(binaryPath) {
   }
 }
 
+// Critical libraries that should be bundled for better portability
+const CRITICAL_LIBS = new Set([
+  'libblas.so.3',
+  'liblapack.so.3', 
+  'libgomp.so.1',
+  'libfreetype.so.6',
+  'libcurl.so.4',
+  'libxml2.so.2',
+  'libtiff.so.6',
+  'libjpeg.so.8',
+  'libpng16.so.16',
+  'libicuuc.so.74',
+  'libicudata.so.74',
+  'libgfortran.so.5',
+  'libnghttp2.so.14',
+  'libidn2.so.0',
+  'libunistring.so.5',
+  'librtmp.so.1',
+  'libssh.so.4',
+  'libpsl.so.5',
+  'libldap.so.2',
+  'liblber.so.2',
+  'libsasl2.so.2',
+  'libbrotlidec.so.1',
+  'libbrotlicommon.so.1',
+  'libzstd.so.1',
+  'liblzma.so.5',
+  'libbz2.so.1.0',
+  'libdeflate.so.0',
+  'libLerc.so.4',
+  'libjbig.so.0',
+  'libwebp.so.7',
+  'libsharpyuv.so.0'
+]);
+
 /**
  * Determine if a library should be bundled
  */
@@ -82,6 +117,21 @@ function shouldBundleLibrary(libName) {
   // Never bundle core system libraries
   if (SYSTEM_LIBS.has(libName)) {
     return false;
+  }
+  
+  // Don't bundle SSL/crypto libraries (security risk if outdated)
+  if (libName.includes('ssl') || libName.includes('crypto') || libName.includes('gnutls')) {
+    return false;
+  }
+  
+  // Don't bundle core security libraries
+  if (libName.includes('krb5') || libName.includes('gssapi') || libName.includes('keyutils')) {
+    return false;
+  }
+  
+  // Bundle critical libraries for better portability
+  if (CRITICAL_LIBS.has(libName)) {
+    return true;
   }
   
   // Don't bundle common system libraries
@@ -192,15 +242,26 @@ async function bundleLibraries(distDir) {
   }
   
   if (toBundleOther.length > 0) {
-    console.log(`\n📦 Additional libraries that could be bundled:`);
+    console.log(`\n📦 Additional libraries to bundle:`);
     toBundleOther.forEach(dep => {
       console.log(`   • ${dep.name} => ${dep.path}`);
     });
     
-    // Copy additional libraries if requested
-    // This is disabled by default for safety
-    console.log(`\n⚠️  Note: Additional library bundling is disabled by default.`);
-    console.log(`   If you need to bundle more libraries, enable it in this script.`);
+    // Copy additional libraries for better portability
+    console.log(`\n📦 Bundling additional libraries for portability...`);
+    for (const dep of toBundleOther) {
+      if (dep.path && dep.path !== 'not found' && !dep.path.includes('(')) {
+        try {
+          const targetPath = path.join(libDir, dep.name);
+          await fs.copyFile(dep.path, targetPath);
+          console.log(`   ✓ Bundled ${dep.name}`);
+        } catch (error) {
+          console.warn(`   ⚠️  Failed to bundle ${dep.name}: ${error.message}`);
+        }
+      }
+    }
+  } else {
+    console.log(`\n✅ No additional libraries need bundling.`);
   }
   
   console.log(`\n📋 System dependencies (not bundled):`);
@@ -296,4 +357,22 @@ if (import.meta.url === `file://${process.argv[1]}`) {
   });
 }
 
-export { bundleLibraries, getDependencies, shouldBundleLibrary };
+/**
+ * Bundle libraries for standalone distribution
+ */
+async function bundleLibrariesForDistribution(distDir) {
+  console.log('🚀 Bundling libraries for standalone distribution...\n');
+  
+  const result = await bundleLibraries(distDir);
+  
+  if (result.additional.length > 0) {
+    console.log(`\n✅ Successfully bundled ${result.additional.length} additional libraries for portability!`);
+    console.log('   Users will not need to install system dependencies manually.');
+  } else {
+    console.log('\n📋 All required libraries are already bundled or are core system libraries.');
+  }
+  
+  return result;
+}
+
+export { bundleLibraries, getDependencies, shouldBundleLibrary, bundleLibrariesForDistribution };
