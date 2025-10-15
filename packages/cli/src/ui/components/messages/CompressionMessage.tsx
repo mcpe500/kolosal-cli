@@ -28,7 +28,7 @@ export const CompressionMessage: React.FC<CompressionDisplayProps> = ({
       ` to ${compression.newTokenCount ?? 'unknown'} tokens.`;
 
   return (
-    <Box flexDirection="row">
+    <Box flexDirection="row" marginTop={1}>
       <Box marginRight={1}>
         {compression.isPending ? (
           <Spinner type="dots" />

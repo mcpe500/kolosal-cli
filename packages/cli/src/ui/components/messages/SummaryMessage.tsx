@@ -45,7 +45,7 @@ export const SummaryMessage: React.FC<SummaryDisplayProps> = ({ summary }) => {
   };
 
   return (
-    <Box flexDirection="row">
+    <Box flexDirection="row" marginTop={1}>
       <Box marginRight={1}>{getIcon()}</Box>
       <Box>
         <Text
