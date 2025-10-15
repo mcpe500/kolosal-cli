@@ -45,6 +45,7 @@ const COMMON_SYSTEM_LIBS = new Set([
 const CUSTOM_LIBS = new Set([
   'libkolosal_server.so',
   'libllama-cpu.so',
+  'libllama-vulkan.so',
 ]);
 
 /**
@@ -98,6 +99,10 @@ const CRITICAL_LIBS = new Set([
   'libzstd.so.1',
   'liblzma.so.5',
   'libbz2.so.1.0',
+  // Vulkan-specific libraries that should be bundled for portability
+  'libvulkan.so.1',
+  'libshaderc_shared.so.1',
+  'libspirv-cross-c-shared.so.0',
   'libdeflate.so.0',
   'libLerc.so.4',
   'libjbig.so.0',
@@ -131,6 +136,11 @@ function shouldBundleLibrary(libName) {
   
   // Bundle critical libraries for better portability
   if (CRITICAL_LIBS.has(libName)) {
+    return true;
+  }
+  
+  // Bundle Vulkan-related libraries for compatibility across systems
+  if (libName.includes('vulkan') || libName.includes('shaderc') || libName.includes('spirv')) {
     return true;
   }
   
@@ -190,6 +200,7 @@ async function bundleLibraries(distDir) {
   const librariesToAnalyze = [
     path.join(libDir, 'libkolosal_server.so'),
     path.join(libDir, 'libllama-cpu.so'),
+    path.join(libDir, 'libllama-vulkan.so'),  // May not exist if Vulkan build failed
   ];
   
   // Collect all dependencies

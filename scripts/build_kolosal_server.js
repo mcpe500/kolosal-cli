@@ -36,6 +36,20 @@ async function buildKolosalServer() {
   } catch (error) {
     throw new Error('❌ kolosal-server directory not found. Make sure the kolosal-server subproject exists.');
   }
+
+  if (isLinux) {
+    console.log('🐧 Linux detected: Building both CPU and Vulkan inference engines...\n');
+    return await buildDualInferenceEngines();
+  } else {
+    return await buildSingleInferenceEngine();
+  }
+}
+
+async function buildSingleInferenceEngine() {
+  console.log('🔨 Building single inference engine...\n');
+  
+  const buildDir = path.join(kolosalServerDir, 'build');
+  const releaseDir = path.join(buildDir, 'Release');
   
   // Create build directory if it doesn't exist
   try {
@@ -95,7 +109,109 @@ async function buildKolosalServer() {
   return releaseDir;
 }
 
-async function copyToDistribution(sourceDir) {
+async function buildDualInferenceEngines() {
+  console.log('🔥 Building dual inference engines for Linux...\n');
+  
+  const buildDirCpu = path.join(kolosalServerDir, 'build-cpu');
+  const buildDirVulkan = path.join(kolosalServerDir, 'build-vulkan');
+  const releaseDirCpu = path.join(buildDirCpu, 'Release');
+  const releaseDirVulkan = path.join(buildDirVulkan, 'Release');
+  
+  // Clean and create build directories
+  await fs.rm(buildDirCpu, { recursive: true, force: true });
+  await fs.rm(buildDirVulkan, { recursive: true, force: true });
+  await fs.mkdir(buildDirCpu, { recursive: true });
+  await fs.mkdir(buildDirVulkan, { recursive: true });
+  
+  console.log('📁 Created separate build directories for CPU and Vulkan');
+
+  // Build CPU version
+  console.log('\n🖥️  Building CPU inference engine...');
+  try {
+    await execAsync('cmake .. -DCMAKE_BUILD_TYPE=Release -DUSE_CUDA=OFF -DUSE_VULKAN=OFF -DUSE_METAL=OFF', {
+      cwd: buildDirCpu,
+      stdio: 'inherit'
+    });
+    console.log('✅ CPU CMake configuration completed');
+    
+    await execAsync('make -j4', {
+      cwd: buildDirCpu,
+      stdio: 'inherit'
+    });
+    console.log('✅ CPU build completed');
+  } catch (error) {
+    throw new Error(`❌ CPU build failed: ${error.message}`);
+  }
+
+  // Build Vulkan version
+  console.log('\n🎮 Building Vulkan inference engine...');
+  try {
+    await execAsync('cmake .. -DCMAKE_BUILD_TYPE=Release -DUSE_CUDA=OFF -DUSE_VULKAN=ON -DUSE_METAL=OFF', {
+      cwd: buildDirVulkan,
+      stdio: 'inherit'
+    });
+    console.log('✅ Vulkan CMake configuration completed');
+    
+    await execAsync('make -j4', {
+      cwd: buildDirVulkan,
+      stdio: 'inherit'
+    });
+    console.log('✅ Vulkan build completed');
+  } catch (error) {
+    console.warn(`⚠️  Vulkan build failed: ${error.message}`);
+    console.warn('   Continuing with CPU-only build...');
+    
+    // Return CPU build only if Vulkan fails
+    return { 
+      cpu: releaseDirCpu,
+      vulkan: null,
+      primary: releaseDirCpu
+    };
+  }
+
+  // Verify build artifacts
+  console.log('\n🔍 Verifying build artifacts...');
+  
+  const cpuFiles = [
+    'kolosal-server',
+    'libkolosal_server.so',
+    'libllama-cpu.so'
+  ];
+  
+  const vulkanFiles = [
+    'libllama-vulkan.so'
+  ];
+
+  console.log('   CPU build artifacts:');
+  for (const file of cpuFiles) {
+    const filePath = path.join(releaseDirCpu, file);
+    try {
+      await fs.access(filePath);
+      console.log(`     ✓ ${file}`);
+    } catch (error) {
+      throw new Error(`❌ Missing CPU build artifact: ${file}`);
+    }
+  }
+
+  console.log('   Vulkan build artifacts:');
+  for (const file of vulkanFiles) {
+    const filePath = path.join(releaseDirVulkan, file);
+    try {
+      await fs.access(filePath);
+      console.log(`     ✓ ${file}`);
+    } catch (error) {
+      console.warn(`⚠️  Missing Vulkan build artifact: ${file}`);
+    }
+  }
+  
+  return {
+    cpu: releaseDirCpu,
+    vulkan: releaseDirVulkan,
+    primary: releaseDirCpu
+  };
+}
+
+async function copyToDistribution(sourceData) {
   console.log('\n📦 Copying kolosal-server to distribution directory...\n');
   
   // Detect platform and set appropriate dist directory
@@ -116,22 +232,22 @@ async function copyToDistribution(sourceDir) {
   await fs.mkdir(binDir, { recursive: true });
   await fs.mkdir(libDir, { recursive: true });
   await fs.mkdir(resourcesDir, { recursive: true });
+
+  // Handle dual build (Linux) or single build (other platforms)
+  const isDualBuild = typeof sourceData === 'object' && sourceData.cpu;
+  const primarySourceDir = isDualBuild ? sourceData.primary : sourceData;
+  
+  console.log(isDualBuild ? '🔥 Processing dual-build artifacts...' : '📋 Processing single-build artifacts...');
   
   // Files to copy to bin directory
   const executableFiles = [
     'kolosal-server'
   ];
   
-  // Files to copy to lib directory  
-  const libraryFiles = [
-    `libkolosal_server${libExtension}`,
-    inferenceLibName
-  ];
-  
-  // Copy executable files
+  // Copy executable files from primary build
   console.log('📋 Copying executables to bin/...');
   for (const file of executableFiles) {
-    const sourcePath = path.join(sourceDir, file);
+    const sourcePath = path.join(primarySourceDir, file);
     const destPath = path.join(binDir, file);
     
     try {
@@ -146,15 +262,63 @@ async function copyToDistribution(sourceDir) {
   
   // Copy library files
   console.log('📚 Copying libraries to lib/...');
-  for (const file of libraryFiles) {
-    const sourcePath = path.join(sourceDir, file);
-    const destPath = path.join(libDir, file);
+  
+  if (isDualBuild) {
+    // Copy libraries from both CPU and Vulkan builds
+    const cpuLibraries = [
+      `libkolosal_server${libExtension}`,
+      'libllama-cpu.so'
+    ];
     
-    try {
-      await fs.copyFile(sourcePath, destPath);
-      console.log(`   ✓ ${file} → lib/`);
-    } catch (error) {
-      throw new Error(`❌ Failed to copy ${file}: ${error.message}`);
+    console.log('   From CPU build:');
+    for (const file of cpuLibraries) {
+      const sourcePath = path.join(sourceData.cpu, file);
+      const destPath = path.join(libDir, file);
+      
+      try {
+        await fs.copyFile(sourcePath, destPath);
+        console.log(`     ✓ ${file} → lib/`);
+      } catch (error) {
+        throw new Error(`❌ Failed to copy CPU library ${file}: ${error.message}`);
+      }
+    }
+    
+    // Copy Vulkan library if available
+    if (sourceData.vulkan) {
+      console.log('   From Vulkan build:');
+      const vulkanLibraries = ['libllama-vulkan.so'];
+      
+      for (const file of vulkanLibraries) {
+        const sourcePath = path.join(sourceData.vulkan, file);
+        const destPath = path.join(libDir, file);
+        
+        try {
+          await fs.copyFile(sourcePath, destPath);
+          console.log(`     ✓ ${file} → lib/`);
+        } catch (error) {
+          console.warn(`⚠️  Failed to copy Vulkan library ${file}: ${error.message}`);
+        }
+      }
+    } else {
+      console.warn('   ⚠️  Vulkan build not available, skipping Vulkan libraries');
+    }
+  } else {
+    // Single build - copy libraries as before
+    const libraryFiles = [
+      `libkolosal_server${libExtension}`,
+      inferenceLibName
+    ];
+    
+    for (const file of libraryFiles) {
+      const sourcePath = path.join(primarySourceDir, file);
+      const destPath = path.join(libDir, file);
+      
+      try {
+        await fs.copyFile(sourcePath, destPath);
+        console.log(`   ✓ ${file} → lib/`);
+      } catch (_error) {
+        throw new Error(`❌ Failed to copy ${file}: ${_error.message}`);
+      }
     }
   }
 
@@ -195,19 +359,49 @@ async function copyToDistribution(sourceDir) {
       } else {
         console.log(`   ⚠️  ${file} (not executable)`);
       }
-    } catch (error) {
+    } catch (_error) {
       throw new Error(`❌ Missing file in bin/: ${file}`);
     }
   }
   
-  // Check libraries
-  for (const file of libraryFiles) {
-    const filePath = path.join(libDir, file);
-    try {
-      await fs.access(filePath);
-      console.log(`   ✓ ${file}`);
-    } catch (error) {
-      throw new Error(`❌ Missing file in lib/: ${file}`);
+  // Check libraries - different approach for dual vs single builds
+  if (isDualBuild) {
+    console.log('   Libraries (dual build):');
+    const expectedLibraries = [
+      `libkolosal_server${libExtension}`,
+      'libllama-cpu.so',
+      'libllama-vulkan.so'  // Optional
+    ];
+    
+    for (const file of expectedLibraries) {
+      const filePath = path.join(libDir, file);
+      try {
+        await fs.access(filePath);
+        console.log(`     ✓ ${file}`);
+      } catch (_error) {
+        if (file === 'libllama-vulkan.so') {
+          console.log(`     ⚠️  ${file} (Vulkan build failed)`);
+        } else {
+          throw new Error(`❌ Missing file in lib/: ${file}`);
+        }
+      }
+    }
+  } else {
+    // Single build verification
+    const libraryFiles = [
+      `libkolosal_server${libExtension}`,
+      inferenceLibName
+    ];
+    
+    console.log('   Libraries (single build):');
+    for (const file of libraryFiles) {
+      const filePath = path.join(libDir, file);
+      try {
+        await fs.access(filePath);
+        console.log(`     ✓ ${file}`);
+      } catch (_error) {
+        throw new Error(`❌ Missing file in lib/: ${file}`);
+      }
     }
   }
   
@@ -326,8 +520,25 @@ async function main() {
     
     console.log('\n🎉 Build and integration completed successfully!');
     console.log('\n📋 Summary:');
-  console.log(`   • Executable: ${path.join(binDir, 'kolosal-server')}`);
-  console.log(`   • Libraries: ${path.join(libDir, `libkolosal_server${libExtension}`)}, ${path.join(libDir, inferenceLibName)}`);
+    console.log(`   • Executable: ${path.join(binDir, 'kolosal-server')}`);
+    
+    if (isLinux) {
+      console.log(`   • Libraries:`);
+      console.log(`     - ${path.join(libDir, `libkolosal_server${libExtension}`)}`);
+      console.log(`     - ${path.join(libDir, 'libllama-cpu.so')}`);
+      
+      // Check if Vulkan library exists
+      try {
+        await fs.access(path.join(libDir, 'libllama-vulkan.so'));
+        console.log(`     - ${path.join(libDir, 'libllama-vulkan.so')}`);
+        console.log(`   • CPU and Vulkan acceleration available`);
+      } catch {
+        console.log(`   • CPU-only acceleration (Vulkan build failed)`);
+      }
+    } else {
+      console.log(`   • Libraries: ${path.join(libDir, `libkolosal_server${libExtension}`)}, ${path.join(libDir, inferenceLibName)}`);
+    }
+    
     console.log(`   • Ready for packaging and distribution`);
     
   } catch (error) {

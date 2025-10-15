@@ -13,6 +13,8 @@ import { join, dirname } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import http from 'node:http';
 import { setTimeout } from 'node:timers/promises';
+import { detectGPUs, getGPUSummary } from '../utils/gpu-detector.js';
+import type { GPUDetectionResult } from '../utils/gpu-detector.js';
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 
@@ -77,6 +79,7 @@ export class KolosalServerManager {
   private healthCheckTimer: NodeJS.Timeout | null = null;
   private shutdownPromise: Promise<void> | null = null;
   private serverExecutablePath: string;
+  private gpuInfo: GPUDetectionResult | null = null;
 
   constructor(config: Partial<ServerConfig> = {}) {
     this.config = { ...DEFAULT_SERVER_CONFIG, ...config };
@@ -121,6 +124,36 @@ export class KolosalServerManager {
     this.debug('No executable found, falling back to system PATH');
     // Default to system PATH
     return 'kolosal-server';
+  }
+
+  /**
+   * Detect GPU capabilities and cache the result
+   */
+  private async detectGPUCapabilities(): Promise<void> {
+    if (this.gpuInfo === null) {
+      this.debug('Detecting GPU capabilities...');
+      this.gpuInfo = await detectGPUs();
+      const summary = getGPUSummary(this.gpuInfo);
+      this.debug(`GPU detection complete: ${summary}`);
+      
+      if (this.gpuInfo.hasDedicatedGPU && this.gpuInfo.hasVulkanSupport) {
+        this.debug('Dedicated GPU with Vulkan support detected - will use llama-vulkan engine');
+      } else if (this.gpuInfo.hasGPU) {
+        this.debug('GPU detected but no Vulkan support or not dedicated - will use llama-cpu engine');
+      } else {
+        this.debug('No GPU detected - will use llama-cpu engine');
+      }
+    }
+  }
+
+  /**
+   * Get the recommended inference engine based on GPU detection
+   */
+  private getRecommendedInferenceEngine(): string {
+    if (this.gpuInfo?.hasDedicatedGPU && this.gpuInfo?.hasVulkanSupport) {
+      return 'llama-vulkan';
+    }
+    return 'llama-cpu';
   }
 
   /**
@@ -195,6 +228,9 @@ export class KolosalServerManager {
     this.startTime = Date.now();
 
     try {
+      // Detect GPU capabilities before starting server
+      await this.detectGPUCapabilities();
+      
       await this.spawnServerProcess();
       await this.waitForServerReady();
       this.startHealthChecking();
@@ -262,14 +298,28 @@ export class KolosalServerManager {
   }
 
   /**
+   * Get GPU information (performs detection if not already done)
+   */
+  async getGPUInfo(): Promise<GPUDetectionResult> {
+    if (this.gpuInfo === null) {
+      await this.detectGPUCapabilities();
+    }
+    return this.gpuInfo!;
+  }
+
+  /**
    * Spawn the server process
    */
   private async spawnServerProcess(): Promise<void> {
+    // Get recommended inference engine based on GPU detection
+    const recommendedEngine = this.getRecommendedInferenceEngine();
+    
     const args = [
       '--log-level', this.config.debug ? 'DEBUG' : 'INFO',
       ...this.resolveConfigArgs(),
       '--port', this.config.port.toString(),
       '--host', this.config.host,
+      '--default-inference-engine', recommendedEngine,
       ...this.config.serverArgs
     ];
 
@@ -493,6 +543,12 @@ export async function startServerIfEnabled(config?: Partial<ServerConfig>): Prom
   
   try {
     console.log('Starting kolosal-server in background...');
+    
+    // Detect GPU capabilities and show info
+    const gpuInfo = await manager.getGPUInfo();
+    const gpuSummary = getGPUSummary(gpuInfo);
+    console.log(`🎮 GPU Detection: ${gpuSummary}`);
+    
     await manager.start();
     console.log(`✅ kolosal-server started successfully on ${finalConfig.host}:${finalConfig.port}`);
     return manager;
