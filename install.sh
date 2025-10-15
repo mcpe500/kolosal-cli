@@ -14,7 +14,7 @@ set -e
 
 # Version to install
 VERSION="${VERSION:-0.1.0-pre}"
-PACKAGE_VERSION="0.1.1-pre"
+PACKAGE_VERSION="0.1.2"
 
 # GitHub release URLs
 GITHUB_REPO="KolosalAI/kolosal-cli"
