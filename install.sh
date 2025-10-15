@@ -13,13 +13,14 @@
 set -e
 
 # Version to install
-VERSION="${VERSION:-0.1.0-pre}"
+VERSION="${VERSION:-0.1.2-pre}"
 PACKAGE_VERSION="0.1.2"
 
 # GitHub release URLs
 GITHUB_REPO="KolosalAI/kolosal-cli"
 MACOS_PKG_URL="https://github.com/${GITHUB_REPO}/releases/download/v${VERSION}/KolosalCode-macos-signed.pkg"
 LINUX_DEB_URL="https://github.com/${GITHUB_REPO}/releases/download/v${VERSION}/kolosal-code_${PACKAGE_VERSION}_amd64.deb"
+LINUX_RPM_URL="https://github.com/${GITHUB_REPO}/releases/download/v${VERSION}/kolosal-code-${PACKAGE_VERSION}.x86_64.rpm"
 
 # Colors for output
 RED='\033[0;31m'
@@ -199,40 +200,14 @@ install_macos() {
     fi
 }
 
-# Install on Linux
-install_linux() {
-    print_header "Installing KolosalCode on Linux"
-    
-    # Detect Linux distribution
-    local distro=""
-    if [ -f /etc/os-release ]; then
-        . /etc/os-release
-        distro="$ID"
-    elif [ -f /etc/debian_version ]; then
-        distro="debian"
-    elif [ -f /etc/redhat-release ]; then
-        distro="redhat"
-    else
-        print_warning "Could not detect Linux distribution"
-        distro="unknown"
-    fi
-    
-    print_info "Detected distribution: $distro"
-    
-    # Check if it's a Debian-based system
-    if [[ "$distro" != "debian" && "$distro" != "ubuntu" && "$distro" != "linuxmint" && "$distro" != "pop" ]]; then
-        print_warning "This installer provides .deb packages for Debian/Ubuntu-based systems"
-        print_info "For other distributions, please download and install manually from:"
-        print_info "$LINUX_DEB_URL"
-        exit 1
-    fi
-    
+# Install .deb package (Debian/Ubuntu-based systems)
+install_deb() {
     local tmp_dir=$(mktemp -d)
     local deb_file="${tmp_dir}/kolosal-code.deb"
     
     # Download the package
     if ! download_file "$LINUX_DEB_URL" "$deb_file"; then
-        print_error "Failed to download Linux package"
+        print_error "Failed to download .deb package"
         rm -rf "$tmp_dir"
         exit 1
     fi
@@ -266,6 +241,140 @@ install_linux() {
     
     # Clean up
     rm -rf "$tmp_dir"
+}
+
+# Install .rpm package (Red Hat/Fedora/CentOS-based systems)
+install_rpm() {
+    local tmp_dir=$(mktemp -d)
+    local rpm_file="${tmp_dir}/kolosal-code.rpm"
+    
+    # Download the package
+    if ! download_file "$LINUX_RPM_URL" "$rpm_file"; then
+        print_error "Failed to download .rpm package"
+        rm -rf "$tmp_dir"
+        exit 1
+    fi
+    
+    # Verify the download
+    if [ ! -f "$rpm_file" ]; then
+        print_error "Package file not found after download"
+        rm -rf "$tmp_dir"
+        exit 1
+    fi
+    
+    print_info "Package size: $(du -h "$rpm_file" | cut -f1)"
+    
+    # Install the package
+    print_info "Installing KolosalCode..."
+    
+    # Detect package manager
+    if command -v dnf &> /dev/null; then
+        # Fedora/RHEL 8+
+        if dnf install -y "$rpm_file" 2>&1 | tee /tmp/kolosal-install.log; then
+            print_success "Installation complete!"
+        else
+            print_error "Installation failed"
+            rm -rf "$tmp_dir"
+            exit 1
+        fi
+    elif command -v yum &> /dev/null; then
+        # CentOS/RHEL 7
+        if yum install -y "$rpm_file" 2>&1 | tee /tmp/kolosal-install.log; then
+            print_success "Installation complete!"
+        else
+            print_error "Installation failed"
+            rm -rf "$tmp_dir"
+            exit 1
+        fi
+    elif command -v zypper &> /dev/null; then
+        # OpenSUSE
+        if zypper install -y "$rpm_file" 2>&1 | tee /tmp/kolosal-install.log; then
+            print_success "Installation complete!"
+        else
+            print_error "Installation failed"
+            rm -rf "$tmp_dir"
+            exit 1
+        fi
+    else
+        # Fallback to rpm command
+        if rpm -ivh "$rpm_file" 2>&1 | tee /tmp/kolosal-install.log; then
+            print_success "Installation complete!"
+        else
+            print_error "Installation failed"
+            rm -rf "$tmp_dir"
+            exit 1
+        fi
+    fi
+    
+    # Clean up
+    rm -rf "$tmp_dir"
+}
+
+# Install on Linux
+install_linux() {
+    print_header "Installing KolosalCode on Linux"
+    
+    # Detect Linux distribution
+    local distro=""
+    local distro_like=""
+    if [ -f /etc/os-release ]; then
+        . /etc/os-release
+        distro="$ID"
+        distro_like="$ID_LIKE"
+    elif [ -f /etc/debian_version ]; then
+        distro="debian"
+        distro_like="debian"
+    elif [ -f /etc/redhat-release ]; then
+        distro="rhel"
+        distro_like="rhel fedora"
+    else
+        print_warning "Could not detect Linux distribution"
+        distro="unknown"
+    fi
+    
+    print_info "Detected distribution: $distro"
+    
+    # Determine package format based on distribution
+    local use_rpm=false
+    
+    # Check for RPM-based distributions
+    if [[ "$distro" == "rhel" || "$distro" == "centos" || "$distro" == "fedora" || 
+          "$distro" == "rocky" || "$distro" == "alma" || "$distro" == "almalinux" ||
+          "$distro" == "opensuse" || "$distro" == "opensuse-leap" || "$distro" == "opensuse-tumbleweed" ||
+          "$distro" == "sles" || "$distro" == "amzn" || "$distro" == "ol" ]]; then
+        use_rpm=true
+    elif [[ "$distro_like" == *"rhel"* || "$distro_like" == *"fedora"* || "$distro_like" == *"suse"* ]]; then
+        use_rpm=true
+    fi
+    
+    # Check for DEB-based distributions
+    local use_deb=false
+    if [[ "$distro" == "debian" || "$distro" == "ubuntu" || "$distro" == "linuxmint" || 
+          "$distro" == "pop" || "$distro" == "elementary" || "$distro" == "kali" ||
+          "$distro" == "raspbian" || "$distro" == "zorin" ]]; then
+        use_deb=true
+    elif [[ "$distro_like" == *"debian"* || "$distro_like" == *"ubuntu"* ]]; then
+        use_deb=true
+    fi
+    
+    # Install based on package format
+    if [ "$use_deb" = true ]; then
+        print_info "Using .deb package format"
+        install_deb
+    elif [ "$use_rpm" = true ]; then
+        print_info "Using .rpm package format"
+        install_rpm
+    else
+        print_error "Could not determine package format for distribution: $distro"
+        print_info "Supported formats:"
+        print_info "  - .deb for Debian/Ubuntu-based systems"
+        print_info "  - .rpm for Red Hat/Fedora/CentOS-based systems"
+        print_info ""
+        print_info "Download packages manually from:"
+        print_info "  .deb: $LINUX_DEB_URL"
+        print_info "  .rpm: $LINUX_RPM_URL"
+        exit 1
+    fi
     
     # Verify installation
     if command -v kolosal &> /dev/null; then
@@ -308,9 +417,17 @@ show_uninstall_info() {
         echo "  sudo rm /usr/local/bin/kolosal"
     else
         echo "To uninstall on Linux:"
+        echo "  # For Debian/Ubuntu (.deb):"
         echo "  sudo apt remove kolosal-code"
         echo "  # or"
         echo "  sudo dpkg -r kolosal-code"
+        echo ""
+        echo "  # For Red Hat/Fedora/CentOS (.rpm):"
+        echo "  sudo dnf remove kolosal-code"
+        echo "  # or"
+        echo "  sudo yum remove kolosal-code"
+        echo "  # or"
+        echo "  sudo rpm -e kolosal-code"
     fi
     echo ""
 }
