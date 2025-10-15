@@ -17,7 +17,7 @@ export const UserShellMessage: React.FC<UserShellMessageProps> = ({ text }) => {
   const commandToDisplay = text.startsWith('!') ? text.substring(1) : text;
 
   return (
-    <Box>
+    <Box marginTop={1}>
       <Text color={Colors.AccentCyan}>$ </Text>
       <Text>{commandToDisplay}</Text>
     </Box>

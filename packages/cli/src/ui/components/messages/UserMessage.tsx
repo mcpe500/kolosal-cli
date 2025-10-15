@@ -29,7 +29,6 @@ export const UserMessage: React.FC<UserMessageProps> = ({ text }) => {
       paddingX={1}
       paddingY={0}
       marginTop={1}
-      marginBottom={1}
       flexDirection="row"
     >
       <Box width={prefixWidth} marginRight={1}>
