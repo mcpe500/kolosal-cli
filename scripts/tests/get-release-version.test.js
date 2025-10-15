@@ -49,7 +49,7 @@ describe('getReleaseVersion', async () => {
       if (command.includes('git tag --list "v*.*.*"')) {
         return 'v0.1.0\nv0.0.1'; // Mock stable tags for getLatestStableTag
       }
-      if (command.includes('git tag -l "v0.1.1-nightly.*"')) {
+      if (command.includes('git tag -l "v0.1.2-nightly.*"')) {
         return ''; // No existing nightly tags
       }
       if (command.includes('gh release list')) {
@@ -60,14 +60,14 @@ describe('getReleaseVersion', async () => {
 
     const { releaseTag, releaseVersion, npmTag, previousReleaseTag } =
       getReleaseVersion();
-    expect(releaseTag).toBe('v0.1.1-nightly.0');
-    expect(releaseVersion).toBe('0.1.1-nightly.0');
+    expect(releaseTag).toBe('v0.1.2-nightly.0');
+    expect(releaseVersion).toBe('0.1.2-nightly.0');
     expect(npmTag).toBe('nightly');
     expect(previousReleaseTag).toBe('v0.1.0-nightly.5');
   });
 
   it('should use the manual version and get previous tag', () => {
-    process.env.MANUAL_VERSION = 'v0.1.1';
+    process.env.MANUAL_VERSION = 'v0.1.2';
 
     vi.mocked(execSync).mockImplementation((command) => {
       if (command.includes('gh release list')) {
@@ -79,8 +79,8 @@ describe('getReleaseVersion', async () => {
     const result = getReleaseVersion();
 
     expect(result).toEqual({
-      releaseTag: 'v0.1.1',
-      releaseVersion: '0.1.1',
+      releaseTag: 'v0.1.2',
+      releaseVersion: '0.1.2',
       npmTag: 'latest',
       previousReleaseTag: 'v0.1.0',
     });
