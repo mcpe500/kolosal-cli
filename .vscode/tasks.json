@@ -38,6 +38,76 @@
 			"command": "npm run build && npm run -w packages/core test",
 			"isBackground": false,
 			"group": "build"
+		},
+		{
+			"label": "Typecheck repo",
+			"type": "shell",
+			"command": "npm run -s -w packages/cli build",
+			"isBackground": false,
+			"problemMatcher": [
+				"$tsc"
+			],
+			"group": "build"
+		},
+		{
+			"label": "Build CLI after settings change",
+			"type": "shell",
+			"command": "npm run -s -w packages/cli build",
+			"isBackground": false,
+			"problemMatcher": [
+				"$tsc"
+			],
+			"group": "build"
+		},
+		{
+			"label": "Build CLI after default-enable API",
+			"type": "shell",
+			"command": "npm run -s -w packages/cli build",
+			"isBackground": false,
+			"problemMatcher": [
+				"$tsc"
+			],
+			"group": "build"
+		},
+		{
+			"label": "Build CLI after transcript change",
+			"type": "shell",
+			"command": "npm run -s -w packages/cli build",
+			"isBackground": false,
+			"problemMatcher": [
+				"$tsc"
+			],
+			"group": "build"
+		},
+		{
+			"label": "Build CLI - diagnose error",
+			"type": "shell",
+			"command": "npm run -s -w packages/cli build",
+			"isBackground": false,
+			"problemMatcher": [
+				"$tsc"
+			],
+			"group": "build"
+		},
+		{
+			"label": "Build CLI after fixing duplicates",
+			"type": "shell",
+			"command": "npm run -s -w packages/cli build",
+			"isBackground": false,
+			"problemMatcher": [
+				"$tsc"
+			],
+			"group": "build"
+		},
+		{
+			"label": "Build CLI with YOLO mode",
+			"type": "shell",
+			"command": "npm run -s -w packages/cli build",
+			"isBackground": false,
+			"problemMatcher": [
+				"$tsc"
+			],
+			"group": "build"
 		}
 	]
 }

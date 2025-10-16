@@ -291,6 +291,39 @@ export async function main() {
 
   await config.initialize();
 
+  // Optionally start lightweight HTTP API server to expose generation endpoints
+  const apiEnabledEnv = process.env['KOLOSAL_CLI_API'];
+  const apiEnabledSetting = settings.merged.api?.enabled ?? true;
+  const apiEnabled = apiEnabledEnv != null
+    ? ['1','true','yes','on'].includes(String(apiEnabledEnv).toLowerCase())
+    : apiEnabledSetting;
+  let apiServer: { close: () => Promise<void> } | undefined;
+  if (apiEnabled) {
+    try {
+      const { startApiServer } = await import('./api/server.js');
+      const port = Number(process.env['KOLOSAL_CLI_API_PORT'] ?? settings.merged.api?.port ?? 38080);
+      const host = process.env['KOLOSAL_CLI_API_HOST'] ?? settings.merged.api?.host ?? '127.0.0.1';
+      const authToken = process.env['KOLOSAL_CLI_API_TOKEN'] ?? settings.merged.api?.token;
+      const corsEnabled = (process.env['KOLOSAL_CLI_API_CORS'] ?? '')
+        ? ['1','true','yes'].includes(String(process.env['KOLOSAL_CLI_API_CORS']).toLowerCase())
+        : settings.merged.api?.corsEnabled ?? true;
+      apiServer = await startApiServer(config, {
+        port,
+        host,
+        enableCors: corsEnabled,
+        authToken,
+      });
+      registerCleanup(async () => {
+        try { await apiServer?.close(); } catch { /* ignore */ }
+      });
+      if (config.getDebugMode()) {
+        console.error(`[api] server listening on http://${host}:${port}`);
+      }
+    } catch (e) {
+      console.error('Failed to start API server:', e);
+    }
+  }
+
   // Start kolosal-server in the background if enabled
   const serverManager = await startServerIfEnabled({
     debug: config.getDebugMode(),

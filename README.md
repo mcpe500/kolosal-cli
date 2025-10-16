@@ -259,3 +259,104 @@ Licensed under the Apache License, Version 2.0. See [LICENSE](./LICENSE) for the
 This product includes software developed from the Qwen Code project, which is also licensed under the Apache License, Version 2.0.
 
 
+## CLI Embedded API (experimental)
+
+The embedded API is enabled by default. It starts alongside the CLI and listens on 127.0.0.1:38080 unless configured otherwise.
+
+Configure via settings.json or environment variables.
+
+Start a local HTTP API alongside the CLI using environment variables:
+
+- KOLOSAL_CLI_API=true — enable the API server
+- KOLOSAL_CLI_API_PORT=38080 — port to listen on (default 38080)
+- KOLOSAL_CLI_API_HOST=127.0.0.1 — host binding (default 127.0.0.1)
+- KOLOSAL_CLI_API_TOKEN=secret — if set, requests must include Authorization: Bearer <token>
+
+Endpoints:
+
+- GET /healthz — health check
+- POST /v1/generate — generate content
+
+Request (JSON):
+
+{
+  "input": "Your prompt here",
+  "stream": false,
+  "prompt_id": "optional-id",
+  "history": [] // optional: conversation history for multi-turn
+}
+
+Response (JSON):
+
+{
+  "output": "model response text",
+  "prompt_id": "...",
+  "messages": [...], // transcript of this turn
+  "history": [...] // updated conversation history (pass this back for next turn)
+}
+
+Streaming: Set stream=true to receive Server-Sent Events (SSE).
+Events are sent in real-time as they occur:
+
+- event: content — data: incremental text chunk
+- event: assistant — data: {"type":"assistant","content":"full assistant message"}
+- event: tool_call — data: {"type":"tool_call","name":"toolName","arguments":{...}}
+- event: tool_result — data: {"type":"tool_result","name":"toolName","ok":true,"responseText":"..."}
+- event: history — data: [...] (updated conversation history)
+- event: done — data: true
+- event: error — data: {"message":"..."}
+
+Alternatively, configure via settings.json (used by the CLI):
+
+{
+  "api": {
+    "enabled": true,
+    "host": "127.0.0.1",
+    "port": 38080,
+    "token": "your-token",
+    "corsEnabled": true
+  }
+}
+
+Example requests
+
+Plain JSON response:
+
+```bash
+curl -s \
+  -H 'Content-Type: application/json' \
+  -H 'Authorization: Bearer YOUR_TOKEN' \ # optional, only if you configured api.token
+  -X POST http://127.0.0.1:38080/v1/generate \
+  -d '{"input":"Summarize the project structure.","stream":false}'
+```
+
+Server-Sent Events (SSE) streaming response:
+
+```bash
+curl -N -s \
+  -H 'Content-Type: application/json' \
+  -H 'Authorization: Bearer YOUR_TOKEN' \ # optional, only if you configured api.token
+  -X POST http://127.0.0.1:38080/v1/generate \
+  -d '{"input":"Provide a step-by-step plan to refactor the CLI.","stream":true}'
+```
+
+Multi-turn conversation (maintaining context):
+
+```bash
+# First turn
+RESPONSE=$(curl -s \
+  -H 'Content-Type: application/json' \
+  -X POST http://127.0.0.1:38080/v1/generate \
+  -d '{"input":"What is 2+2?","stream":false}')
+
+# Extract history from response
+HISTORY=$(echo $RESPONSE | jq -c '.history')
+
+# Second turn - pass history to maintain context
+curl -s \
+  -H 'Content-Type: application/json' \
+  -X POST http://127.0.0.1:38080/v1/generate \
+  -d "{\"input\":\"Now multiply that by 3\",\"stream\":false,\"history\":$HISTORY}" | jq
+```
+
+
