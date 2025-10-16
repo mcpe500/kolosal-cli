@@ -61,7 +61,7 @@ describe('getReleaseVersion', async () => {
     const { releaseTag, releaseVersion, npmTag, previousReleaseTag } =
       getReleaseVersion();
     expect(releaseTag).toBe('v0.1.2-nightly.0');
-    expect(releaseVersion).toBe('0.1.2-nightly.0');
+    expect(releaseVersion).toBe('0.1.3-nightly.0');
     expect(npmTag).toBe('nightly');
     expect(previousReleaseTag).toBe('v0.1.0-nightly.5');
   });
@@ -80,7 +80,7 @@ describe('getReleaseVersion', async () => {
 
     expect(result).toEqual({
       releaseTag: 'v0.1.2',
-      releaseVersion: '0.1.2',
+      releaseVersion: '0.1.3',
       npmTag: 'latest',
       previousReleaseTag: 'v0.1.0',
     });

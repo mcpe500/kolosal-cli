@@ -3,7 +3,7 @@
 
 [Setup]
 AppName=Kolosal Cli
-AppVersion=0.1.2
+AppVersion=0.1.3
 AppPublisher=KolosalAI
 DefaultDirName={pf64}\KolosalAI\Kolosal Cli
 DefaultGroupName=KolosalAI

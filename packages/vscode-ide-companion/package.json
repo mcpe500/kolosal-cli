@@ -2,7 +2,7 @@
   "name": "kolosal-ai-vscode-ide-companion",
   "displayName": "Kolosal Cli Companion",
   "description": "Enable Kolosal Cli with direct access to your VS Code workspace.",
-  "version": "0.1.2",
+  "version": "0.1.3",
   "publisher": "qwenlm",
   "icon": "assets/icon.png",
   "repository": {
