@@ -130,6 +130,12 @@ export class KolosalServerManager {
    * Detect GPU capabilities and cache the result
    */
   private async detectGPUCapabilities(): Promise<void> {
+    // On macOS, we default to Metal and skip GPU detection to avoid unnecessary work
+    if (process.platform === 'darwin') {
+      this.debug('macOS detected: skipping GPU detection and defaulting to llama-metal');
+      return;
+    }
+
     if (this.gpuInfo === null) {
       this.debug('Detecting GPU capabilities...');
       this.gpuInfo = await detectGPUs();
@@ -150,6 +156,11 @@ export class KolosalServerManager {
    * Get the recommended inference engine based on GPU detection
    */
   private getRecommendedInferenceEngine(): string {
+    // On macOS, always use Metal backend
+    if (process.platform === 'darwin') {
+      return 'llama-metal';
+    }
+
     if (this.gpuInfo?.hasDedicatedGPU && this.gpuInfo?.hasVulkanSupport) {
       return 'llama-vulkan';
     }
@@ -542,18 +553,10 @@ export async function startServerIfEnabled(config?: Partial<ServerConfig>): Prom
   const manager = getServerManager(finalConfig);
   
   try {
-    console.log('Starting kolosal-server in background...');
-    
-    // Detect GPU capabilities and show info
-    const gpuInfo = await manager.getGPUInfo();
-    const gpuSummary = getGPUSummary(gpuInfo);
-    console.log(`🎮 GPU Detection: ${gpuSummary}`);
     
     await manager.start();
-    console.log(`✅ kolosal-server started successfully on ${finalConfig.host}:${finalConfig.port}`);
     return manager;
   } catch (error) {
-    console.warn(`Warning: Could not start kolosal-server: ${error}`);
     return null;
   }
 }
