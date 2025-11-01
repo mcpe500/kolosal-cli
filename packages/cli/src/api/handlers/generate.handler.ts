@@ -83,13 +83,33 @@ export class GenerateHandler implements RouteHandler {
   ): Promise<void> {
     HttpUtils.setupSseHeaders(res, enableCors);
 
+    // Track state to filter unwanted newline chunks
+    let lastEventType: string | null = null;
+    let previousContentEmpty = true;
+
     const { history: updatedHistory } = await this.generationService.generateResponse(
       input,
       promptId,
       signal,
       {
-        onContentChunk: (chunk) => HttpUtils.writeSse(res, 'content', chunk),
-        onEvent: (item) => HttpUtils.writeSse(res, item.type, JSON.stringify(item)),
+        onContentChunk: (chunk) => {
+          // Ignore newline-only chunks if previous content is empty or after tool results
+          if (chunk === '\n' && (previousContentEmpty || lastEventType === 'tool_result')) {
+            return;
+          }
+          
+          HttpUtils.writeSse(res, 'content', chunk);
+          previousContentEmpty = chunk.trim() === '';
+          lastEventType = 'content';
+        },
+        onEvent: (item) => {
+          HttpUtils.writeSse(res, item.type, JSON.stringify(item));
+          lastEventType = item.type;
+          // Reset content state after tool events
+          if (item.type === 'tool_call' || item.type === 'tool_result') {
+            previousContentEmpty = true;
+          }
+        },
         conversationHistory: history,
       },
     );
