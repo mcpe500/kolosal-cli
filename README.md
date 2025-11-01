@@ -325,7 +325,6 @@ Plain JSON response:
 ```bash
 curl -s \
   -H 'Content-Type: application/json' \
-  -H 'Authorization: Bearer YOUR_TOKEN' \ # optional, only if you configured api.token
   -X POST http://127.0.0.1:38080/v1/generate \
   -d '{"input":"Summarize the project structure.","stream":false}'
 ```
@@ -335,9 +334,8 @@ Server-Sent Events (SSE) streaming response:
 ```bash
 curl -N -s \
   -H 'Content-Type: application/json' \
-  -H 'Authorization: Bearer YOUR_TOKEN' \ # optional, only if you configured api.token
   -X POST http://127.0.0.1:38080/v1/generate \
-  -d '{"input":"Provide a step-by-step plan to refactor the CLI.","stream":true}'
+  -d '{"input":"Summarize the project structure","stream":true}'
 ```
 
 Multi-turn conversation (maintaining context):
