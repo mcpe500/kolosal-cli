@@ -317,13 +317,11 @@ export async function startServerOnly(
     const { startApiServer } = await import('./api/server.js');
     const port = Number(process.env['KOLOSAL_CLI_API_PORT'] ?? settings.merged.api?.port ?? 38080);
     const host = process.env['KOLOSAL_CLI_API_HOST'] ?? settings.merged.api?.host ?? '127.0.0.1';
-    const authToken = process.env['KOLOSAL_CLI_API_TOKEN'] ?? settings.merged.api?.token;
     
     const apiServer = await startApiServer(config, {
       port,
       host,
-      enableCors: true, // Always enable CORS for desktop app
-      authToken,
+      enableCors: true,
     });
     
     registerCleanup(async () => {
@@ -447,7 +445,6 @@ export async function main() {
       const { startApiServer } = await import('./api/server.js');
       const port = Number(argv.apiPort ?? process.env['KOLOSAL_CLI_API_PORT'] ?? settings.merged.api?.port ?? 38080);
       const host = argv.apiHost ?? process.env['KOLOSAL_CLI_API_HOST'] ?? settings.merged.api?.host ?? '127.0.0.1';
-      const authToken = process.env['KOLOSAL_CLI_API_TOKEN'] ?? settings.merged.api?.token;
       const corsEnabled = (process.env['KOLOSAL_CLI_API_CORS'] ?? '')
         ? ['1','true','yes'].includes(String(process.env['KOLOSAL_CLI_API_CORS']).toLowerCase())
         : settings.merged.api?.corsEnabled ?? true;
@@ -455,7 +452,6 @@ export async function main() {
         port,
         host,
         enableCors: corsEnabled,
-        authToken,
       });
       registerCleanup(async () => {
         try { await apiServer?.close(); } catch { /* ignore */ }
