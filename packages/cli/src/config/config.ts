@@ -116,6 +116,10 @@ export interface CliArgs {
   tavilyApiKey: string | undefined;
   screenReader: boolean | undefined;
   vlmSwitchMode: string | undefined;
+  serverOnly: boolean | undefined;
+  noUiOutput: boolean | undefined;
+  apiPort: number | undefined;
+  apiHost: string | undefined;
 }
 
 export async function parseArguments(settings: Settings): Promise<CliArgs> {
@@ -289,6 +293,26 @@ export async function parseArguments(settings: Settings): Promise<CliArgs> {
           description:
             'Default behavior when images are detected in input. Values: once (one-time switch), session (switch for entire session), persist (continue with current model). Overrides settings files.',
           default: process.env['VLM_SWITCH_MODE'],
+        })
+        .option('server-only', {
+          type: 'boolean',
+          description: 'Run in server-only mode (no interactive UI). Ideal for desktop app integration.',
+          default: false,
+        })
+        .option('no_ui_output', {
+          type: 'boolean',
+          description: 'Disable all UI output and run silently. Use with --server-only for headless operation.',
+          default: false,
+        })
+        .option('api-port', {
+          type: 'number',
+          description: 'Port for the API server to listen on.',
+          default: process.env['KOLOSAL_CLI_API_PORT'] ? Number(process.env['KOLOSAL_CLI_API_PORT']) : undefined,
+        })
+        .option('api-host', {
+          type: 'string',
+          description: 'Host for the API server to bind to.',
+          default: process.env['KOLOSAL_CLI_API_HOST'],
         })
         .check((argv) => {
           if (argv.prompt && argv['promptInteractive']) {
@@ -495,8 +519,9 @@ export async function loadCliConfig(
   const interactive =
     !!argv.promptInteractive || (process.stdin.isTTY && question.length === 0);
   // In non-interactive mode, exclude tools that require a prompt.
+  // However, in server-only mode, we want to allow all tools for API access.
   const extraExcludes: string[] = [];
-  if (!interactive && !argv.experimentalAcp) {
+  if (!interactive && !argv.experimentalAcp && !argv.serverOnly) {
     switch (approvalMode) {
       case ApprovalMode.PLAN:
       case ApprovalMode.DEFAULT:

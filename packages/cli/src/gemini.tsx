@@ -8,6 +8,7 @@ import { startServerIfEnabled, stopGlobalServer } from './server/kolosal-server-
 
 import type { Config } from '@kolosal-code/kolosal-code-core';
 import {
+  ApprovalMode,
   AuthType,
   FatalConfigError,
   getOauthClient,
@@ -229,6 +230,134 @@ export async function startInteractiveUI(
   registerCleanup(() => instance.unmount());
 }
 
+export async function startServerOnly(
+  config: Config,
+  settings: LoadedSettings,
+  workspaceRoot: string,
+): Promise<void> {
+  // Server-only mode - no UI, no interactive elements
+  // Skip UI initialization, theme loading, and desktop integration
+  // But keep essential authentication and client initialization
+  
+  // CRITICAL: Initialize the config - this sets up contentGeneratorConfig
+  await config.initialize();
+  
+  // Get authType from current model (needed for client initialization)
+  const { getCurrentModelAuthType, getSavedModelEntry } = await import('./config/savedModels.js');
+  const currentModelName = settings.merged.model?.name;
+  const savedModels = (settings.merged.model?.savedModels ?? []) as SavedModelEntry[];
+  const currentAuthType = getCurrentModelAuthType(currentModelName, savedModels);
+  const currentModelEntry = getSavedModelEntry(currentModelName, savedModels);
+  const hasStoredApiKey = Boolean(currentModelEntry?.apiKey?.trim());
+  const hasPersistedKolosalToken = Boolean(
+    typeof settings.merged.kolosalOAuthToken === 'string' &&
+      settings.merged.kolosalOAuthToken.trim(),
+  );
+  const usesOpenAICompatibleProvider = currentModelEntry?.provider === 'openai-compatible';
+
+  // Set approval mode to YOLO before creating the client to ensure all tools are available
+  const originalApprovalMode = config.getApprovalMode();
+  config.setApprovalMode(ApprovalMode.YOLO);
+  
+  // CRITICAL: Create the Gemini client by calling refreshAuth
+  // This is what actually creates this.geminiClient
+  try {
+    await config.refreshAuth(currentAuthType || AuthType.NO_AUTH);
+  } catch (err) {
+    if (config.getDebugMode()) {
+      console.error('[server-only] Client initialization failed:', err);
+    }
+    // Continue anyway - some operations might work without auth
+  }
+  
+  // Restore original approval mode after client creation
+  config.setApprovalMode(originalApprovalMode);
+
+  // Handle additional authentication if needed
+  const shouldPreAuthenticate =
+    currentAuthType === AuthType.USE_OPENAI &&
+    config.isBrowserLaunchSuppressed() &&
+    !hasStoredApiKey &&
+    !hasPersistedKolosalToken &&
+    !usesOpenAICompatibleProvider;
+
+  if (shouldPreAuthenticate) {
+    try {
+      await getOauthClient(currentAuthType, config);
+    } catch (err) {
+      if (config.getDebugMode()) {
+        console.error('[server-only] Authentication failed:', err);
+      }
+      // Continue anyway - some operations might work without auth
+    }
+  }
+
+  // Start kolosal-server in the background if enabled
+  const serverManager = await startServerIfEnabled({
+    debug: config.getDebugMode(),
+    autoStart: true,
+    port: 8087,
+  });
+
+  // Register cleanup to stop the server when CLI exits
+  if (serverManager) {
+    registerCleanup(async () => {
+      try {
+        await stopGlobalServer();
+      } catch (error) {
+        if (config.getDebugMode()) {
+          console.error('Error stopping kolosal-server:', error);
+        }
+      }
+    });
+  }
+
+  // Start API server with forced enabled state for server-only mode
+  try {
+    const { startApiServer } = await import('./api/server.js');
+    const port = Number(process.env['KOLOSAL_CLI_API_PORT'] ?? settings.merged.api?.port ?? 38080);
+    const host = process.env['KOLOSAL_CLI_API_HOST'] ?? settings.merged.api?.host ?? '127.0.0.1';
+    const authToken = process.env['KOLOSAL_CLI_API_TOKEN'] ?? settings.merged.api?.token;
+    
+    const apiServer = await startApiServer(config, {
+      port,
+      host,
+      enableCors: true, // Always enable CORS for desktop app
+      authToken,
+    });
+    
+    registerCleanup(async () => {
+      try { await apiServer.close(); } catch { /* ignore */ }
+    });
+    
+    // Always log debug info in server-only mode for troubleshooting
+    console.error(`[server-only] API server listening on http://${host}:${port}`);
+    console.error(`[server-only] Model: ${currentModelName}, Auth: ${currentAuthType}`);
+    console.error(`[server-only] Excluded tools:`, config.getExcludeTools());
+  } catch (e) {
+    console.error('Failed to start API server in server-only mode:', e);
+    throw e;
+  }
+
+  // Keep the process alive and handle graceful shutdown
+  const shutdown = async () => {
+    if (config.getDebugMode()) {
+      console.error('[server-only] Shutting down...');
+    }
+    await runExitCleanup();
+    process.exit(0);
+  };
+
+  process.once('SIGINT', shutdown);
+  process.once('SIGTERM', shutdown);
+  process.once('SIGUSR2', shutdown); // For nodemon
+
+  // Log startup completion only in debug mode
+  if (config.getDebugMode()) {
+    console.error(`[server-only] Kolosal CLI server ready on port ${process.env['KOLOSAL_CLI_API_PORT'] ?? 38080}`);
+  }
+}
+
 export async function main() {
   setupProcessExitHandlers();
   setupUnhandledRejectionHandler();
@@ -289,6 +418,21 @@ export async function main() {
 
   setMaxSizedBoxDebugging(config.getDebugMode());
 
+  // Check for server-only mode first (before config.initialize())
+  if (argv.serverOnly) {
+    // Override API settings for server-only mode
+    process.env['KOLOSAL_CLI_API'] = 'true'; // Force API enabled
+    if (argv.apiPort) {
+      process.env['KOLOSAL_CLI_API_PORT'] = argv.apiPort.toString();
+    }
+    if (argv.apiHost) {
+      process.env['KOLOSAL_CLI_API_HOST'] = argv.apiHost;
+    }
+    
+    await startServerOnly(config, settings, workspaceRoot);
+    return; // Exit early for server-only mode
+  }
+
   await config.initialize();
 
   // Optionally start lightweight HTTP API server to expose generation endpoints
@@ -301,8 +445,8 @@ export async function main() {
   if (apiEnabled) {
     try {
       const { startApiServer } = await import('./api/server.js');
-      const port = Number(process.env['KOLOSAL_CLI_API_PORT'] ?? settings.merged.api?.port ?? 38080);
-      const host = process.env['KOLOSAL_CLI_API_HOST'] ?? settings.merged.api?.host ?? '127.0.0.1';
+      const port = Number(argv.apiPort ?? process.env['KOLOSAL_CLI_API_PORT'] ?? settings.merged.api?.port ?? 38080);
+      const host = argv.apiHost ?? process.env['KOLOSAL_CLI_API_HOST'] ?? settings.merged.api?.host ?? '127.0.0.1';
       const authToken = process.env['KOLOSAL_CLI_API_TOKEN'] ?? settings.merged.api?.token;
       const corsEnabled = (process.env['KOLOSAL_CLI_API_CORS'] ?? '')
         ? ['1','true','yes'].includes(String(process.env['KOLOSAL_CLI_API_CORS']).toLowerCase())

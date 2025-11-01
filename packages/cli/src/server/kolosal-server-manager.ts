@@ -92,22 +92,64 @@ export class KolosalServerManager {
   private findServerExecutable(): string {
     // Determine platform-specific directory
     const platform = process.platform === 'darwin' ? 'mac' : 'linux';
-    
+
     // Check if we're in development or production
     const possiblePaths = [
       // From CLI package dist to main project dist
-      join(__dirname, '..', '..', '..', '..', '..', 'dist', platform, 'kolosal-app', 'bin', 'kolosal-server'),
+      join(
+        __dirname,
+        '..',
+        '..',
+        '..',
+        '..',
+        '..',
+        'dist',
+        platform,
+        'kolosal-app',
+        'bin',
+        'kolosal-server',
+      ),
       // From CLI package to main project dist (development)
-      join(__dirname, '..', '..', '..', '..', 'dist', platform, 'kolosal-app', 'bin', 'kolosal-server'),
+      join(
+        __dirname,
+        '..',
+        '..',
+        '..',
+        '..',
+        'dist',
+        platform,
+        'kolosal-app',
+        'bin',
+        'kolosal-server',
+      ),
       // Direct paths for development
-      join(__dirname, '..', '..', '..', 'dist', platform, 'kolosal-app', 'bin', 'kolosal-server'),
+      join(
+        __dirname,
+        '..',
+        '..',
+        '..',
+        'dist',
+        platform,
+        'kolosal-app',
+        'bin',
+        'kolosal-server',
+      ),
       // Production paths (in packaged app)
       join(__dirname, '..', '..', 'bin', 'kolosal-server'),
       join(__dirname, '..', 'bin', 'kolosal-server'),
       // Development paths
-      join(__dirname, '..', '..', '..', 'kolosal-server', 'build', 'Release', 'kolosal-server'),
+      join(
+        __dirname,
+        '..',
+        '..',
+        '..',
+        'kolosal-server',
+        'build',
+        'Release',
+        'kolosal-server',
+      ),
       // Fallback to system PATH
-      'kolosal-server'
+      'kolosal-server',
     ];
 
     this.debug(`Looking for kolosal-server executable...`);
@@ -132,7 +174,9 @@ export class KolosalServerManager {
   private async detectGPUCapabilities(): Promise<void> {
     // On macOS, we default to Metal and skip GPU detection to avoid unnecessary work
     if (process.platform === 'darwin') {
-      this.debug('macOS detected: skipping GPU detection and defaulting to llama-metal');
+      this.debug(
+        'macOS detected: skipping GPU detection and defaulting to llama-metal',
+      );
       return;
     }
 
@@ -141,11 +185,15 @@ export class KolosalServerManager {
       this.gpuInfo = await detectGPUs();
       const summary = getGPUSummary(this.gpuInfo);
       this.debug(`GPU detection complete: ${summary}`);
-      
+
       if (this.gpuInfo.hasDedicatedGPU && this.gpuInfo.hasVulkanSupport) {
-        this.debug('Dedicated GPU with Vulkan support detected - will use llama-vulkan engine');
+        this.debug(
+          'Dedicated GPU with Vulkan support detected - will use llama-vulkan engine',
+        );
       } else if (this.gpuInfo.hasGPU) {
-        this.debug('GPU detected but no Vulkan support or not dedicated - will use llama-cpu engine');
+        this.debug(
+          'GPU detected but no Vulkan support or not dedicated - will use llama-cpu engine',
+        );
       } else {
         this.debug('No GPU detected - will use llama-cpu engine');
       }
@@ -184,7 +232,10 @@ export class KolosalServerManager {
         return true;
       }
       // Handle pair style: ['--config', 'path']
-      if ((arg === '--config' || arg === '-c') && typeof arr[index + 1] === 'string') {
+      if (
+        (arg === '--config' || arg === '-c') &&
+        typeof arr[index + 1] === 'string'
+      ) {
         return true;
       }
       return false;
@@ -194,9 +245,11 @@ export class KolosalServerManager {
       return [];
     }
 
-  const envConfig = process.env['KOLOSAL_SERVER_CONFIG']?.trim();
+    const envConfig = process.env['KOLOSAL_SERVER_CONFIG']?.trim();
     if (envConfig && existsSync(envConfig)) {
-      this.debug(`Using kolosal-server config from KOLOSAL_SERVER_CONFIG: ${envConfig}`);
+      this.debug(
+        `Using kolosal-server config from KOLOSAL_SERVER_CONFIG: ${envConfig}`,
+      );
       return ['--config', envConfig];
     }
 
@@ -211,9 +264,24 @@ export class KolosalServerManager {
       candidates.push(join(execDir, '..', 'config.yaml'));
     }
 
-    const devConfigName = process.platform === 'darwin' ? 'config.macos.yaml' : 'config.yaml';
-    candidates.push(join(__dirname, '..', '..', '..', '..', '..', 'kolosal-server', 'configs', devConfigName));
-    candidates.push(join(process.cwd(), 'kolosal-server', 'configs', devConfigName));
+    const devConfigName =
+      process.platform === 'darwin' ? 'config.macos.yaml' : 'config.yaml';
+    candidates.push(
+      join(
+        __dirname,
+        '..',
+        '..',
+        '..',
+        '..',
+        '..',
+        'kolosal-server',
+        'configs',
+        devConfigName,
+      ),
+    );
+    candidates.push(
+      join(process.cwd(), 'kolosal-server', 'configs', devConfigName),
+    );
 
     for (const candidate of candidates) {
       if (candidate && existsSync(candidate)) {
@@ -241,12 +309,14 @@ export class KolosalServerManager {
     try {
       // Detect GPU capabilities before starting server
       await this.detectGPUCapabilities();
-      
+
       await this.spawnServerProcess();
       await this.waitForServerReady();
       this.startHealthChecking();
       this.status = ServerStatus.RUNNING;
-      this.debug(`kolosal-server started successfully on ${this.config.host}:${this.config.port}`);
+      this.debug(
+        `kolosal-server started successfully on ${this.config.host}:${this.config.port}`,
+      );
     } catch (error) {
       this.status = ServerStatus.ERROR;
       this.cleanup();
@@ -279,7 +349,10 @@ export class KolosalServerManager {
       status: this.status,
       pid: this.process?.pid,
       port: this.status === ServerStatus.RUNNING ? this.config.port : undefined,
-      uptime: this.status === ServerStatus.RUNNING ? Date.now() - this.startTime : undefined,
+      uptime:
+        this.status === ServerStatus.RUNNING
+          ? Date.now() - this.startTime
+          : undefined,
       lastHealthCheck: new Date(),
     };
   }
@@ -324,31 +397,39 @@ export class KolosalServerManager {
   private async spawnServerProcess(): Promise<void> {
     // Get recommended inference engine based on GPU detection
     const recommendedEngine = this.getRecommendedInferenceEngine();
-    
+
     const args = [
-      '--log-level', this.config.debug ? 'DEBUG' : 'INFO',
+      '--log-level',
+      this.config.debug ? 'DEBUG' : 'INFO',
       ...this.resolveConfigArgs(),
-      '--port', this.config.port.toString(),
-      '--host', this.config.host,
-      '--default-inference-engine', recommendedEngine,
-      ...this.config.serverArgs
+      '--port',
+      this.config.port.toString(),
+      '--host',
+      this.config.host,
+      '--default-inference-engine',
+      recommendedEngine,
+      ...this.config.serverArgs,
     ];
 
     // Set library path for macOS
     const env = { ...process.env };
     if (process.platform === 'darwin') {
       const libPath = join(dirname(this.serverExecutablePath), '..', 'lib');
-      env['DYLD_LIBRARY_PATH'] = libPath + (env['DYLD_LIBRARY_PATH'] ? ':' + env['DYLD_LIBRARY_PATH'] : '');
+      env['DYLD_LIBRARY_PATH'] =
+        libPath +
+        (env['DYLD_LIBRARY_PATH'] ? ':' + env['DYLD_LIBRARY_PATH'] : '');
     }
 
     this.debug(`Spawning: ${this.serverExecutablePath} ${args.join(' ')}`);
     this.debug(`Environment DYLD_LIBRARY_PATH: ${env['DYLD_LIBRARY_PATH']}`);
-    this.debug(`Server executable exists: ${existsSync(this.serverExecutablePath)}`);
+    this.debug(
+      `Server executable exists: ${existsSync(this.serverExecutablePath)}`,
+    );
 
     this.process = spawn(this.serverExecutablePath, args, {
       env,
       stdio: this.config.debug ? 'inherit' : 'pipe',
-      detached: false
+      detached: false,
     });
 
     let processErrorOccurred = false;
@@ -377,8 +458,14 @@ export class KolosalServerManager {
       throw new Error('Server process failed to spawn');
     }
 
-    if (!this.process || this.process.killed || this.process.exitCode !== null) {
-      throw new Error(`Server process failed to start - killed: ${this.process?.killed}, exitCode: ${this.process?.exitCode}`);
+    if (
+      !this.process ||
+      this.process.killed ||
+      this.process.exitCode !== null
+    ) {
+      throw new Error(
+        `Server process failed to start - killed: ${this.process?.killed}, exitCode: ${this.process?.exitCode}`,
+      );
     }
   }
 
@@ -391,7 +478,9 @@ export class KolosalServerManager {
 
     while (retries < this.config.maxHealthCheckRetries) {
       if (Date.now() - startTime > this.config.startupTimeoutMs) {
-        throw new Error(`Server startup timeout after ${this.config.startupTimeoutMs}ms`);
+        throw new Error(
+          `Server startup timeout after ${this.config.startupTimeoutMs}ms`,
+        );
       }
 
       try {
@@ -415,34 +504,41 @@ export class KolosalServerManager {
    */
   private async makeHealthRequest(): Promise<boolean> {
     return new Promise((resolve) => {
-      const request = http.request({
-        hostname: this.config.host,
-        port: this.config.port,
-        path: '/health',
-        method: 'GET',
-        timeout: 3000
-      }, (response) => {
-        if (response.statusCode === 200) {
-          let data = '';
-          response.on('data', (chunk) => {
-            data += chunk;
-          });
-          response.on('end', () => {
-            try {
-              const healthData = JSON.parse(data);
-              const isHealthy = healthData.status === 'healthy';
-              this.debug(`Health check response: ${isHealthy ? 'healthy' : 'unhealthy'} - ${data.substring(0, 100)}`);
-              resolve(isHealthy);
-            } catch (error) {
-              this.debug(`Health check JSON parse error: ${error}`);
-              resolve(false);
-            }
-          });
-        } else {
-          this.debug(`Health check failed with status ${response.statusCode}`);
-          resolve(false);
-        }
-      });
+      const request = http.request(
+        {
+          hostname: this.config.host,
+          port: this.config.port,
+          path: '/health',
+          method: 'GET',
+          timeout: 3000,
+        },
+        (response) => {
+          if (response.statusCode === 200) {
+            let data = '';
+            response.on('data', (chunk) => {
+              data += chunk;
+            });
+            response.on('end', () => {
+              try {
+                const healthData = JSON.parse(data);
+                const isHealthy = healthData.status === 'healthy';
+                this.debug(
+                  `Health check response: ${isHealthy ? 'healthy' : 'unhealthy'} - ${data.substring(0, 100)}`,
+                );
+                resolve(isHealthy);
+              } catch (error) {
+                this.debug(`Health check JSON parse error: ${error}`);
+                resolve(false);
+              }
+            });
+          } else {
+            this.debug(
+              `Health check failed with status ${response.statusCode}`,
+            );
+            resolve(false);
+          }
+        },
+      );
 
       request.on('error', (error) => {
         this.debug(`Health check request error: ${error.message}`);
@@ -490,7 +586,11 @@ export class KolosalServerManager {
 
       // Wait for graceful shutdown
       const shutdownStart = Date.now();
-      while (this.process && !this.process.killed && Date.now() - shutdownStart < this.config.shutdownTimeoutMs) {
+      while (
+        this.process &&
+        !this.process.killed &&
+        Date.now() - shutdownStart < this.config.shutdownTimeoutMs
+      ) {
         await setTimeout(100);
       }
 
@@ -533,7 +633,9 @@ let globalServerManager: KolosalServerManager | null = null;
 /**
  * Get or create the global server manager instance
  */
-export function getServerManager(config?: Partial<ServerConfig>): KolosalServerManager {
+export function getServerManager(
+  config?: Partial<ServerConfig>,
+): KolosalServerManager {
   if (!globalServerManager) {
     globalServerManager = new KolosalServerManager(config);
   }
@@ -543,17 +645,18 @@ export function getServerManager(config?: Partial<ServerConfig>): KolosalServerM
 /**
  * Start the kolosal-server if auto-start is enabled
  */
-export async function startServerIfEnabled(config?: Partial<ServerConfig>): Promise<KolosalServerManager | null> {
+export async function startServerIfEnabled(
+  config?: Partial<ServerConfig>,
+): Promise<KolosalServerManager | null> {
   const finalConfig = { ...DEFAULT_SERVER_CONFIG, ...config };
-  
+
   if (!finalConfig.autoStart) {
     return null;
   }
 
   const manager = getServerManager(finalConfig);
-  
+
   try {
-    
     await manager.start();
     return manager;
   } catch (error) {

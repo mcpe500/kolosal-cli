@@ -104,6 +104,10 @@ async function handleGenerateOnce(
 
   try {
     const geminiClient = config.getGeminiClient();
+    
+    // Debug: Log available tools
+    console.error('[API] Available tools:', config.getExcludeTools());
+    console.error('[API] Approval mode:', config.getApprovalMode());
 
   const { processedQuery, shouldProceed } = await handleAtCommand({
     query: input,
@@ -260,6 +264,33 @@ export function startApiServer(
           {
             status: 'ok',
             timestamp: new Date().toISOString(),
+            mode: 'server',
+          },
+          enableCors,
+        );
+      }
+
+      if (url.pathname === '/status' && req.method === 'GET') {
+        if (!checkAuth(req, res, authToken, enableCors)) return;
+        
+        return sendJson(
+          res,
+          200,
+          {
+            status: 'ready',
+            timestamp: new Date().toISOString(),
+            version: '1.0.0', // TODO: Get from package.json
+            mode: 'server-only',
+            endpoints: {
+              generate: '/v1/generate',
+              health: '/healthz',
+              status: '/status'
+            },
+            features: {
+              streaming: true,
+              conversationHistory: true,
+              toolExecution: true
+            }
           },
           enableCors,
         );
