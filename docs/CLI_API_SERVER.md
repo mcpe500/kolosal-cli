@@ -9,23 +9,8 @@ The implementation lives in `packages/cli/src/api/server.ts`.
 - Host: defaults to 127.0.0.1
 - Port: configurable by the CLI/launcher
 - CORS: enabled by default (Access-Control-Allow-Origin: *)
-- Auth: Bearer token via Authorization header. If no token is configured, endpoints that require auth will accept requests without it.
 - Streaming: Server-Sent Events (SSE) for token streaming and tool-call events
 - Conversation history: Optional, using Google GenAI `Content[]` shape
-
----
-
-## Authentication
-
-The server can require a token on protected endpoints. When enabled, requests must include:
-
-```
-Authorization: Bearer <token>
-```
-
-The token can be provided when starting the server or via the environment variable `KOLOSAL_CLI_API_TOKEN`.
-
-If the header is missing or the token doesn’t match, the server returns HTTP 401 with `{ "error": "Unauthorized" }`.
 
 ## CORS
 
@@ -43,7 +28,7 @@ The server responds to `OPTIONS` preflight with `204 No Content`.
 
 ### GET /healthz
 
-Health check. No authentication required.
+Health check.
 
 Response example:
 
@@ -57,7 +42,7 @@ Response example:
 
 ### GET /status
 
-Status and capability check. Authentication may be required.
+Status and capability check.
 
 Response example:
 
@@ -85,15 +70,15 @@ Notes:
 
 ### POST /v1/generate
 
-Generates model output for a single prompt, optionally streaming tokens and tool-call events. Authentication may be required.
+Generates model output for a single prompt, optionally streaming tokens and tool-call events. 
 
 Request body:
 
 ```json
 {
-  "input": "Your prompt text…",              // required
+  "input": "Your prompt text…",               // required
   "stream": true,                             // optional (default: false)
-  "prompt_id": "client-generated-id",        // optional; echoed back; auto-generated if missing
+  "prompt_id": "client-generated-id",         // optional; echoed back; auto-generated if missing
   "history": [                                // optional; Google GenAI Content[]
     { "role": "user",  "parts": [{ "text": "Hello" }] },
     { "role": "model", "parts": [{ "text": "Hi!" }] }
@@ -168,7 +153,6 @@ For each tool request emitted by the model, the server:
 ## Error Handling
 
 - `400 Bad Request` — invalid JSON body or missing fields (e.g., `input`).
-- `401 Unauthorized` — missing or invalid `Authorization` header when auth is required.
 - `404 Not Found` — unrecognized path.
 - `500 Internal Server Error` — unexpected exceptions.
 
@@ -178,26 +162,22 @@ In streaming mode, errors are emitted as an `error` SSE event with `{ "message":
 
 ## Examples
 
-Replace `$TOKEN` with your token if auth is enabled.
-
 ### Health check
 
 ```sh
 curl -sS http://127.0.0.1:8787/healthz | jq .
 ```
 
-### Status (auth)
+### Status
 
 ```sh
-curl -sS -H "Authorization: Bearer $TOKEN" \
-  http://127.0.0.1:8787/status | jq .
+curl -sS http://127.0.0.1:8787/status | jq .
 ```
 
 ### Non‑streaming generation
 
 ```sh
 curl -sS -H "Content-Type: application/json" \
-  -H "Authorization: Bearer $TOKEN" \
   -X POST http://127.0.0.1:8787/v1/generate \
   -d '{
     "input": "Summarize the benefits of local AI.",
@@ -209,7 +189,6 @@ curl -sS -H "Content-Type: application/json" \
 
 ```sh
 curl -N -sS -H "Content-Type: application/json" \
-  -H "Authorization: Bearer $TOKEN" \
   -X POST http://127.0.0.1:8787/v1/generate \
   -d '{
     "input": "List three CLI productivity tips.",
@@ -240,7 +219,6 @@ data: true
 
 ```sh
 curl -sS -H "Content-Type: application/json" \
-  -H "Authorization: Bearer $TOKEN" \
   -X POST http://127.0.0.1:8787/v1/generate \
   -d '{
     "input": "And add one more.",
@@ -266,9 +244,8 @@ const config = createConfig(/* … */);
 
 await startApiServer(config, {
   port: 8787,
-  host: "127.0.0.1",     // default
+  host: "127.0.0.1",      // default
   enableCors: true,       // default
-  authToken: process.env.KOLOSAL_CLI_API_TOKEN,
 });
 ```
 
@@ -277,7 +254,6 @@ Options:
 - `port: number` — required
 - `host?: string` — default `"127.0.0.1"`
 - `enableCors?: boolean` — default `true`
-- `authToken?: string` — if set, `/status` and `/v1/generate` require `Authorization: Bearer <token>`
 
 ---
 
