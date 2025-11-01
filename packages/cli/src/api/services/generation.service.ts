@@ -254,15 +254,27 @@ export class GenerationService {
         error: toolResponse.error.message,
       };
     } else {
-      return {
+      // Include full response details similar to non-streaming mode
+      const fullResponse: any = {
         type: 'tool_result',
         name: requestInfo.name,
         ok: true,
-        responseText:
-          typeof toolResponse.resultDisplay === 'string'
-            ? toolResponse.resultDisplay
-            : undefined,
       };
+
+      // Add responseText if available
+      if (typeof toolResponse.resultDisplay === 'string') {
+        fullResponse.responseText = toolResponse.resultDisplay;
+      }
+
+      // Add full response details from responseParts if available
+      if (toolResponse.responseParts && toolResponse.responseParts.length > 0) {
+        const responsePart = toolResponse.responseParts[0];
+        if (responsePart.functionResponse && responsePart.functionResponse.response) {
+          fullResponse.response = responsePart.functionResponse.response;
+        }
+      }
+
+      return fullResponse;
     }
   }
 }

@@ -93,13 +93,22 @@ export class GenerateHandler implements RouteHandler {
       signal,
       {
         onContentChunk: (chunk) => {
-          // Ignore newline-only chunks if previous content is empty or after tool results
-          if (chunk === '\n' && (previousContentEmpty || lastEventType === 'tool_result')) {
+          // Filter out leading newlines if previous content is empty or after tool results
+          let filteredChunk = chunk;
+          if (previousContentEmpty || lastEventType === 'tool_result') {
+            filteredChunk = chunk.replace(/^\n+/, '');
+          }
+          
+          // Limit consecutive newlines to maximum of 2
+          filteredChunk = filteredChunk.replace(/\n{3,}/g, '\n\n');
+          
+          // Skip if chunk becomes empty after filtering
+          if (filteredChunk === '') {
             return;
           }
           
-          HttpUtils.writeSse(res, 'content', chunk);
-          previousContentEmpty = chunk.trim() === '';
+          HttpUtils.writeSse(res, 'content', filteredChunk);
+          previousContentEmpty = filteredChunk.trim() === '';
           lastEventType = 'content';
         },
         onEvent: (item) => {
@@ -138,16 +147,45 @@ export class GenerateHandler implements RouteHandler {
         },
       );
 
+    // Apply similar filtering logic as streaming to clean up final text
+    const cleanedFinalText = this.cleanFinalText(finalText, transcript);
+
     HttpUtils.sendJson(
       res,
       200,
       { 
-        output: finalText, 
+        output: cleanedFinalText, 
         prompt_id: promptId, 
         messages: transcript,
         history: updatedHistory,
       },
       enableCors,
     );
+  }
+
+  private cleanFinalText(finalText: string, transcript: any[]): string {
+    if (!finalText) return finalText;
+
+    let cleanedText = finalText;
+
+    // Check if the last events in transcript were tool-related
+    const lastEvent = transcript[transcript.length - 1];
+    const secondLastEvent = transcript.length > 1 ? transcript[transcript.length - 2] : null;
+    
+    // If final text starts with newlines and follows tool results, clean them up
+    if (cleanedText.startsWith('\n') && 
+        (lastEvent?.type === 'tool_result' || secondLastEvent?.type === 'tool_result')) {
+      cleanedText = cleanedText.replace(/^\n+/, '');
+    }
+
+    // Limit consecutive newlines to maximum of 2
+    cleanedText = cleanedText.replace(/\n{3,}/g, '\n\n');
+
+    // Also clean up cases where the text is just newlines
+    if (cleanedText.trim() === '') {
+      return '';
+    }
+
+    return cleanedText;
   }
 }
