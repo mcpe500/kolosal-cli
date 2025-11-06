@@ -44,14 +44,27 @@ export class GenerationService {
 
     if (workingDirectory) {
       try {
-        // Import the WorkspaceContext class
+        // Import the WorkspaceContext class and fs
         const { WorkspaceContext } = await import('@kolosal-ai/kolosal-ai-core');
+        const fs = await import('node:fs/promises');
+        const path = await import('node:path');
+        
+        // Resolve the working directory path
+        const resolvedWorkingDirectory = path.resolve(workingDirectory);
+        
+        // Check if the directory exists, create it if it doesn't
+        try {
+          await fs.access(resolvedWorkingDirectory);
+        } catch (error) {
+          console.log(`[API] Creating working directory: ${resolvedWorkingDirectory}`);
+          await fs.mkdir(resolvedWorkingDirectory, { recursive: true });
+        }
         
         // Store the original workspace context
         originalWorkspaceContext = this.config.getWorkspaceContext();
         
         // Create a temporary workspace context with the specified working directory
-        tempWorkspaceContext = new WorkspaceContext(workingDirectory, []);
+        tempWorkspaceContext = new WorkspaceContext(resolvedWorkingDirectory, []);
         
         // Temporarily replace the workspace context in the config
         this.config.setWorkspaceContext(tempWorkspaceContext);

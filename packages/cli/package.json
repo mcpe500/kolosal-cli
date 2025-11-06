@@ -34,6 +34,7 @@
   "dependencies": {
     "@google/genai": "1.9.0",
     "@iarna/toml": "^2.2.5",
+    "@kolosal-ai/api-server": "file:../api-server",
     "@kolosal-code/kolosal-code-core": "file:../core",
     "@modelcontextprotocol/sdk": "^1.15.1",
     "@types/update-notifier": "^6.0.8",

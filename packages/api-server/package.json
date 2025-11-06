@@ -1,0 +1,51 @@
+{
+  "name": "@kolosal-ai/api-server",
+  "version": "0.1.3",
+  "description": "Kolosal AI API Server - HTTP server for AI generation services",
+  "type": "module",
+  "main": "dist/index.js",
+  "types": "dist/index.d.ts",
+  "exports": {
+    ".": {
+      "import": "./dist/index.js",
+      "types": "./dist/index.d.ts"
+    }
+  },
+  "scripts": {
+    "build": "node ../../scripts/build_package.js",
+    "start": "node dist/standalone.js",
+    "start:server": "node dist/standalone.js",
+    "start:server:debug": "DEBUG=1 node dist/standalone.js",
+    "start:server:port": "node dist/standalone.js",
+    "test": "vitest",
+    "test:watch": "vitest --watch",
+    "lint": "eslint src",
+    "clean": "rm -rf dist"
+  },
+  "dependencies": {
+    "@kolosal-ai/kolosal-ai-core": "file:../core",
+    "@google/genai": "1.9.0"
+  },
+  "devDependencies": {
+    "@types/node": "^22.9.0",
+    "typescript": "^5.6.3",
+    "vitest": "^2.1.4"
+  },
+  "license": "Apache-2.0",
+  "keywords": [
+    "ai",
+    "api",
+    "server",
+    "http",
+    "kolosal"
+  ],
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/kolosalAI/kolosal-cli.git",
+    "directory": "packages/api-server"
+  },
+  "bugs": {
+    "url": "https://github.com/kolosalAI/kolosal-cli/issues"
+  },
+  "homepage": "https://github.com/kolosalAI/kolosal-cli/tree/main/packages/api-server"
+}

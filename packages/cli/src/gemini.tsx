@@ -314,7 +314,7 @@ export async function startServerOnly(
 
   // Start API server with forced enabled state for server-only mode
   try {
-    const { startApiServer } = await import('./api/server.js');
+    const { startApiServer } = await import('@kolosal-ai/api-server');
     const port = Number(process.env['KOLOSAL_CLI_API_PORT'] ?? settings.merged.api?.port ?? 38080);
     const host = process.env['KOLOSAL_CLI_API_HOST'] ?? settings.merged.api?.host ?? '127.0.0.1';
     
@@ -442,7 +442,7 @@ export async function main() {
   let apiServer: { close: () => Promise<void> } | undefined;
   if (apiEnabled) {
     try {
-      const { startApiServer } = await import('./api/server.js');
+      const { startApiServer } = await import('@kolosal-ai/api-server');
       const port = Number(argv.apiPort ?? process.env['KOLOSAL_CLI_API_PORT'] ?? settings.merged.api?.port ?? 38080);
       const host = argv.apiHost ?? process.env['KOLOSAL_CLI_API_HOST'] ?? settings.merged.api?.host ?? '127.0.0.1';
       const corsEnabled = (process.env['KOLOSAL_CLI_API_CORS'] ?? '')
