@@ -30,6 +30,9 @@ export class GenerateHandler implements RouteHandler {
     const stream = Boolean(body?.stream);
     const promptId = body?.prompt_id || Math.random().toString(16).slice(2);
     const history = body?.history;
+    const model = body?.model;
+    const apiKey = body?.api_key;
+    const baseUrl = body?.base_url;
 
     if (!input) {
       return HttpUtils.sendJson(
@@ -52,6 +55,9 @@ export class GenerateHandler implements RouteHandler {
           abortController.signal,
           res,
           enableCors,
+          model,
+          apiKey,
+          baseUrl,
         );
       } else {
         await this.handleNonStreamingResponse(
@@ -61,6 +67,9 @@ export class GenerateHandler implements RouteHandler {
           abortController.signal,
           res,
           enableCors,
+          model,
+          apiKey,
+          baseUrl,
         );
       }
     } catch (e) {
@@ -80,6 +89,9 @@ export class GenerateHandler implements RouteHandler {
     signal: AbortSignal,
     res: any,
     enableCors: boolean,
+    model?: string,
+    apiKey?: string,
+    baseUrl?: string,
   ): Promise<void> {
     HttpUtils.setupSseHeaders(res, enableCors);
 
@@ -120,6 +132,9 @@ export class GenerateHandler implements RouteHandler {
           }
         },
         conversationHistory: history,
+        model,
+        apiKey,
+        baseUrl,
       },
     );
 
@@ -136,6 +151,9 @@ export class GenerateHandler implements RouteHandler {
     signal: AbortSignal,
     res: any,
     enableCors: boolean,
+    model?: string,
+    apiKey?: string,
+    baseUrl?: string,
   ): Promise<void> {
     const { finalText, transcript, history: updatedHistory } = 
       await this.generationService.generateResponse(
@@ -144,6 +162,9 @@ export class GenerateHandler implements RouteHandler {
         signal,
         {
           conversationHistory: history,
+          model,
+          apiKey,
+          baseUrl,
         },
       );
 

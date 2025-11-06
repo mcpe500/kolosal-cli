@@ -14,6 +14,10 @@
   "scripts": {
     "build": "node ../../scripts/build_package.js",
     "start": "node dist/index.js",
+    "start:server": "node dist/index.js --server-only",
+    "start:server:debug": "node dist/index.js --server-only --debug",
+    "start:server:port": "node dist/index.js --server-only --api-port 8080",
+    "start:server:silent": "node dist/index.js --server-only --no_ui_output",
     "debug": "node --inspect-brk dist/index.js",
     "lint": "eslint . --ext .ts,.tsx",
     "format": "prettier --write .",

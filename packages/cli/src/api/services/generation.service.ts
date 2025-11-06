@@ -5,7 +5,7 @@
  */
 
 import type { Config, ToolCallRequestInfo } from '@kolosal-ai/kolosal-ai-core';
-import { executeToolCall, GeminiEventType, ApprovalMode } from '@kolosal-ai/kolosal-ai-core';
+import { executeToolCall, GeminiEventType, ApprovalMode, GeminiClient, AuthType } from '@kolosal-ai/kolosal-ai-core';
 import type { Content, Part } from '@google/genai';
 import { handleAtCommand } from '../../ui/hooks/atCommandProcessor.js';
 import type {
@@ -26,16 +26,48 @@ export class GenerationService {
       onContentChunk?: ContentStreamCallback;
       onEvent?: StreamEventCallback;
       conversationHistory?: Content[];
+      model?: string;
+      apiKey?: string;
+      baseUrl?: string;
     } = {},
   ): Promise<GenerationResult> {
-    const { onContentChunk, onEvent, conversationHistory } = options;
+    const { onContentChunk, onEvent, conversationHistory, model, apiKey, baseUrl } = options;
 
     // Set approval mode to YOLO for API requests to auto-approve tool calls
     const originalApprovalMode = this.config.getApprovalMode();
     this.config.setApprovalMode(ApprovalMode.YOLO);
 
     try {
-      const geminiClient = this.config.getGeminiClient();
+      let geminiClient = this.config.getGeminiClient();
+
+      // Create a temporary client with custom model/API key/baseUrl if provided
+      if (model || apiKey || baseUrl) {
+        const currentConfig = this.config.getContentGeneratorConfig();
+        const customConfig = {
+          ...currentConfig,
+          ...(model && { model }),
+          ...(apiKey && { apiKey, authType: AuthType.USE_OPENAI }),
+          ...(baseUrl && { baseUrl, authType: AuthType.USE_OPENAI }),
+        };
+
+        // Create a temporary client for this request
+        geminiClient = new GeminiClient(this.config);
+        await geminiClient.initialize(customConfig);
+        
+        // Ensure the client is properly initialized before setting history
+        if (!geminiClient.isInitialized()) {
+          throw new Error('Failed to initialize custom Gemini client');
+        }
+      } else {
+        // No custom parameters provided - check if default client exists and is initialized
+        if (!geminiClient) {
+          throw new Error('No Gemini client available from configuration and no custom parameters provided');
+        }
+        
+        if (!geminiClient.isInitialized()) {
+          throw new Error('Default Gemini client is not properly initialized and no custom parameters provided');
+        }
+      }
       
       this.setupConversationHistory(geminiClient, conversationHistory);
       this.logDebugInfo();
@@ -58,16 +90,32 @@ export class GenerationService {
   }
 
   private setupConversationHistory(geminiClient: any, conversationHistory?: Content[]): void {
+    // Check if the client is properly initialized
+    if (!geminiClient || !geminiClient.isInitialized()) {
+      console.error('[API] Gemini client is not properly initialized');
+      throw new Error('Gemini client is not properly initialized');
+    }
+
     if (conversationHistory && conversationHistory.length > 0) {
       try {
         geminiClient.setHistory(conversationHistory);
       } catch (e) {
         console.error('[API] Failed to set provided conversation history:', e);
         // Fall back to clearing history to ensure statelessness
-        geminiClient.setHistory([]);
+        try {
+          geminiClient.setHistory([]);
+        } catch (clearError) {
+          console.error('[API] Failed to clear history as fallback:', clearError);
+          throw new Error('Unable to initialize conversation history');
+        }
       }
     } else {
-      geminiClient.setHistory([]);
+      try {
+        geminiClient.setHistory([]);
+      } catch (e) {
+        console.error('[API] Failed to clear conversation history:', e);
+        throw new Error('Unable to initialize conversation history');
+      }
     }
   }
 

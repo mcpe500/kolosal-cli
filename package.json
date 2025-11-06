@@ -17,6 +17,10 @@
   },
   "scripts": {
     "start": "cross-env NODE_OPTIONS=\"--no-deprecation\" node scripts/start.js",
+    "start:server": "cross-env NODE_OPTIONS=\"--no-deprecation\" node scripts/start.js --server-only",
+    "start:server:debug": "cross-env DEBUG=1 NODE_OPTIONS=\"--no-deprecation\" node scripts/start.js --server-only",
+    "start:server:port": "cross-env NODE_OPTIONS=\"--no-deprecation\" node scripts/start.js --server-only --api-port 8080",
+    "start:server:silent": "cross-env NODE_OPTIONS=\"--no-deprecation\" node scripts/start.js --server-only --no_ui_output",
     "debug": "cross-env DEBUG=1 NODE_OPTIONS=\"--no-deprecation\" node --inspect-brk scripts/start.js",
     "auth:npm": "npx google-artifactregistry-auth",
     "auth:docker": "gcloud auth configure-docker us-west1-docker.pkg.dev",

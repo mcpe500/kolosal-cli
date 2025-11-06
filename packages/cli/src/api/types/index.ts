@@ -44,6 +44,9 @@ export interface GenerateRequest {
   stream?: boolean;
   prompt_id?: string;
   history?: Content[];
+  model?: string;
+  api_key?: string;
+  base_url?: string;
 }
 
 export interface GenerateResponse {
