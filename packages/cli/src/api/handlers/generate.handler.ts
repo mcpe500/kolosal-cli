@@ -33,6 +33,7 @@ export class GenerateHandler implements RouteHandler {
     const model = body?.model;
     const apiKey = body?.api_key;
     const baseUrl = body?.base_url;
+    const workingDirectory = body?.working_directory;
 
     if (!input) {
       return HttpUtils.sendJson(
@@ -58,6 +59,7 @@ export class GenerateHandler implements RouteHandler {
           model,
           apiKey,
           baseUrl,
+          workingDirectory,
         );
       } else {
         await this.handleNonStreamingResponse(
@@ -70,6 +72,7 @@ export class GenerateHandler implements RouteHandler {
           model,
           apiKey,
           baseUrl,
+          workingDirectory,
         );
       }
     } catch (e) {
@@ -92,6 +95,7 @@ export class GenerateHandler implements RouteHandler {
     model?: string,
     apiKey?: string,
     baseUrl?: string,
+    workingDirectory?: string,
   ): Promise<void> {
     HttpUtils.setupSseHeaders(res, enableCors);
 
@@ -135,6 +139,7 @@ export class GenerateHandler implements RouteHandler {
         model,
         apiKey,
         baseUrl,
+        workingDirectory,
       },
     );
 
@@ -154,6 +159,7 @@ export class GenerateHandler implements RouteHandler {
     model?: string,
     apiKey?: string,
     baseUrl?: string,
+    workingDirectory?: string,
   ): Promise<void> {
     const { finalText, transcript, history: updatedHistory } = 
       await this.generationService.generateResponse(
@@ -165,6 +171,7 @@ export class GenerateHandler implements RouteHandler {
           model,
           apiKey,
           baseUrl,
+          workingDirectory,
         },
       );
 

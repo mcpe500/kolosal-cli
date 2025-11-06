@@ -47,6 +47,7 @@ export interface GenerateRequest {
   model?: string;
   api_key?: string;
   base_url?: string;
+  working_directory?: string;
 }
 
 export interface GenerateResponse {

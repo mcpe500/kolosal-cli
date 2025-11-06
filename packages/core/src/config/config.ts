@@ -657,6 +657,10 @@ export class Config {
     return this.workspaceContext;
   }
 
+  setWorkspaceContext(workspaceContext: WorkspaceContext): void {
+    this.workspaceContext = workspaceContext;
+  }
+
   getToolRegistry(): ToolRegistry {
     return this.toolRegistry;
   }

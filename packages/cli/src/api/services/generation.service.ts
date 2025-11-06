@@ -29,13 +29,37 @@ export class GenerationService {
       model?: string;
       apiKey?: string;
       baseUrl?: string;
+      workingDirectory?: string;
     } = {},
   ): Promise<GenerationResult> {
-    const { onContentChunk, onEvent, conversationHistory, model, apiKey, baseUrl } = options;
+    const { onContentChunk, onEvent, conversationHistory, model, apiKey, baseUrl, workingDirectory } = options;
 
     // Set approval mode to YOLO for API requests to auto-approve tool calls
     const originalApprovalMode = this.config.getApprovalMode();
     this.config.setApprovalMode(ApprovalMode.YOLO);
+
+    // Store original workspace context if we need to temporarily change it
+    let originalWorkspaceContext: any = null;
+    let tempWorkspaceContext: any = null;
+
+    if (workingDirectory) {
+      try {
+        // Import the WorkspaceContext class
+        const { WorkspaceContext } = await import('@kolosal-ai/kolosal-ai-core');
+        
+        // Store the original workspace context
+        originalWorkspaceContext = this.config.getWorkspaceContext();
+        
+        // Create a temporary workspace context with the specified working directory
+        tempWorkspaceContext = new WorkspaceContext(workingDirectory, []);
+        
+        // Temporarily replace the workspace context in the config
+        this.config.setWorkspaceContext(tempWorkspaceContext);
+      } catch (error) {
+        console.warn('[API] Failed to set working directory:', error);
+        // Continue with the original workspace context
+      }
+    }
 
     try {
       let geminiClient = this.config.getGeminiClient();
@@ -84,6 +108,11 @@ export class GenerationService {
         onEvent,
       );
     } finally {
+      // Restore original workspace context if it was changed
+      if (originalWorkspaceContext && workingDirectory) {
+        this.config.setWorkspaceContext(originalWorkspaceContext);
+      }
+      
       // Restore original approval mode
       this.config.setApprovalMode(originalApprovalMode);
     }
