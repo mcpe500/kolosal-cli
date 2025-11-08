@@ -18,7 +18,7 @@ PACKAGE_VERSION="0.1.3"
 
 # GitHub release URLs
 GITHUB_REPO="KolosalAI/kolosal-cli"
-MACOS_PKG_URL="https://github.com/${GITHUB_REPO}/releases/download/v${VERSION}/KolosalCode-macos-signed.pkg"
+MACOS_PKG_URL="https://github.com/KolosalAI/kolosal-cli/releases/download/v0.1.2/KolosalCode-macos-signed.pkg"
 LINUX_DEB_URL="https://github.com/${GITHUB_REPO}/releases/download/v${VERSION}/kolosal-code_${PACKAGE_VERSION}_amd64.deb"
 LINUX_RPM_URL="https://github.com/${GITHUB_REPO}/releases/download/v${VERSION}/kolosal-code-${PACKAGE_VERSION}.x86_64.rpm"
 
