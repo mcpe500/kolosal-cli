@@ -58,6 +58,10 @@ import { ShellConfirmationDialog } from './components/ShellConfirmationDialog.js
 import { QuitConfirmationDialog } from './components/QuitConfirmationDialog.js';
 import { RadioButtonSelect } from './components/shared/RadioButtonSelect.js';
 import { ModelSelectionDialog } from './components/ModelSelectionDialog.js';
+import {
+  ModelDeleteConfirmationDialog,
+  ModelDeleteChoice,
+} from './components/ModelDeleteConfirmationDialog.js';
 import { HfModelPickerDialog } from './components/HfModelPickerDialog.js';
 import {
   HfModelFilePickerDialog,
@@ -145,6 +149,7 @@ import { useKittyKeyboardProtocol } from './hooks/useKittyKeyboardProtocol.js';
 import { keyMatchers, Command } from './keyMatchers.js';
 import {
   upsertSavedModelEntry,
+  removeSavedModelEntry,
   getCurrentModelAuthType,
   deriveOpenAIEnvConfig,
   findKolosalApiKey,
@@ -328,6 +333,8 @@ const App = ({ config, settings, startupWarnings = [], version }: AppProps) => {
   // Model selection dialog states
   const [isModelSelectionDialogOpen, setIsModelSelectionDialogOpen] =
     useState(false);
+  const [isModelDeleteDialogOpen, setIsModelDeleteDialogOpen] = useState(false);
+  const [modelToDelete, setModelToDelete] = useState<AvailableModel | null>(null);
   const [isHfPickerOpen, setIsHfPickerOpen] = useState(false);
   const [isHfFilePickerOpen, setIsHfFilePickerOpen] = useState(false);
   const [selectedHfModelId, setSelectedHfModelId] = useState<string | null>(null);
@@ -2139,6 +2146,84 @@ const App = ({ config, settings, startupWarnings = [], version }: AppProps) => {
     setIsModelSelectionDialogOpen(false);
   }, []);
 
+  const handleModelDeleteOpen = useCallback(() => {
+    // Open model selection dialog filtered to deletable models
+    setIsModelSelectionDialogOpen(true);
+  }, []);
+
+  const handleModelDeleteClose = useCallback(() => {
+    setIsModelDeleteDialogOpen(false);
+    setModelToDelete(null);
+  }, []);
+
+  const handleModelDeleteRequest = useCallback(
+    (model: AvailableModel) => {
+      const runtimeId = model.runtimeId ?? model.id;
+      const isCurrentModel = runtimeId === currentModel;
+      if (isCurrentModel) {
+        addItem(
+          {
+            type: MessageType.ERROR,
+            text: 'Cannot delete the currently active model. Switch to a different model first.',
+          },
+          Date.now(),
+        );
+        return;
+      }
+      if (!model.savedModel) {
+        addItem(
+          {
+            type: MessageType.ERROR,
+            text: 'This model cannot be deleted as it is not a saved custom model.',
+          },
+          Date.now(),
+        );
+        return;
+      }
+      setModelToDelete(model);
+      setIsModelDeleteDialogOpen(true);
+    },
+    [currentModel, addItem],
+  );
+
+  const handleModelDeleteConfirm = useCallback(
+    (choice: ModelDeleteChoice) => {
+      if (choice === ModelDeleteChoice.CANCEL) {
+        handleModelDeleteClose();
+        return;
+      }
+
+      if (choice === ModelDeleteChoice.DELETE && modelToDelete?.savedModel) {
+        const modelLabel = modelToDelete.label ?? modelToDelete.id;
+        const existingSavedModels = (
+          settings.merged.model?.savedModels ?? []
+        ) as SavedModelEntry[];
+
+        const updatedModels = removeSavedModelEntry(
+          existingSavedModels,
+          modelToDelete.savedModel,
+        );
+
+        settings.setValue(
+          SettingScope.User,
+          'model.savedModels',
+          updatedModels,
+        );
+
+        addItem(
+          {
+            type: MessageType.INFO,
+            text: `Model \`${modelLabel}\` has been deleted.`,
+          },
+          Date.now(),
+        );
+
+        handleModelDeleteClose();
+      }
+    },
+    [modelToDelete, settings, addItem, handleModelDeleteClose],
+  );
+
   const handleModelSelect = useCallback(
     async (model: AvailableModel) => {
   const savedModelId = model.savedModel?.id ?? model.id;
@@ -2417,6 +2502,7 @@ const App = ({ config, settings, startupWarnings = [], version }: AppProps) => {
     openPrivacyNotice,
     openSettingsDialog,
     handleModelSelectionOpen,
+    handleModelDeleteOpen,
     openSubagentCreateDialog,
     openAgentsManagerDialog,
     toggleVimEnabled,
@@ -3252,6 +3338,12 @@ const App = ({ config, settings, startupWarnings = [], version }: AppProps) => {
               currentModel={currentModel}
               onSelect={handleModelSelect}
               onCancel={handleModelSelectionClose}
+              onDelete={handleModelDeleteRequest}
+            />
+          ) : isModelDeleteDialogOpen && modelToDelete ? (
+            <ModelDeleteConfirmationDialog
+              model={modelToDelete}
+              onSelect={handleModelDeleteConfirm}
             />
           ) : isVisionSwitchDialogOpen ? (
             <ModelSwitchDialog onSelect={handleVisionSwitchSelect} />

@@ -54,6 +54,7 @@ export const useSlashCommandProcessor = (
   openPrivacyNotice: () => void,
   openSettingsDialog: () => void,
   openModelSelectionDialog: () => void,
+  openModelDeleteDialog: () => void,
   openSubagentCreateDialog: () => void,
   openAgentsManagerDialog: () => void,
   toggleVimEnabled: () => Promise<boolean>,
@@ -407,6 +408,9 @@ export const useSlashCommandProcessor = (
                       return { type: 'handled' };
                     case 'model':
                       openModelSelectionDialog();
+                      return { type: 'handled' };
+                    case 'model_delete':
+                      openModelDeleteDialog();
                       return { type: 'handled' };
                     case 'subagent_create':
                       openSubagentCreateDialog();
