@@ -1,0 +1,35 @@
+id = "kolosal"
+name = "Kolosal"
+description = "AI-powered command-line workflow tool for developers"
+version = "0.1.3"
+schema_version = 1
+authors = ["Kolosal AI"]
+repository = "https://github.com/KolosalAI/kolosal-cli"
+
+[agent_servers.kolosal]
+name = "Kolosal"
+icon = "./icons/kolosal.svg"
+
+[agent_servers.kolosal.targets.darwin-aarch64]
+archive = "https://github.com/KolosalAI/kolosal-cli/releases/download/v0.1.3/kolosal-acp-darwin-aarch64-0.1.3.zip"
+cmd = "./kolosal-acp"
+
+[agent_servers.kolosal.targets.darwin-x86_64]
+archive = "https://github.com/KolosalAI/kolosal-cli/releases/download/v0.1.3/kolosal-acp-darwin-x86_64-0.1.3.zip"
+cmd = "./kolosal-acp"
+
+[agent_servers.kolosal.targets.linux-aarch64]
+archive = "https://github.com/KolosalAI/kolosal-cli/releases/download/v0.1.3/kolosal-acp-linux-aarch64-0.1.3.zip"
+cmd = "./kolosal-acp"
+
+[agent_servers.kolosal.targets.linux-x86_64]
+archive = "https://github.com/KolosalAI/kolosal-cli/releases/download/v0.1.3/kolosal-acp-linux-x86_64-0.1.3.zip"
+cmd = "./kolosal-acp"
+
+[agent_servers.kolosal.targets.windows-aarch64]
+archive = "https://github.com/KolosalAI/kolosal-cli/releases/download/v0.1.3/kolosal-acp-windows-aarch64-0.1.3.zip"
+cmd = "./kolosal-acp.exe"
+
+[agent_servers.kolosal.targets.windows-x86_64]
+archive = "https://github.com/KolosalAI/kolosal-cli/releases/download/v0.1.3/kolosal-acp-windows-x86_64-0.1.3.zip"
+cmd = "./kolosal-acp.exe"
