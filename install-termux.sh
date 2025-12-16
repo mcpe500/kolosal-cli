@@ -1,4 +1,4 @@
-#!/data/data/com.termux/files/usr/bin/bash
+#!/usr/bin/env bash
 
 ##
 # KolosalCode Termux Installer (Build from Source)
@@ -14,6 +14,7 @@
 #   - Internet connection (for npm dependencies)
 ##
 
+# Exit on error
 set -e
 
 # Version
@@ -28,40 +29,45 @@ GREEN='\033[0;32m'
 YELLOW='\033[1;33m'
 BLUE='\033[0;34m'
 BOLD='\033[1m'
-NC='\033[0m' # No Color
+NC='\033[0m'
 
-# Print functions
+# Print functions using printf for compatibility
 print_info() {
-    echo -e "${BLUE}ℹ${NC} $1"
+    printf "${BLUE}ℹ${NC} %s\n" "$1"
 }
 
 print_success() {
-    echo -e "${GREEN}✓${NC} $1"
+    printf "${GREEN}✓${NC} %s\n" "$1"
 }
 
 print_warning() {
-    echo -e "${YELLOW}⚠${NC}  $1"
+    printf "${YELLOW}⚠${NC}  %s\n" "$1"
 }
 
 print_error() {
-    echo -e "${RED}✗${NC} $1"
+    printf "${RED}✗${NC} %s\n" "$1"
 }
 
 print_header() {
-    echo ""
-    echo -e "${BOLD}$1${NC}"
-    echo "================================"
+    printf "\n${BOLD}%s${NC}\n" "$1"
+    printf "================================\n"
 }
 
 # Get the directory where this script is located (the repository root)
 get_repo_dir() {
-    local script_path="${BASH_SOURCE[0]}"
-    # Resolve symlinks
-    while [ -L "$script_path" ]; do
-        local script_dir="$(cd "$(dirname "$script_path")" && pwd)"
-        script_path="$(readlink "$script_path")"
-        [[ $script_path != /* ]] && script_path="$script_dir/$script_path"
-    done
+    # Use $0 for script path, works in most shells
+    local script_path="$0"
+    
+    # Handle relative paths
+    if [ -z "${script_path%%/*}" ]; then
+        # Absolute path
+        script_path="$script_path"
+    else
+        # Relative path
+        script_path="$(pwd)/$script_path"
+    fi
+    
+    # Get directory and resolve to absolute path
     cd "$(dirname "$script_path")" && pwd
 }
 
@@ -69,28 +75,35 @@ REPO_DIR="$(get_repo_dir)"
 
 # Check if running in Termux
 check_termux() {
-    if [[ "$PREFIX" != *"/com.termux/"* ]] && [[ ! -d "/data/data/com.termux" ]]; then
+    if [ -z "$PREFIX" ]; then
         print_error "This script is designed for Termux on Android."
+        print_info "The PREFIX environment variable is not set."
         print_info "Please run this inside Termux."
+        exit 1
+    fi
+    
+    if [ ! -d "$PREFIX" ]; then
+        print_error "Termux PREFIX directory not found: $PREFIX"
         exit 1
     fi
 }
 
 # Detect Architecture
 detect_arch() {
-    local arch=$(uname -m)
+    local arch
+    arch=$(uname -m)
     case "$arch" in
         aarch64|arm64)
-            echo "arm64"
+            printf "arm64"
             ;;
         armv7l|armv8l)
-            echo "arm"
+            printf "arm"
             ;;
         x86_64)
-            echo "x64"
+            printf "x64"
             ;;
         i686|i386)
-            echo "x86"
+            printf "x86"
             ;;
         *)
             print_error "Unsupported architecture: $arch"
@@ -103,19 +116,19 @@ detect_arch() {
 # Check if required files exist in the repository
 check_repo_files() {
     print_info "Checking repository files..."
+    print_info "Repository: $REPO_DIR"
     
-    local required_files=(
-        "package.json"
-        "esbuild.config.js"
-    )
+    if [ ! -f "$REPO_DIR/package.json" ]; then
+        print_error "Required file not found: package.json"
+        print_info "Please run this script from the kolosal-cli repository root."
+        exit 1
+    fi
     
-    for file in "${required_files[@]}"; do
-        if [ ! -f "$REPO_DIR/$file" ]; then
-            print_error "Required file not found: $file"
-            print_info "Please run this script from the kolosal-cli repository root."
-            exit 1
-        fi
-    done
+    if [ ! -f "$REPO_DIR/esbuild.config.js" ]; then
+        print_error "Required file not found: esbuild.config.js"
+        print_info "Please run this script from the kolosal-cli repository root."
+        exit 1
+    fi
     
     print_success "Repository files verified"
 }
@@ -125,27 +138,21 @@ install_dependencies() {
     print_header "Installing Dependencies"
     
     print_info "Updating package lists..."
-    pkg update -y || true
+    pkg update -y 2>/dev/null || true
     
     print_info "Installing required packages..."
     
-    # Core build tools and runtime
-    local packages=(
-        "nodejs-lts"    # Node.js LTS (includes npm)
-        "git"           # For git operations
-        "python"        # Required for node-gyp (native module builds)
-        "make"          # Build tools
-        "clang"         # C/C++ compiler for native modules
-    )
-    
-    for package in "${packages[@]}"; do
+    # Install packages one by one for better error handling
+    for package in nodejs-lts git python make clang; do
         if pkg list-installed 2>/dev/null | grep -q "^$package/"; then
             print_success "$package is already installed"
         else
             print_info "Installing $package..."
-            pkg install -y "$package" || {
+            if pkg install -y "$package" 2>/dev/null; then
+                print_success "$package installed"
+            else
                 print_warning "Failed to install $package, continuing..."
-            }
+            fi
         fi
     done
     
@@ -159,10 +166,17 @@ build_project() {
     cd "$REPO_DIR"
     
     # Check Node.js version
-    local node_version=$(node --version)
+    if ! command -v node >/dev/null 2>&1; then
+        print_error "Node.js not found. Please install with: pkg install nodejs-lts"
+        exit 1
+    fi
+    
+    local node_version
+    node_version=$(node --version)
     print_info "Node.js version: $node_version"
     
-    local npm_version=$(npm --version)
+    local npm_version
+    npm_version=$(npm --version)
     print_info "npm version: $npm_version"
     
     # Clean previous build artifacts if they exist
@@ -177,36 +191,42 @@ build_project() {
     
     # Use npm ci for clean install, or npm install as fallback
     if [ -f "package-lock.json" ]; then
-        npm ci || {
+        if npm ci 2>&1; then
+            print_success "Dependencies installed with npm ci"
+        else
             print_warning "npm ci failed, trying npm install..."
-            npm install || {
+            if npm install 2>&1; then
+                print_success "Dependencies installed with npm install"
+            else
                 print_error "Failed to install dependencies"
                 exit 1
-            }
-        }
+            fi
+        fi
     else
-        npm install || {
+        if npm install 2>&1; then
+            print_success "Dependencies installed"
+        else
             print_error "Failed to install dependencies"
             exit 1
-        }
+        fi
     fi
-    
-    print_success "Dependencies installed"
     
     # Generate git commit info (if the script exists)
     if [ -f "scripts/generate-git-commit-info.js" ]; then
         print_info "Generating git commit info..."
-        node scripts/generate-git-commit-info.js || true
+        node scripts/generate-git-commit-info.js 2>/dev/null || true
     fi
     
     # Bundle the application using esbuild
     print_info "Bundling application with esbuild..."
     
     if [ -f "esbuild.config.js" ]; then
-        node esbuild.config.js || {
+        if node esbuild.config.js; then
+            print_success "Bundle created"
+        else
             print_error "Failed to bundle application"
             exit 1
-        }
+        fi
     else
         print_error "esbuild.config.js not found"
         exit 1
@@ -215,7 +235,7 @@ build_project() {
     # Copy bundle assets
     if [ -f "scripts/copy_bundle_assets.js" ]; then
         print_info "Copying bundle assets..."
-        node scripts/copy_bundle_assets.js || true
+        node scripts/copy_bundle_assets.js 2>/dev/null || true
     fi
     
     # Verify bundle was created
@@ -263,12 +283,7 @@ install_app() {
         mkdir -p "$install_dir/lib/node_modules"
         
         # Copy only necessary external modules that can't be bundled
-        local externals=(
-            "@lydell/node-pty"
-            "node-pty"
-        )
-        
-        for dep in "${externals[@]}"; do
+        for dep in "@lydell/node-pty" "node-pty"; do
             if [ -d "$REPO_DIR/node_modules/$dep" ]; then
                 cp -R "$REPO_DIR/node_modules/$dep" "$install_dir/lib/node_modules/" 2>/dev/null || true
             fi
@@ -279,22 +294,16 @@ install_app() {
     print_info "Creating launcher script..."
     
     cat > "$install_dir/bin/kolosal" << 'LAUNCHER_EOF'
-#!/data/data/com.termux/files/usr/bin/bash
+#!/usr/bin/env bash
 
-# Get the directory where this script is located (resolve symlinks)
-SCRIPT_PATH="${BASH_SOURCE[0]}"
-while [ -L "$SCRIPT_PATH" ]; do
-    SCRIPT_DIR="$(cd "$(dirname "$SCRIPT_PATH")" && pwd)"
-    SCRIPT_PATH="$(readlink "$SCRIPT_PATH")"
-    [[ $SCRIPT_PATH != /* ]] && SCRIPT_PATH="$SCRIPT_DIR/$SCRIPT_PATH"
-done
-SCRIPT_DIR="$(cd "$(dirname "$SCRIPT_PATH")" && pwd)"
+# Get the directory where this script is located
+SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 APP_DIR="$(dirname "$SCRIPT_DIR")"
 
 # Use Termux's system Node.js (avoids glibc vs bionic issues)
-NODE_BINARY="$(which node)"
+NODE_BINARY="$(command -v node)"
 
-if [ ! -x "$NODE_BINARY" ]; then
+if [ -z "$NODE_BINARY" ] || [ ! -x "$NODE_BINARY" ]; then
     echo "Error: Node.js not found. Please install with: pkg install nodejs-lts"
     exit 1
 fi
@@ -313,6 +322,7 @@ LAUNCHER_EOF
     
     # Create symlink in Termux bin directory
     print_info "Creating symlink in $bin_dir..."
+    rm -f "$bin_dir/kolosal"
     ln -sf "$install_dir/bin/kolosal" "$bin_dir/kolosal"
     
     print_success "Installation complete"
@@ -322,83 +332,102 @@ LAUNCHER_EOF
 verify_installation() {
     print_header "Verifying Installation"
     
-    if command -v kolosal &> /dev/null; then
+    # Refresh command hash
+    hash -r 2>/dev/null || true
+    
+    local kolosal_path="$PREFIX/bin/kolosal"
+    
+    if [ -x "$kolosal_path" ]; then
         print_success "KolosalCode installed successfully!"
-        echo ""
-        print_info "Location: $(which kolosal)"
+        printf "\n"
+        print_info "Location: $kolosal_path"
         
         # Try to get version
         print_info "Testing kolosal..."
-        if kolosal --version 2>/dev/null; then
+        if "$kolosal_path" --version 2>/dev/null; then
             print_success "Version check passed"
         else
             print_warning "Version check returned non-zero, but command exists"
         fi
     else
-        print_error "Installation finished but 'kolosal' not found in PATH."
-        print_info "Ensure $PREFIX/bin is in your PATH."
-        print_info "Try running: hash -r"
+        print_error "Installation finished but kolosal not found at $kolosal_path"
         return 1
     fi
 }
 
 # Show usage instructions
 show_usage() {
-    echo ""
+    printf "\n"
     print_header "Quick Start"
-    echo ""
-    echo "Run KolosalCode:"
-    echo -e "  ${BOLD}kolosal${NC}"
-    echo ""
-    echo "Check version:"
-    echo -e "  ${BOLD}kolosal --version${NC}"
-    echo ""
-    echo "Get help:"
-    echo -e "  ${BOLD}kolosal --help${NC}"
-    echo ""
+    printf "\n"
+    printf "Run KolosalCode:\n"
+    printf "  ${BOLD}kolosal${NC}\n"
+    printf "\n"
+    printf "Check version:\n"
+    printf "  ${BOLD}kolosal --version${NC}\n"
+    printf "\n"
+    printf "Get help:\n"
+    printf "  ${BOLD}kolosal --help${NC}\n"
+    printf "\n"
     print_info "For more information, visit:"
     print_info "  https://github.com/${GITHUB_REPO}"
-    echo ""
+    printf "\n"
 }
 
 # Show uninstall instructions
 show_uninstall() {
-    echo ""
+    printf "\n"
     print_header "Uninstallation"
-    echo ""
-    echo "To uninstall KolosalCode from Termux:"
-    echo "  rm -rf \$PREFIX/opt/kolosal-code"
-    echo "  rm -f \$PREFIX/bin/kolosal"
-    echo ""
+    printf "\n"
+    printf "To uninstall KolosalCode from Termux:\n"
+    printf "  rm -rf \$PREFIX/opt/kolosal-code\n"
+    printf "  rm -f \$PREFIX/bin/kolosal\n"
+    printf "\n"
+}
+
+# Ask yes/no question (compatible with POSIX sh)
+ask_yes_no() {
+    local prompt="$1"
+    local response
+    
+    printf "%s (y/n) " "$prompt"
+    read response
+    
+    case "$response" in
+        [Yy]|[Yy][Ee][Ss])
+            return 0
+            ;;
+        *)
+            return 1
+            ;;
+    esac
 }
 
 # Main installation flow
 main() {
     print_header "KolosalCode Termux Installer v${VERSION}"
-    echo ""
+    printf "\n"
     print_info "Building from local source (no root required)"
-    print_info "Repository: $REPO_DIR"
-    echo ""
     
     # Check if running in Termux
     check_termux
     print_success "Running in Termux environment"
+    print_info "PREFIX: $PREFIX"
     
     # Detect Architecture
-    local arch=$(detect_arch)
+    local arch
+    arch=$(detect_arch)
     print_success "Detected architecture: $arch"
     
     # Check repository files
     check_repo_files
     
     # Check if already installed
-    if command -v kolosal &> /dev/null; then
+    if [ -x "$PREFIX/bin/kolosal" ]; then
         print_warning "KolosalCode is already installed"
-        print_info "Current location: $(which kolosal)"
-        echo ""
-        read -p "Do you want to reinstall? (y/n) " -n 1 -r
-        echo
-        if [[ ! $REPLY =~ ^[Yy]$ ]]; then
+        print_info "Current location: $PREFIX/bin/kolosal"
+        printf "\n"
+        if ! ask_yes_no "Do you want to reinstall?"; then
             print_info "Installation cancelled"
             exit 0
         fi
@@ -428,23 +457,23 @@ case "${1:-}" in
         show_uninstall
         ;;
     --help|-h)
-        echo "KolosalCode Termux Installer (Build from Source)"
-        echo ""
-        echo "Usage:"
-        echo "  cd kolosal-cli"
-        echo "  bash install-termux.sh [OPTIONS]"
-        echo ""
-        echo "Options:"
-        echo "  --help, -h     Show this help message"
-        echo "  --uninstall    Show uninstall instructions"
-        echo ""
-        echo "This script builds KolosalCode from the local repository"
-        echo "and installs it to \$PREFIX/opt/kolosal-code"
-        echo ""
-        echo "Prerequisites:"
-        echo "  1. Clone the repository: git clone https://github.com/${GITHUB_REPO}.git"
-        echo "  2. Enter the directory: cd kolosal-cli"
-        echo "  3. Run installer: bash install-termux.sh"
+        printf "KolosalCode Termux Installer (Build from Source)\n"
+        printf "\n"
+        printf "Usage:\n"
+        printf "  cd kolosal-cli\n"
+        printf "  bash install-termux.sh [OPTIONS]\n"
+        printf "\n"
+        printf "Options:\n"
+        printf "  --help, -h     Show this help message\n"
+        printf "  --uninstall    Show uninstall instructions\n"
+        printf "\n"
+        printf "This script builds KolosalCode from the local repository\n"
+        printf "and installs it to \$PREFIX/opt/kolosal-code\n"
+        printf "\n"
+        printf "Prerequisites:\n"
+        printf "  1. Clone the repository: git clone https://github.com/${GITHUB_REPO}.git\n"
+        printf "  2. Enter the directory: cd kolosal-cli\n"
+        printf "  3. Run installer: bash install-termux.sh\n"
         ;;
     *)
         main "$@"
