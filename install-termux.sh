@@ -140,6 +140,13 @@ install_dependencies() {
     print_info "Updating package lists..."
     pkg update -y 2>/dev/null || true
     
+    print_info "Upgrading existing packages (this may take a while)..."
+    if pkg upgrade -y 2>&1; then
+        print_success "Packages upgraded"
+    else
+        print_warning "Some packages failed to upgrade, continuing..."
+    fi
+    
     print_info "Installing required packages..."
     
     # Install packages one by one for better error handling
@@ -148,13 +155,29 @@ install_dependencies() {
             print_success "$package is already installed"
         else
             print_info "Installing $package..."
-            if pkg install -y "$package" 2>/dev/null; then
+            if pkg install -y "$package" 2>&1; then
                 print_success "$package installed"
             else
                 print_warning "Failed to install $package, continuing..."
             fi
         fi
     done
+    
+    # Verify Node.js works
+    if command -v node >/dev/null 2>&1; then
+        if node --version >/dev/null 2>&1; then
+            print_success "Node.js is working: $(node --version)"
+        else
+            print_error "Node.js is installed but not working!"
+            print_info "Try running: pkg upgrade"
+            print_info "Then run this installer again."
+            exit 1
+        fi
+    else
+        print_error "Node.js is not installed!"
+        print_info "Try running manually: pkg install nodejs-lts"
+        exit 1
+    fi
     
     print_success "Dependencies installed"
 }
