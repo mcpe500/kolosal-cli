@@ -208,17 +208,32 @@ build_project() {
         rm -rf "$REPO_DIR/bundle"
     fi
     
+    # Clean node_modules to ensure fresh install without cached problematic scripts
+    if [ -d "$REPO_DIR/node_modules" ]; then
+        print_info "Cleaning node_modules for fresh install..."
+        rm -rf "$REPO_DIR/node_modules"
+    fi
+    
     # Install npm dependencies
+    # Use --ignore-scripts because some packages have postinstall scripts
+    # that don't work on Android (e.g., node-pty needs Android NDK, @lvce-editor/ripgrep
+    # doesn't recognize Android platform). We'll use Termux's system ripgrep instead.
     print_info "Installing npm dependencies..."
     print_info "This may take a while..."
+    print_info "Skipping native modules that don't support Android..."
     
-    # Use npm ci for clean install, or npm install as fallback
+    # Force npm to ignore scripts via environment variable as well
+    export npm_config_ignore_scripts=true
+    
+    # Use npm install with flags to handle Android compatibility issues:
+    # --ignore-scripts: Skip postinstall scripts that fail on Android
+    # --omit=optional: Skip optional dependencies like node-pty variants
     if [ -f "package-lock.json" ]; then
-        if npm ci 2>&1; then
+        if npm ci --ignore-scripts --omit=optional 2>&1; then
             print_success "Dependencies installed with npm ci"
         else
             print_warning "npm ci failed, trying npm install..."
-            if npm install 2>&1; then
+            if npm install --ignore-scripts --omit=optional 2>&1; then
                 print_success "Dependencies installed with npm install"
             else
                 print_error "Failed to install dependencies"
@@ -226,7 +241,7 @@ build_project() {
             fi
         fi
     else
-        if npm install 2>&1; then
+        if npm install --ignore-scripts --omit=optional 2>&1; then
             print_success "Dependencies installed"
         else
             print_error "Failed to install dependencies"
