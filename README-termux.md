@@ -69,9 +69,10 @@ Ensure you are running the script with `bash`:
 ```bash
 bash install-termux.sh
 ```
-Check if the file is executable:
+### "Permission denied" or "Command not found"
+Ensure you are running the script with `bash` as instructed, not `sh` or directly (`./install-termux.sh`).
 ```bash
-chmod +x install-termux.sh
+bash install-termux.sh
 ```
 
 ### Node.js Warnings

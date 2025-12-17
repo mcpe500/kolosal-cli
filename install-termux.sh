@@ -321,7 +321,7 @@ install_app() {
         mkdir -p "$install_dir/lib/node_modules"
         
         # Copy only necessary external modules that can't be bundled
-        for dep in "tiktoken" "node-pty" "@lydell/node-pty"; do
+        for dep in "tiktoken" "node-pty" "@lydell"; do
             if [ -d "$REPO_DIR/node_modules/$dep" ]; then
                 dest="$install_dir/lib/node_modules/$dep"
                 mkdir -p "$(dirname "$dest")"
