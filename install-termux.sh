@@ -334,8 +334,31 @@ install_app() {
     cat > "$install_dir/bin/kolosal" << 'LAUNCHER_EOF'
 #!/usr/bin/env bash
 
-# Get the directory where this script is located
-SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
+# Resolve the actual script location (following symlinks)
+# This is needed because the script is invoked via a symlink in $PREFIX/bin
+SCRIPT_PATH="$0"
+
+# Follow symlinks to get the real path
+if command -v readlink > /dev/null 2>&1; then
+    # Try readlink -f first (GNU readlink)
+    REAL_PATH="$(readlink -f "$SCRIPT_PATH" 2>/dev/null)"
+    if [ -z "$REAL_PATH" ]; then
+        # Fallback for BSD readlink (no -f option)
+        REAL_PATH="$SCRIPT_PATH"
+        while [ -L "$REAL_PATH" ]; do
+            LINK_TARGET="$(readlink "$REAL_PATH")"
+            case "$LINK_TARGET" in
+                /*) REAL_PATH="$LINK_TARGET" ;;
+                *) REAL_PATH="$(dirname "$REAL_PATH")/$LINK_TARGET" ;;
+            esac
+        done
+    fi
+else
+    REAL_PATH="$SCRIPT_PATH"
+fi
+
+# Get the directory where the actual script is located
+SCRIPT_DIR="$(cd "$(dirname "$REAL_PATH")" && pwd)"
 APP_DIR="$(dirname "$SCRIPT_DIR")"
 
 # Use Termux's system Node.js (avoids glibc vs bionic issues)
