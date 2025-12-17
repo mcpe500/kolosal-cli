@@ -225,15 +225,15 @@ build_project() {
     # Force npm to ignore scripts via environment variable as well
     export npm_config_ignore_scripts=true
     
-    # Use npm install with flags to handle Android compatibility issues:
-    # --ignore-scripts: Skip postinstall scripts that fail on Android
-    # --omit=optional: Skip optional dependencies like node-pty variants
+    # Use npm install with --ignore-scripts to skip postinstall scripts that fail on Android
+    # (e.g., node-pty, @lvce-editor/ripgrep). We do NOT use --omit=optional because
+    # esbuild needs its platform-specific binaries (@esbuild/android-arm64) which are optional.
     if [ -f "package-lock.json" ]; then
-        if npm ci --ignore-scripts --omit=optional 2>&1; then
+        if npm ci --ignore-scripts 2>&1; then
             print_success "Dependencies installed with npm ci"
         else
             print_warning "npm ci failed, trying npm install..."
-            if npm install --ignore-scripts --omit=optional 2>&1; then
+            if npm install --ignore-scripts 2>&1; then
                 print_success "Dependencies installed with npm install"
             else
                 print_error "Failed to install dependencies"
@@ -241,7 +241,7 @@ build_project() {
             fi
         fi
     else
-        if npm install --ignore-scripts --omit=optional 2>&1; then
+        if npm install --ignore-scripts 2>&1; then
             print_success "Dependencies installed"
         else
             print_error "Failed to install dependencies"
