@@ -348,7 +348,11 @@ esbuild
         __dirname,
         'packages/cli/src/patches/is-in-ci.ts',
       ),
-      // Force resolve api-server to source if needed, though package.json patch should handle it
+      // Explicitly alias workspace packages to source to force bundling
+      '@kolosal-ai/api-server': path.resolve(__dirname, 'packages/api-server/index.ts'),
+      '@kolosal-ai/kolosal-ai-core': path.resolve(__dirname, 'packages/core/index.ts'),
+      '@kolosal-ai/kolosal-ai-test-utils': path.resolve(__dirname, 'packages/test-utils/index.ts'),
+      // Add other workspaces if needed
     },
     define: {
       'process.env.CLI_VERSION': JSON.stringify(pkg.version),
