@@ -150,7 +150,10 @@ install_dependencies() {
     print_info "Installing required packages..."
     
     # Install packages one by one for better error handling
-    for package in nodejs-lts git python make clang; do
+    # libcurl and yaml-cpp are needed for kolosal-server
+    # esbuild is needed for bundling (system version avoids postinstall script issues)
+    # cmake is needed for building kolosal-server
+    for package in nodejs-lts git python make clang cmake libcurl yaml-cpp esbuild; do
         if pkg list-installed 2>/dev/null | grep -q "^$package/"; then
             print_success "$package is already installed"
         else
@@ -249,10 +252,31 @@ build_project() {
         fi
     fi
     
+    # Link system esbuild to node_modules if needed (since we ignored scripts)
+    if command -v esbuild >/dev/null 2>&1; then
+        print_info "Linking system esbuild..."
+        mkdir -p node_modules/.bin
+        rm -f node_modules/.bin/esbuild
+        ln -sf "$(command -v esbuild)" node_modules/.bin/esbuild
+    fi
+    
     # Generate git commit info (if the script exists)
     if [ -f "scripts/generate-git-commit-info.js" ]; then
         print_info "Generating git commit info..."
         node scripts/generate-git-commit-info.js 2>/dev/null || true
+    fi
+
+    # Build workspaces (compile TS to JS) - CRITICAL for api-server
+    print_info "Building workspace packages..."
+    # Ensure node_modules/.bin is in PATH for tsc
+    export PATH="$REPO_DIR/node_modules/.bin:$PATH"
+    
+    if npm run build --workspaces; then
+        print_success "Workspaces built successfully"
+    else
+        print_error "Failed to build workspaces. Check npm logs."
+        # Attempt to continue? No, api-server is required.
+        exit 1
     fi
     
     # Bundle the application using esbuild
@@ -454,7 +478,7 @@ ask_yes_no() {
     local response
     
     printf "%s (y/n) " "$prompt"
-    read response
+    read -r response
     
     case "$response" in
         [Yy]|[Yy][Ee][Ss])
@@ -501,6 +525,27 @@ main() {
     
     # Build the project from local source
     build_project
+    
+    # Build Kolosal Server (C++ backend)
+    # Check if cmake is installed
+    if command -v cmake >/dev/null 2>&1; then
+        print_header "Building Kolosal Server"
+        print_info "Building C++ inference server..."
+        
+        # Ensure we are in the repo dir
+        cd "$REPO_DIR"
+        
+        # Run the build script
+        if node scripts/build_kolosal_server.js; then
+            print_success "Kolosal Server built successfully"
+        else
+            print_warning "Kolosal Server build failed. CLI will work but local inference might not."
+            print_info "You can try building it manually later."
+        fi
+    else
+        print_warning "CMake not found. Skipping Kolosal Server build."
+        print_info "Install cmake with: pkg install cmake"
+    fi
     
     # Install the application
     install_app
