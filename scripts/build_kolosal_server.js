@@ -19,7 +19,7 @@ const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const rootDir = path.resolve(__dirname, '..');
 const kolosalServerDir = path.join(rootDir, 'kolosal-server');
 const isMac = process.platform === 'darwin';
-const isLinux = process.platform === 'linux';
+const isLinux = process.platform === 'linux' || process.platform === 'android';
 const inferenceLibName = isMac ? 'libllama-metal.dylib' : 'libllama-cpu.so';
 const libExtension = isMac ? '.dylib' : '.so';
 

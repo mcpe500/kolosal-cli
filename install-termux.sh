@@ -153,7 +153,8 @@ install_dependencies() {
     # libcurl and yaml-cpp are needed for kolosal-server
     # esbuild is needed for bundling (system version avoids postinstall script issues)
     # cmake is needed for building kolosal-server
-    for package in nodejs-lts git python make clang cmake libcurl yaml-cpp esbuild; do
+    # libopenblas and blas-openblas are needed for LAPACK support in faiss (kolosal-server)
+    for package in nodejs-lts git python make clang cmake libcurl yaml-cpp esbuild libopenblas blas-openblas pkg-config; do
         if pkg list-installed 2>/dev/null | grep -q "^$package/"; then
             print_success "$package is already installed"
         else
@@ -288,7 +289,7 @@ build_project() {
                  entry_point="src/index.ts"
             else
                  # Fallback, keep as is
-                 return
+                 return 0
             fi
             
             # Use sed to replace main and exports
@@ -418,6 +419,31 @@ EOF
     print_success "Build complete"
 }
 
+# Prepare git submodules
+prepare_submodules() {
+    print_info "Checking submodules..."
+    if [ -d ".git" ]; then
+        if [ -f ".gitmodules" ]; then
+            print_info "Initializing git submodules..."
+            
+            # Check if kolosal-server exists but is not a valid submodule checkout (e.g. only contains build dir from failed build)
+            if [ -d "kolosal-server" ] && [ ! -f "kolosal-server/CMakeLists.txt" ]; then
+                print_warning "kolosal-server directory exists but appears incomplete. Cleaning..."
+                rm -rf kolosal-server
+            fi
+
+            # Try to update submodules, but don't fail strictly if network issues or not needed
+            git submodule update --init --recursive || print_warning "Failed to update submodules. Kolosal Server might not build."
+        fi
+    else
+        print_warning "Not a git repository. Skipping submodule initialization."
+        # Check if kolosal-server is empty
+        if [ ! -f "kolosal-server/CMakeLists.txt" ]; then
+             print_warning "kolosal-server/CMakeLists.txt not found. Server build will likely fail."
+        fi
+    fi
+}
+
 # Install the built application
 install_app() {
     print_header "Installing KolosalCode"
@@ -443,6 +469,29 @@ install_app() {
     print_info "Copying bundle..."
     cp -R "$REPO_DIR/bundle" "$install_dir/lib/"
     
+    # Copy Kolosal Server artifacts if they exist
+    # Check for linux directory (patched script treats android as linux)
+    if [ -d "$REPO_DIR/dist/linux/kolosal-app" ]; then
+        print_info "Copying Kolosal Server artifacts..."
+        
+        # Copy binaries
+        if [ -d "$REPO_DIR/dist/linux/kolosal-app/bin" ]; then
+            cp -R "$REPO_DIR/dist/linux/kolosal-app/bin/"* "$install_dir/bin/" 2>/dev/null || true
+        fi
+        
+        # Copy libraries
+        if [ -d "$REPO_DIR/dist/linux/kolosal-app/lib" ]; then
+            mkdir -p "$install_dir/lib"
+            cp -R "$REPO_DIR/dist/linux/kolosal-app/lib/"* "$install_dir/lib/" 2>/dev/null || true
+        fi
+        
+        # Copy resources
+        if [ -d "$REPO_DIR/dist/linux/kolosal-app/Resources" ]; then
+            mkdir -p "$install_dir/Resources"
+            cp -R "$REPO_DIR/dist/linux/kolosal-app/Resources/"* "$install_dir/Resources/" 2>/dev/null || true
+        fi
+    fi
+
     # Copy required node_modules (external dependencies that aren't bundled)
     if [ -d "$REPO_DIR/node_modules" ]; then
         print_info "Copying required node_modules..."
@@ -627,6 +676,9 @@ main() {
     # Install dependencies
     install_dependencies
     
+    # Prepare submodules
+    prepare_submodules
+    
     # Build the project from local source
     build_project
     
@@ -638,6 +690,12 @@ main() {
         
         # Ensure we are in the repo dir
         cd "$REPO_DIR"
+        
+        # Patch build script for Android support (treat android as linux)
+        if [ -f "scripts/build_kolosal_server.js" ]; then
+             print_info "Patching build script for Android support..."
+             sed -i "s|const isLinux = process.platform === 'linux';|const isLinux = process.platform === 'linux' \|\| process.platform === 'android';|g" scripts/build_kolosal_server.js
+        fi
         
         # Run the build script
         if node scripts/build_kolosal_server.js; then

@@ -7,7 +7,7 @@
     "url": "git+https://github.com/KolosalAI/kolosal-code.git"
   },
   "type": "module",
-  "main": "dist/index.js",
+  "main": "index.ts",
   "bin": {
     "kolosal": "dist/index.js"
   },
