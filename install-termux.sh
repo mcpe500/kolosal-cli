@@ -312,11 +312,61 @@ build_project() {
         fi
     done
     
-    # Bundle the application using esbuild
-    print_info "Bundling application with esbuild..."
+    # Create a Termux-specific esbuild config that forces bundling of workspaces
+    print_info "Creating Termux-specific esbuild config..."
+    cat > esbuild.config.termux.js << 'EOF'
+import esbuild from 'esbuild';
+import path from 'node:path';
+import { fileURLToPath } from 'node:url';
+import { createRequire } from 'node:module';
+
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = path.dirname(__filename);
+const require = createRequire(import.meta.url);
+const pkg = require(path.resolve(__dirname, 'package.json'));
+
+console.log('Building for Termux with workspace bundling...');
+
+esbuild
+  .build({
+    entryPoints: ['packages/cli/index.ts'],
+    bundle: true,
+    outfile: 'bundle/gemini.js',
+    platform: 'node',
+    target: 'node18',
+    format: 'esm',
+    // Only exclude genuine system/native dependencies
+    external: [
+      '@lydell/node-pty',
+      'node-pty',
+      'tiktoken',
+      'esbuild',
+      '@esbuild/*',
+    ],
+    alias: {
+      'is-in-ci': path.resolve(
+        __dirname,
+        'packages/cli/src/patches/is-in-ci.ts',
+      ),
+      // Force resolve api-server to source if needed, though package.json patch should handle it
+    },
+    define: {
+      'process.env.CLI_VERSION': JSON.stringify(pkg.version),
+    },
+    banner: {
+      js: `import { createRequire } from 'module'; const require = createRequire(import.meta.url); globalThis.__filename = require('url').fileURLToPath(import.meta.url); globalThis.__dirname = require('path').dirname(globalThis.__filename);`,
+    },
+    loader: { '.node': 'file', '.wasm': 'copy' },
+    logLevel: 'info',
+  })
+  .catch(() => process.exit(1));
+EOF
+
+    # Bundle the application using esbuild with the new config
+    print_info "Bundling application with esbuild (Termux config)..."
     
-    if [ -f "esbuild.config.js" ]; then
-        if node esbuild.config.js; then
+    if [ -f "esbuild.config.termux.js" ]; then
+        if node esbuild.config.termux.js; then
             print_success "Bundle created"
         else
             print_error "Failed to bundle application"
@@ -335,8 +385,11 @@ build_project() {
                 mv "$pkg/package.json.bak" "$pkg/package.json"
             fi
         done
+        
+        # Cleanup temp config
+        rm esbuild.config.termux.js
     else
-        print_error "esbuild.config.js not found"
+        print_error "esbuild.config.termux.js creation failed"
         exit 1
     fi
 
