@@ -691,10 +691,14 @@ main() {
         # Ensure we are in the repo dir
         cd "$REPO_DIR"
         
-        # Patch build script for Android support (treat android as linux)
+        # Patch build script for Android support (treat android as linux) and disable PoDoFo
         if [ -f "scripts/build_kolosal_server.js" ]; then
              print_info "Patching build script for Android support..."
              sed -i "s|const isLinux = process.platform === 'linux';|const isLinux = process.platform === 'linux' \|\| process.platform === 'android';|g" scripts/build_kolosal_server.js
+             
+             # Disable PoDoFo (PDF support) as it fails to build on Termux due to C++ standard issues
+             print_info "Disabling PoDoFo for Termux build..."
+             sed -i "s|cmake .. -DCMAKE_BUILD_TYPE=Release|cmake .. -DCMAKE_BUILD_TYPE=Release -DUSE_PODOFO=OFF -DPODOFO_BUILD_STATIC=OFF|g" scripts/build_kolosal_server.js
         fi
         
         # Run the build script
