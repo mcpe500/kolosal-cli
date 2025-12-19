@@ -39,21 +39,21 @@
     "commands": [
       {
         "command": "kolosal.diff.accept",
-  "title": "Kolosal Cli: Accept Current Diff",
+        "title": "Kolosal Cli: Accept Current Diff",
         "icon": "$(check)"
       },
       {
         "command": "kolosal.diff.cancel",
-  "title": "Kolosal Cli: Close Diff Editor",
+        "title": "Kolosal Cli: Close Diff Editor",
         "icon": "$(close)"
       },
       {
         "command": "kolosal-ai.runQwenCode",
-  "title": "Kolosal Cli: Run"
+        "title": "Kolosal Cli: Run"
       },
       {
         "command": "kolosal-ai.showNotices",
-  "title": "Kolosal Cli: View Third-Party Notices"
+        "title": "Kolosal Cli: View Third-Party Notices"
       }
     ],
     "menus": {
@@ -112,7 +112,9 @@
   "devDependencies": {
     "@types/cors": "^2.8.19",
     "@types/express": "^5.0.3",
+    "@types/minimatch": "^6.0.0",
     "@types/node": "20.x",
+    "@types/uuid": "^11.0.0",
     "@types/vscode": "^1.99.0",
     "@typescript-eslint/eslint-plugin": "^8.31.1",
     "@typescript-eslint/parser": "^8.31.1",
