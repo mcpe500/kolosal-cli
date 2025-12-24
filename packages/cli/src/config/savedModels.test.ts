@@ -10,6 +10,7 @@ import {
   findKolosalApiKey,
   getCurrentModelAuthType,
   mergeSavedModelEntries,
+  removeSavedModelEntry,
   upsertSavedModelEntry,
   type SavedModelEntry,
 } from './savedModels.js';
@@ -247,5 +248,105 @@ describe('findKolosalApiKey', () => {
         envBaseUrl: 'https://api.openai.com/v1',
       }),
     ).toBeUndefined();
+  });
+});
+
+describe('removeSavedModelEntry', () => {
+  it('removes a model entry by key', () => {
+    const existing: SavedModelEntry[] = [
+      {
+        id: 'model-1',
+        provider: 'openai-compatible',
+        baseUrl: 'https://api.example.com/v1',
+      },
+      {
+        id: 'model-2',
+        provider: 'openai-compatible',
+        baseUrl: 'https://api.example.com/v1',
+      },
+    ];
+
+    const removed = removeSavedModelEntry(existing, {
+      id: 'model-1',
+      provider: 'openai-compatible',
+      baseUrl: 'https://api.example.com/v1',
+    });
+
+    expect(removed).toHaveLength(1);
+    expect(removed[0]?.id).toBe('model-2');
+  });
+
+  it('handles empty array', () => {
+    const removed = removeSavedModelEntry([], {
+      id: 'model-1',
+      provider: 'openai-compatible',
+    });
+
+    expect(removed).toHaveLength(0);
+  });
+
+  it('handles undefined input', () => {
+    const removed = removeSavedModelEntry(undefined, {
+      id: 'model-1',
+      provider: 'openai-compatible',
+    });
+
+    expect(removed).toHaveLength(0);
+  });
+
+  it('handles non-existent model', () => {
+    const existing: SavedModelEntry[] = [
+      {
+        id: 'model-1',
+        provider: 'openai-compatible',
+      },
+    ];
+
+    const removed = removeSavedModelEntry(existing, {
+      id: 'model-2',
+      provider: 'openai-compatible',
+    });
+
+    expect(removed).toHaveLength(1);
+    expect(removed[0]?.id).toBe('model-1');
+  });
+
+  it('removes oss-local models correctly', () => {
+    const existing: SavedModelEntry[] = [
+      {
+        id: 'unsloth/Qwen3-1.7B',
+        provider: 'oss-local',
+      },
+      {
+        id: 'meta/llama',
+        provider: 'oss-local',
+      },
+    ];
+
+    const removed = removeSavedModelEntry(existing, {
+      id: 'unsloth/Qwen3-1.7B',
+      provider: 'oss-local',
+    });
+
+    expect(removed).toHaveLength(1);
+    expect(removed[0]?.id).toBe('meta/llama');
+  });
+
+  it('normalizes baseUrl when matching', () => {
+    const existing: SavedModelEntry[] = [
+      {
+        id: 'model-1',
+        provider: 'openai-compatible',
+        baseUrl: 'https://api.example.com/v1/',
+      },
+    ];
+
+    const removed = removeSavedModelEntry(existing, {
+      id: 'model-1',
+      provider: 'openai-compatible',
+      baseUrl: 'https://api.example.com/v1',
+    });
+
+    expect(removed).toHaveLength(0);
   });
 });

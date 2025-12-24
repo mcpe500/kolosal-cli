@@ -59,6 +59,7 @@ export interface ModelSelectionDialogProps {
   currentModel: string;
   onSelect: (model: AvailableModel) => void;
   onCancel: () => void;
+  onDelete?: (model: AvailableModel) => void;
 }
 
 export const ModelSelectionDialog: React.FC<ModelSelectionDialogProps> = ({
@@ -66,9 +67,11 @@ export const ModelSelectionDialog: React.FC<ModelSelectionDialogProps> = ({
   currentModel,
   onSelect,
   onCancel,
+  onDelete,
 }) => {
   const { columns } = useTerminalSize();
   const [spinnerIndex, setSpinnerIndex] = useState(0);
+  const [selectedIndex, setSelectedIndex] = useState(0);
 
   useEffect(() => {
     const interval = setInterval(() => {
@@ -83,6 +86,12 @@ export const ModelSelectionDialog: React.FC<ModelSelectionDialogProps> = ({
     (key) => {
       if (key.name === 'escape') {
         onCancel();
+      } else if (key.name === 'd' && onDelete) {
+        const selectedModel = availableModels[selectedIndex];
+        if (selectedModel && selectedModel.savedModel) {
+          // Let handleModelDeleteRequest handle the current model check and show error
+          onDelete(selectedModel);
+        }
       }
     },
     { isActive: true },
@@ -187,8 +196,21 @@ export const ModelSelectionDialog: React.FC<ModelSelectionDialogProps> = ({
     ),
   );
 
+  useEffect(() => {
+    setSelectedIndex(initialIndex);
+  }, [initialIndex]);
+
   const handleSelect = (model: AvailableModel) => {
     onSelect(model);
+  };
+
+  const handleHighlight = (model: AvailableModel) => {
+    const index = availableModels.findIndex(
+      (m) => (m.runtimeId ?? m.id) === (model.runtimeId ?? model.id),
+    );
+    if (index >= 0) {
+      setSelectedIndex(index);
+    }
   };
 
   return (
@@ -214,12 +236,15 @@ export const ModelSelectionDialog: React.FC<ModelSelectionDialogProps> = ({
           items={options}
           initialIndex={initialIndex}
           onSelect={handleSelect}
+          onHighlight={handleHighlight}
           isFocused
         />
       </Box>
 
       <Box>
-        <Text color={Colors.Gray}>Press Enter to select, Esc to cancel</Text>
+        <Text color={Colors.Gray}>
+          Press Enter to select{onDelete ? ", 'd' to delete" : ''}, Esc to cancel
+        </Text>
       </Box>
     </LeftBorderPanel>
   );

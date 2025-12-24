@@ -62,6 +62,7 @@ export const createMockCommandContext = (
     session: {
       sessionShellAllowlist: new Set<string>(),
       stats: {
+        sessionId: 'test-session-id',
         sessionStartTime: new Date(),
         lastPromptTokenCount: 0,
         metrics: {
