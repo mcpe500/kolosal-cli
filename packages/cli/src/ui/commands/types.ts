@@ -117,6 +117,7 @@ export interface OpenDialogActionReturn {
     | 'privacy'
     | 'settings'
     | 'model'
+    | 'model_delete'
     | 'subagent_create'
     | 'subagent_list';
 }

@@ -74,6 +74,22 @@ export function upsertSavedModelEntry(
   return [...filtered, normalizedEntry];
 }
 
+export function removeSavedModelEntry(
+  existing: SavedModelEntry[] | undefined,
+  entry: SavedModelEntry,
+): SavedModelEntry[] {
+  const list = existing ?? [];
+  if (list.length === 0) {
+    return [];
+  }
+  const normalizedEntry = sanitizeEntry(entry);
+  const keyToRemove = keyFor(normalizedEntry);
+  return list.filter((item) => {
+    const normalizedItem = sanitizeEntry(item);
+    return keyFor(normalizedItem) !== keyToRemove;
+  });
+}
+
 export function mergeSavedModelEntries(
   sources: Array<SavedModelEntry[] | undefined>,
 ): SavedModelEntry[] {

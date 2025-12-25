@@ -43,6 +43,8 @@
     "build:linux:deb": "node scripts/build-standalone-linux.js deb",
     "build:linux:rpm": "node scripts/build-standalone-linux.js rpm",
     "build:linux:tar": "node scripts/build-standalone-linux.js tar",
+    "build:zed": "node scripts/build-zed-acp.js",
+    "build:zed:all": "node scripts/build-zed-acp.js --all",
     "build:packages": "npm run build --workspaces",
     "build:sandbox": "cross-env NODE_OPTIONS=\"--no-deprecation\" node scripts/build_sandbox.js --skip-npm-install-build",
     "bundle": "npm run generate && cross-env NODE_OPTIONS=\"--no-deprecation\" node esbuild.config.js && cross-env NODE_OPTIONS=\"--no-deprecation\" node scripts/copy_bundle_assets.js",
