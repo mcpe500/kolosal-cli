@@ -359,7 +359,7 @@ esbuild
       'process.env.CLI_VERSION': JSON.stringify(pkg.version),
     },
     banner: {
-      js: `import { createRequire as _createRequire } from 'module'; const require = _createRequire(import.meta.url); globalThis.__filename = _createRequire(import.meta.url)('url').fileURLToPath(import.meta.url); globalThis.__dirname = _createRequire(import.meta.url)('path').dirname(globalThis.__filename);`,
+      js: `import { createRequire as _kolosalCreateRequire } from 'module'; const require = _kolosalCreateRequire(import.meta.url); globalThis.__filename = _kolosalCreateRequire(import.meta.url)('url').fileURLToPath(import.meta.url); globalThis.__dirname = _kolosalCreateRequire(import.meta.url)('path').dirname(globalThis.__filename);`,
     },
     loader: { '.node': 'file', '.wasm': 'copy' },
     logLevel: 'info',
